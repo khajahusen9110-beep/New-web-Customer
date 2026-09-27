@@ -317,7 +317,22 @@ function resolveVariants(prod: Product, cityId: string): ResolvedVariant[] {
   return out.sort((a, b) => a.price - b.price);
 }
 
-function resolveProduct(prod: Product, override: ProductCityStock | undefined, cityId: string): ResolvedProduct {
+// Grocery items (vendor_id IS NULL) are only sold where an active product_city_stock row
+// exists; the checkout RPC rejects anything else. Hotel food is made to order, so city
+// stock only overrides its price/availability.
+function resolveProduct(
+  prod: Product,
+  override: ProductCityStock | undefined,
+  cityId: string,
+  stockLoadFailed = false,
+): ResolvedProduct {
+  const isGrocery = !prod.vendor_id;
+  const available = isGrocery
+    ? !!override && override.is_active !== false && override.is_available !== false
+    : (override?.is_available ?? prod.is_available) !== false;
+  const stockQty = isGrocery
+    ? num(override?.stock_qty)
+    : num(override?.stock_qty ?? prod.stock_qty ?? prod.stock_quantity);
   return {
     base: prod,
     id: prod.id,
@@ -330,20 +345,26 @@ function resolveProduct(prod: Product, override: ProductCityStock | undefined, c
     isActive: prod.is_active !== false,
     effectivePrice: num(override?.price ?? prod.price),
     effectiveMrp: override?.mrp ?? prod.mrp ?? null,
-    effectiveStock: num(override?.stock_qty ?? prod.stock_qty ?? prod.stock_quantity),
-    effectiveIsAvailable: (override?.is_available ?? prod.is_available) !== false,
+    effectiveStock: stockQty,
+    effectiveIsAvailable: available,
     variants: resolveVariants(prod, cityId),
+    stockLoadFailed: isGrocery && stockLoadFailed,
   };
 }
 
+/** City price/stock rows for the given products; `failed` means the request itself failed. */
 async function getCityStockMap(cityId: string, productIds: string[]) {
-  if (!productIds.length) return new Map<string, ProductCityStock>();
-  const { data } = await supabase
+  if (!productIds.length) return { map: new Map<string, ProductCityStock>(), failed: false };
+  const { data, error } = await supabase
     .from('product_city_stock')
-    .select('product_id,price,mrp,stock_qty,is_available')
+    .select('product_id,price,mrp,stock_qty,is_available,is_active')
     .eq('city_id', cityId)
     .in('product_id', productIds);
-  return new Map(((data ?? []) as ProductCityStock[]).map((s) => [s.product_id, s]));
+  if (error) console.warn('City stock request failed', error);
+  return {
+    map: new Map(((data ?? []) as ProductCityStock[]).map((s) => [s.product_id, s])),
+    failed: !!error,
+  };
 }
 
 export async function getResolvedGroceryProducts(p: {
@@ -374,13 +395,14 @@ export async function getResolvedGroceryProducts(p: {
   const products = (data ?? []) as unknown as Product[];
   const stock = await getCityStockMap(cityId, products.map((x) => x.id));
   const resolved = products
-    .map((prod) => resolveProduct(prod, stock.get(prod.id), cityId))
+    .map((prod) => resolveProduct(prod, stock.map.get(prod.id), cityId, stock.failed))
     .sort(
       (a, b) =>
         Number(isInStockAndActive(b)) - Number(isInStockAndActive(a)) ||
         a.name.toLowerCase().localeCompare(b.name.toLowerCase()),
     );
-  cacheSet(key, resolved);
+  // Never cache a page whose stock failed to load, so the next load retries.
+  if (!stock.failed) cacheSet(key, resolved);
   return resolved;
 }
 
@@ -433,7 +455,7 @@ export async function getHotelProducts(p: {
     return avail && x.isFeatured ? 0 : avail ? 1 : 2;
   };
   const resolved = products
-    .map((prod) => ({ ...resolveProduct(prod, stock.get(prod.id), cityId), variants: [] }))
+    .map((prod) => ({ ...resolveProduct(prod, stock.map.get(prod.id), cityId), variants: [] }))
     .sort((a, b) => tier(a) - tier(b) || a.name.toLowerCase().localeCompare(b.name.toLowerCase()));
   cacheSet(key, resolved);
   return resolved;
@@ -450,12 +472,13 @@ export async function getFreshCartItems(items: CartItem[], cityId: string): Prom
     getCityStockMap(cityId, ids),
   ]);
   if (prodRes.error) fail(prodRes.error, 'Could not load live prices');
+  if (stock.failed) throw new Error('Could not refresh prices');
   const products = new Map(((prodRes.data ?? []) as unknown as Product[]).map((x) => [x.id, x]));
   const out: CartItemUi[] = [];
   for (const item of items) {
     const prod = products.get(item.product_id);
     if (!prod) continue;
-    const rp = resolveProduct(prod, stock.get(prod.id), cityId);
+    const rp = resolveProduct(prod, stock.map.get(prod.id), cityId);
     const variant = item.variant_id ? rp.variants.find((v) => v.id === item.variant_id) ?? null : null;
     const price = variant?.price ?? rp.effectivePrice;
     out.push({
@@ -688,7 +711,7 @@ export async function placeOrder(p: {
   isHotel: boolean;
   vendorId: string | null;
   addressId: string;
-  paymentMethod: 'cod' | 'upi' | 'card';
+  paymentMethod: 'cod' | 'upi';
   coupon: Coupon | null;
 }): Promise<Order> {
   const { groceryCart, hotelCart } = useCart.getState();
@@ -701,6 +724,10 @@ export async function placeOrder(p: {
     throw new Error(maintenance.message ?? 'Service temporarily unavailable. Please try again shortly.');
   }
 
+  // Only COD and UPI (Razorpay) have a working payment flow; never create an unpaid "card" order.
+  if ((p.paymentMethod as string) === 'card') {
+    throw new Error('Card payment is not available. Please choose UPI or Cash on Delivery.');
+  }
   const paymentMethod = p.paymentMethod === 'cod' ? 'cash' : p.paymentMethod;
   const items = raw.map((i) => ({ product_id: i.product_id, variant_id: i.variant_id ?? null, quantity: i.quantity }));
   const args: Record<string, unknown> = {
@@ -850,15 +877,17 @@ export async function reorder(orderItems: OrderItem[], cityId: string): Promise<
   const ids = Array.from(new Set(orderItems.map((i) => i.product_id).filter(Boolean)));
   if (!ids.length) return 'No items to reorder.';
   const [prodRes, stock] = await Promise.all([
-    supabase.from('products').select('id,is_active,is_available').in('id', ids),
+    supabase.from('products').select('id,vendor_id,is_active,is_available').in('id', ids),
     getCityStockMap(cityId, ids),
   ]);
+  if (prodRes.error || stock.failed) throw new Error('Could not check item availability. Please try again.');
   const products = new Map(((prodRes.data ?? []) as Product[]).map((x) => [x.id, x]));
   let added = 0;
   const skipped: string[] = [];
   for (const item of orderItems) {
     const prod = products.get(item.product_id);
-    const avail = (stock.get(item.product_id)?.is_available ?? prod?.is_available) !== false;
+    // Same city rule as the product lists: grocery items need an active city stock row.
+    const avail = !!prod && resolveProduct(prod, stock.map.get(item.product_id), cityId).effectiveIsAvailable;
     if (prod && prod.is_active !== false && avail) {
       const res: AddToCartResult = useCart.getState().addToCart({
         productId: item.product_id,

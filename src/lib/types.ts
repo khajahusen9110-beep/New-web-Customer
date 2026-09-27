@@ -91,6 +91,7 @@ export interface ProductCityStock {
   mrp?: number | null;
   stock_qty?: number | null;
   is_available?: boolean | null;
+  is_active?: boolean | null;
 }
 
 export interface ResolvedVariant {
@@ -117,6 +118,8 @@ export interface ResolvedProduct {
   effectiveStock: number;
   effectiveIsAvailable: boolean;
   variants: ResolvedVariant[];
+  /** City stock request failed: availability is unknown, so the item is shown as unavailable. */
+  stockLoadFailed?: boolean;
 }
 
 export interface CartItem {

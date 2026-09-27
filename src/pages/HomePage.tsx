@@ -567,6 +567,11 @@ export default function HomePage() {
             <p className="muted center-pad">No grocery products found.</p>
           ) : (
             <>
+              {products.some((p) => p.stockLoadFailed) && (
+                <button className="alert alert-danger w-full mb-12" onClick={() => void loadProducts(true, true)}>
+                  Could not load stock for your city, so items can't be added right now. Tap to retry.
+                </button>
+              )}
               <div className="product-grid">
                 {products.map((p) => (
                   <GroceryProductCard

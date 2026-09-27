@@ -36,7 +36,6 @@ import { useCart } from '../store/cart';
 const PAYMENT_METHODS = [
   { key: 'cod', label: 'Cash on Delivery (COD)' },
   { key: 'upi', label: 'UPI / Instant Pay' },
-  { key: 'card', label: 'Credit / Debit Card' },
 ] as const;
 type PaymentKey = (typeof PAYMENT_METHODS)[number]['key'];
 type DeliveryType = 'scheduled' | 'express' | 'none';
