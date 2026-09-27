@@ -674,7 +674,8 @@ export async function setDefaultAddress(userId: string, addressId: string) {
 
 // ---------- CHECKOUT (backend-authoritative RPCs) ----------
 
-function parseOrderFromRpc(data: unknown): Order {
+// Returns null when the response has no order id; never invent one.
+function parseOrderFromRpc(data: unknown): Order | null {
   const fallback = (id: string): Order => ({
     id,
     order_number: '',
@@ -688,11 +689,15 @@ function parseOrderFromRpc(data: unknown): Order {
     handling_fee: 0,
     total_amount: 0,
   });
-  if (typeof data === 'string') return fallback(data.replace(/^"|"$/g, ''));
-  const obj = (Array.isArray(data) ? data[0] : data) as Record<string, unknown> | undefined;
-  if (!obj) return fallback(`ord-${Date.now()}`);
+  if (typeof data === 'string') {
+    const id = data.replace(/^"|"$/g, '').trim();
+    return id ? fallback(id) : null;
+  }
+  const obj = (Array.isArray(data) ? data[0] : data) as Record<string, unknown> | null | undefined;
+  if (!obj || typeof obj !== 'object') return null;
   const id = (obj.id ?? obj.order_id) as string | undefined;
-  return { ...fallback(id ?? `ord-${Date.now()}`), ...(obj as Partial<Order>), id: id ?? `ord-${Date.now()}` };
+  if (!id) return null;
+  return { ...fallback(id), ...(obj as Partial<Order>), id };
 }
 
 export async function checkMaintenanceMode(): Promise<MaintenanceSettings> {
@@ -753,8 +758,16 @@ export async function placeOrder(p: {
     try {
       const { data, error } = await supabase.rpc(fn, args);
       if (error) throw Object.assign(new Error(errorMessage(error, 'Failed to place order')), { final: true });
+      // The RPC succeeded, so the order exists: nothing after this point may retry (duplicate order).
       const order = parseOrderFromRpc(data);
-      await clearCartDirectly(p.isHotel);
+      if (!order) {
+        throw Object.assign(new Error('Order status unknown. Please check My Orders before trying again.'), { final: true });
+      }
+      try {
+        await clearCartDirectly(p.isHotel);
+      } catch {
+        // Cart cleanup failing must not hide a placed order.
+      }
       return order;
     } catch (e) {
       if ((e as { final?: boolean }).final) throw e;
