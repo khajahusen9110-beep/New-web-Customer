@@ -1,7 +1,8 @@
 import { useEffect, useState } from 'react';
 import { Share, SquarePlus, X } from 'lucide-react';
 
-const DISMISS_KEY = 'sndmart-ios-install-dismissed-at';
+// Separate keys so closing the card on the login page does not hide it after login.
+const dismissKey = (loggedIn: boolean) => `sndmart-ios-install-dismissed-at-${loggedIn ? 'user' : 'guest'}`;
 const HIDE_FOR_MS = 7 * 24 * 60 * 60 * 1000;
 
 function isIos(): boolean {
@@ -22,9 +23,9 @@ function isInAppBrowser(): boolean {
   return /FBAN|FBAV|Instagram|Line\/|Snapchat|GSA\//i.test(navigator.userAgent);
 }
 
-function recentlyDismissed(): boolean {
+function recentlyDismissed(loggedIn: boolean): boolean {
   try {
-    const at = Number(localStorage.getItem(DISMISS_KEY));
+    const at = Number(localStorage.getItem(dismissKey(loggedIn)));
     return !!at && Date.now() - at < HIDE_FOR_MS;
   } catch {
     return false;
@@ -32,21 +33,22 @@ function recentlyDismissed(): boolean {
 }
 
 /** Floating card telling iPhone/iPad users how to install the site as an app (iOS has no install prompt). */
-export function IosInstallPrompt() {
+export function IosInstallPrompt({ loggedIn }: { loggedIn: boolean }) {
   const [open, setOpen] = useState(false);
 
   useEffect(() => {
-    if (!isIos() || isStandalone() || recentlyDismissed()) return;
+    setOpen(false);
+    if (!isIos() || isStandalone() || recentlyDismissed(loggedIn)) return;
     const t = window.setTimeout(() => setOpen(true), 2500);
     return () => window.clearTimeout(t);
-  }, []);
+  }, [loggedIn]);
 
   if (!open) return null;
 
   const dismiss = () => {
     setOpen(false);
     try {
-      localStorage.setItem(DISMISS_KEY, String(Date.now()));
+      localStorage.setItem(dismissKey(loggedIn), String(Date.now()));
     } catch {
       // Storage unavailable (private mode): the card simply shows again next visit.
     }

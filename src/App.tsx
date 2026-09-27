@@ -239,7 +239,7 @@ export default function App() {
         </>
       )}
       <ToastHost />
-      <IosInstallPrompt />
+      <IosInstallPrompt loggedIn={isLoggedIn} />
     </>
   );
 }
