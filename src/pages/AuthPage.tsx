@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from 'react';
 import { Navigate, useNavigate } from 'react-router-dom';
 import { BadgeCheck, MessageSquareText, ShoppingBag, UserRound, X } from 'lucide-react';
 import { PageHeader, Spinner, toast } from '../components/ui';
+import { Turnstile, TURNSTILE_SITE_KEY } from '../components/Turnstile';
 import {
   createProfile,
   getAddresses,
@@ -52,6 +53,8 @@ export default function AuthPage() {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [cooldown, setCooldown] = useState(0);
+  const [captchaToken, setCaptchaToken] = useState<string | null>(null);
+  const [captchaReset, setCaptchaReset] = useState(0);
   const [verifiedUserId, setVerifiedUserId] = useState('');
   const [verifiedPhone, setVerifiedPhone] = useState('');
 
@@ -69,15 +72,21 @@ export default function AuthPage() {
   // Already signed in (e.g. user opened /auth directly): go home.
   if (session.isLoggedIn && step === 'phone' && !loading) return <Navigate to="/" replace />;
 
+  const captchaReady = !TURNSTILE_SITE_KEY || !!captchaToken;
+
   async function sendOtp(isResend = false) {
     if (!isValidPhoneNumber(mobile)) {
       setError('Please enter a valid 10-digit mobile number.');
       return;
     }
+    if (TURNSTILE_SITE_KEY && !captchaToken) {
+      setError('Please complete the security check first.');
+      return;
+    }
     setLoading(true);
     setError(null);
     try {
-      await sendPhoneOtp(mobile);
+      await sendPhoneOtp(mobile, captchaToken);
       setStep('otp');
       setOtp('');
       setCooldown(30);
@@ -86,6 +95,8 @@ export default function AuthPage() {
       setError(errorMessage(e, 'Failed to send OTP. Please check your number.'));
     } finally {
       setLoading(false);
+      // Security-check tokens are single-use: get a fresh one for the next request.
+      if (TURNSTILE_SITE_KEY) setCaptchaReset((k) => k + 1);
     }
   }
 
@@ -199,7 +210,7 @@ export default function AuthPage() {
             className="auth-card"
             onSubmit={(e) => {
               e.preventDefault();
-              if (mobile.length === 10 && !loading) void sendOtp();
+              if (mobile.length === 10 && !loading && captchaReady) void sendOtp();
             }}
           >
             <div className="hero-icon">
@@ -228,7 +239,12 @@ export default function AuthPage() {
                 <span>{mobile.length}/10</span>
               </span>
             </label>
-            <button className="btn btn-primary btn-lg w-full" disabled={mobile.length !== 10 || loading} type="submit">
+            {TURNSTILE_SITE_KEY && <Turnstile onToken={setCaptchaToken} resetKey={captchaReset} />}
+            <button
+              className="btn btn-primary btn-lg w-full"
+              disabled={mobile.length !== 10 || loading || !captchaReady}
+              type="submit"
+            >
               {loading ? <Spinner size={22} light /> : 'Continue'}
             </button>
             <p className="muted small center">By continuing, you agree to Sndmart's Terms of Service and Privacy Policy.</p>
@@ -277,12 +293,15 @@ export default function AuthPage() {
             {cooldown > 0 ? (
               <p className="muted small">Resend OTP in {cooldown}s</p>
             ) : (
-              <p className="muted small">
-                Didn't receive the OTP?{' '}
-                <button className="link-btn" disabled={loading} onClick={() => void sendOtp(true)}>
-                  Resend OTP
-                </button>
-              </p>
+              <>
+                {TURNSTILE_SITE_KEY && <Turnstile onToken={setCaptchaToken} resetKey={captchaReset} />}
+                <p className="muted small">
+                  Didn't receive the OTP?{' '}
+                  <button className="link-btn" disabled={loading || !captchaReady} onClick={() => void sendOtp(true)}>
+                    Resend OTP
+                  </button>
+                </p>
+              </>
             )}
             <button className="btn btn-primary btn-lg w-full" disabled={otp.length !== 6 || loading} onClick={() => void verifyOtp()}>
               {loading ? <Spinner size={22} light /> : 'Verify & Continue'}

@@ -140,8 +140,12 @@ export async function getCity(cityId: string): Promise<City | null> {
 
 // ---------- PROFILE / AUTH ----------
 
-export async function sendPhoneOtp(rawPhone: string) {
-  const { error } = await supabase.auth.signInWithOtp({ phone: toE164(rawPhone) });
+/** `captchaToken` is required once CAPTCHA is enabled in Supabase Auth (see Turnstile.tsx). */
+export async function sendPhoneOtp(rawPhone: string, captchaToken?: string | null) {
+  const { error } = await supabase.auth.signInWithOtp({
+    phone: toE164(rawPhone),
+    options: captchaToken ? { captchaToken } : undefined,
+  });
   if (error) throw new Error(errorMessage(error, 'Failed to send OTP. Please check your number.'));
 }
 

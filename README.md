@@ -28,6 +28,9 @@ It is a static single-page app. Build with `npm run build` and host `dist/` anyw
 - **Netlify**: build command `npm run build`, publish directory `dist`, same env vars.
   `public/_redirects` handles SPA routing.
 
+**Security / paid APIs:** see [SECURITY.md](SECURITY.md) for the kill switch, usage dashboard, limits and
+provider settings (MSG91, Razorpay, Firebase, Supabase spend cap, CAPTCHA).
+
 **SEO**
 
 Set `VITE_SITE_URL` (e.g. `https://sndmart.in`) in the hosting env vars. The build then fills the
