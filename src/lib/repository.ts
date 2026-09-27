@@ -36,6 +36,8 @@ import type {
 import { errorMessage, haversineKm, isHotelItemAvailable, isInStockAndActive, KNOWN_HUBS, toE164 } from './utils';
 
 const CACHE_TTL_MS = 5 * 60 * 1000;
+/** Set VITE_CHECKOUT_COUPON_RPC=true once the checkout RPCs accept p_coupon_code. */
+const COUPON_IN_CHECKOUT = import.meta.env.VITE_CHECKOUT_COUPON_RPC === 'true';
 const SESSION_EXPIRED = 'Your session expired, please log in again';
 
 type PgError = { code?: string; message?: string; status?: number } | null;
@@ -606,25 +608,25 @@ export async function validateAndApplyCoupon(
   if (!coupon) return bad('Invalid or inactive coupon for this city');
   if (!coupon.is_active) return bad('This coupon is no longer active');
   const now = Date.now();
-  if (coupon.starts_at && now < Date.parse(coupon.starts_at)) return bad('Coupon is not active yet');
+  // The database treats a coupon without a start date as not active.
+  if (!coupon.starts_at || now < Date.parse(coupon.starts_at)) return bad('Coupon is not active yet');
   if (coupon.expires_at && now > Date.parse(coupon.expires_at)) return bad('Coupon has expired');
   const minOrder = num(coupon.min_order_amount);
   if (subtotal < minOrder) return bad(`Minimum order of ₹${minOrder.toFixed(0)} required for this coupon`);
   if (coupon.usage_limit != null && num(coupon.used_count) >= coupon.usage_limit) {
     return bad('Coupon usage limit reached');
   }
-  let discount =
-    coupon.discount_type === 'percentage' ? (subtotal * num(coupon.discount_value)) / 100 : num(coupon.discount_value);
+  // Same maths as calculate_city_coupon_discount() in the database, which the checkout
+  // RPC uses to charge the order: 'percent' (rounded to paise) or 'flat'.
+  const isPercent = coupon.discount_type === 'percent' || coupon.discount_type === 'percentage';
+  let discount = isPercent
+    ? Math.round(subtotal * num(coupon.discount_value)) / 100
+    : num(coupon.discount_value);
   if (coupon.max_discount_amount != null && discount > coupon.max_discount_amount) {
     discount = Number(coupon.max_discount_amount);
   }
   discount = Math.min(discount, subtotal);
   return { isValid: true, coupon, discountAmount: discount };
-}
-
-export async function recordCouponUsage(couponId: string, userId: string, orderId: string) {
-  const { error } = await supabase.from('coupon_usages').insert({ coupon_id: couponId, user_id: userId, order_id: orderId });
-  if (error) console.warn('Coupon usage recording skipped', error);
 }
 
 // ---------- ADDRESSES ----------
@@ -736,6 +738,11 @@ export async function placeOrder(p: {
     p_items: items,
     p_notes: null,
   };
+  // The checkout RPC validates the coupon, applies the discount to the order total and
+  // records the usage itself, so the customer is charged exactly what checkout showed.
+  // Needs supabase/migrations/20260927_checkout_coupon.sql applied first; until then the
+  // RPC has no p_coupon_code parameter, so the flag stays off.
+  if (p.coupon?.code && COUPON_IN_CHECKOUT) args.p_coupon_code = p.coupon.code;
   if (p.isHotel) {
     const vendorId = p.vendorId || raw.find((i) => i.vendor_id)?.vendor_id;
     if (!vendorId) throw new Error('Hotel / Vendor ID is missing for this order');
@@ -751,7 +758,6 @@ export async function placeOrder(p: {
       if (error) throw Object.assign(new Error(errorMessage(error, 'Failed to place order')), { final: true });
       const order = parseOrderFromRpc(data);
       await clearCartDirectly(p.isHotel);
-      if (p.coupon?.code && order.id) await recordCouponUsage(p.coupon.id, p.userId, order.id);
       return order;
     } catch (e) {
       if ((e as { final?: boolean }).final) throw e;
