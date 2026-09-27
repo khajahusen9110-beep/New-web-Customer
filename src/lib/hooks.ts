@@ -1,6 +1,6 @@
-import { useEffect, useRef, useState } from 'react';
-import type { CartItem, CartItemUi } from './types';
-import { getFreshCartItems } from './repository';
+import { useEffect, useMemo, useRef, useState } from 'react';
+import type { CartItem, CartItemUi, ResolvedProduct } from './types';
+import { buildCartLines, getLiveCartProducts } from './repository';
 
 export function useDebounced<T>(value: T, ms = 350): T {
   const [v, setV] = useState(value);
@@ -28,29 +28,42 @@ export function useInfiniteSentinel(onVisible: () => void, enabled: boolean) {
   return ref;
 }
 
-/** Live-priced cart lines, re-fetched whenever the cart or city changes. */
+/**
+ * Live-priced cart lines. Prices are requested only when the set of products (or the city)
+ * changes; quantity changes are priced locally from the already-fetched data, and pages showing
+ * the same cart share one request through the repository cache.
+ */
 export function useFreshCart(items: CartItem[], cityId: string | null | undefined) {
-  const [fresh, setFresh] = useState<CartItemUi[]>([]);
+  const [live, setLive] = useState<Map<string, ResolvedProduct>>(() => new Map());
   const [loading, setLoading] = useState(items.length > 0 && !!cityId);
   const [error, setError] = useState<string | null>(null);
   const [tick, setTick] = useState(0);
+  const forceNext = useRef(false);
+  const idsKey = useMemo(() => Array.from(new Set(items.map((i) => i.product_id))).sort().join(','), [items]);
   useEffect(() => {
     let cancelled = false;
-    if (!cityId || items.length === 0) {
-      setFresh([]);
+    if (!cityId || !idsKey) {
+      setLive(new Map());
       setLoading(false);
       setError(null);
       return;
     }
     setLoading(true);
     setError(null);
-    getFreshCartItems(items, cityId)
-      .then((r) => !cancelled && setFresh(r))
+    const force = forceNext.current;
+    forceNext.current = false;
+    getLiveCartProducts(idsKey.split(','), cityId, force)
+      .then((r) => !cancelled && setLive(r))
       .catch((e) => !cancelled && setError(e instanceof Error ? e.message : 'Could not load live prices'))
       .finally(() => !cancelled && setLoading(false));
     return () => {
       cancelled = true;
     };
-  }, [items, cityId, tick]);
-  return { fresh, loading, error, reload: () => setTick((t) => t + 1) };
+  }, [idsKey, cityId, tick]);
+  const fresh = useMemo<CartItemUi[]>(() => buildCartLines(items, live), [items, live]);
+  const reload = () => {
+    forceNext.current = true;
+    setTick((t) => t + 1);
+  };
+  return { fresh, loading, error, reload };
 }

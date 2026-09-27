@@ -165,29 +165,43 @@ export default function OrderDetailPage() {
   const [payMsg, setPayMsg] = useState('Starting payment...');
   const orderRef = useRef<Order | null>(null);
 
+  const partnerRef = useRef<DeliveryPartner | null>(null);
+  partnerRef.current = partner;
+
+  // Full load: everything the page shows. Silent polls (every 18s while active) only re-read what
+  // changes during delivery: order status, status history and the rider assignment. Items,
+  // address and review state do not change while polling, so they are loaded once.
   const load = useCallback(
     async (silent = false) => {
       if (!silent) setLoading(true);
       setError(null);
       try {
-        const o = await getOrderById(orderId);
-        setOrder(o);
-        orderRef.current = o;
-        const [its, hist, asg] = await Promise.all([
-          getOrderItems(orderId),
+        const [o, hist, asg, once] = await Promise.all([
+          getOrderById(orderId),
           getOrderStatusHistory(orderId),
           getDeliveryAssignment(orderId),
+          silent ? null : getOrderItems(orderId),
         ]);
-        setItems(its);
+        setOrder(o);
+        orderRef.current = o;
         setHistory(hist);
         setAssignment(asg);
+        if (once) setItems(once);
         // Privacy: partner details only once the assignment is genuinely accepted.
         if (isAssignmentAccepted(asg)) {
           const pid = asg?.delivery_partner_id ?? o.delivery_partner_id;
-          setPartner(pid ? await getDeliveryPartner(pid) : o.delivery_partners ?? null);
+          // The rider-location poll keeps a known partner fresh; only fetch a new/changed one here.
+          if (!pid) setPartner(o.delivery_partners ?? null);
+          else if (partnerRef.current?.id !== pid) setPartner((await getDeliveryPartner(pid)) ?? o.delivery_partners ?? null);
         } else setPartner(null);
-        if (o.address_id) setAddress(await getAddressById(o.address_id));
-        if (o.customer_id) setReviewedIds(await getReviewedOrderIds(o.customer_id));
+        if (!silent) {
+          const [addr, reviewed] = await Promise.all([
+            o.address_id ? getAddressById(o.address_id) : null,
+            o.customer_id ? getReviewedOrderIds(o.customer_id, [orderId]) : new Set<string>(),
+          ]);
+          setAddress(addr);
+          setReviewedIds(reviewed);
+        }
       } catch (e) {
         if (!silent) setError(errorMessage(e, 'Failed to load order'));
       } finally {

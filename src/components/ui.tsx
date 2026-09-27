@@ -252,7 +252,9 @@ export function ProductImage({ url, alt, grayscale = false }: { url?: string | n
       </div>
     );
   }
-  return <img className={`cover-img${grayscale ? ' grayscale' : ''}`} src={url} alt={alt} loading="lazy" />;
+  // Lazy + async decode: off-screen images are not downloaded until scrolled near, and decoding
+  // never blocks scrolling.
+  return <img className={`cover-img${grayscale ? ' grayscale' : ''}`} src={url} alt={alt} loading="lazy" decoding="async" />;
 }
 
 export function BillRow({ label, value, bold, accent }: { label: string; value: ReactNode; bold?: boolean; accent?: boolean }) {

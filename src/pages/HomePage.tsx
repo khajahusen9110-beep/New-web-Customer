@@ -33,15 +33,16 @@ import {
 import { openCityPicker } from '../components/CityPicker';
 import {
   getCompletedOrderCount,
-  getCoupons,
+  getPromoCoupon,
   getFreeDeliveryThreshold,
   getGroceryCategories,
   getHotels,
   getResolvedGroceryProducts,
   getVendorAverageRating,
   getVendorOperatingSlots,
+  peekVendorExtras,
 } from '../lib/repository';
-import type { Category, Coupon, OperatingSlot, ResolvedProduct, Vendor } from '../lib/types';
+import type { CartItem, Category, Coupon, OperatingSlot, ResolvedProduct, Vendor } from '../lib/types';
 import { useDebounced, useFreshCart, useInfiniteSentinel } from '../lib/hooks';
 import {
   cartTotal,
@@ -258,11 +259,15 @@ function VariantPicker({ product, cityId, onClose }: { product: ResolvedProduct;
 }
 
 function HotelCard({ vendor, onClick }: { vendor: Vendor; onClick: () => void }) {
-  const [slots, setSlots] = useState<OperatingSlot[]>([]);
-  const [rating, setRating] = useState(0);
+  // getHotels already fetched hours and ratings for the whole page; only ask again if they expired.
+  const [slots, setSlots] = useState<OperatingSlot[]>(() => peekVendorExtras(vendor.id).slots ?? []);
+  const [rating, setRating] = useState(() => peekVendorExtras(vendor.id).rating ?? 0);
   useEffect(() => {
-    getVendorOperatingSlots(vendor.id).then(setSlots);
-    getVendorAverageRating(vendor.id).then(setRating);
+    const known = peekVendorExtras(vendor.id);
+    if (known.slots) setSlots(known.slots);
+    else void getVendorOperatingSlots(vendor.id).then(setSlots);
+    if (known.rating !== null) setRating(known.rating);
+    else void getVendorAverageRating(vendor.id).then(setRating);
   }, [vendor.id]);
   const withinHours = slots.length ? isWithinAnySlot(slots) : isWithinOperatingHours(vendor.opening_time, vendor.closing_time);
   const isActive = vendor.is_active !== false;
@@ -307,6 +312,8 @@ function HotelCard({ vendor, onClick }: { vendor: Vendor; onClick: () => void })
     </button>
   );
 }
+
+const NO_ITEMS: CartItem[] = [];
 
 export default function HomePage() {
   const navigate = useNavigate();
@@ -445,8 +452,7 @@ export default function HomePage() {
     if (!cityId) return;
     getFreeDeliveryThreshold(cityId).then(setThreshold).catch(() => setThreshold(null));
     if (!couponShownThisSession) {
-      getCoupons(cityId).then((list) => {
-        const c = list.find((x) => x.is_active);
+      getPromoCoupon(cityId).then((c) => {
         if (c && !couponShownThisSession) {
           couponShownThisSession = true;
           setCoupon(c);
@@ -473,8 +479,9 @@ export default function HomePage() {
     }
   };
 
-  const groceryFresh = useFreshCart(groceryCart, cityId);
-  const hotelFresh = useFreshCart(hotelCart, cityId);
+  // Only price the cart of the tab being shown (no hotel requests while browsing grocery, and vice versa).
+  const groceryFresh = useFreshCart(mode === 'grocery' ? groceryCart : NO_ITEMS, cityId);
+  const hotelFresh = useFreshCart(mode === 'hotels' ? hotelCart : NO_ITEMS, cityId);
   const groceryTotal = useMemo(() => {
     if (groceryFresh.fresh.length) return cartTotal(groceryFresh.fresh);
     return groceryCart.reduce((sum, item) => {

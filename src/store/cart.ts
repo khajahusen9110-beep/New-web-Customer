@@ -175,7 +175,10 @@ export const useCart = create<CartState>()(
       syncFromBackend: async () => {
         const userId = useSession.getState().userId;
         if (!userId) return;
-        const { data, error } = await supabase.from('cart_items').select('*').eq('user_id', userId);
+        const { data, error } = await supabase
+          .from('cart_items')
+          .select('id,user_id,product_id,variant_id,vendor_id,city_id,quantity')
+          .eq('user_id', userId);
         if (error || !data) return;
         const items = (data as CartItem[]).map((i) => ({ ...i, quantity: Number(i.quantity) }));
         set({

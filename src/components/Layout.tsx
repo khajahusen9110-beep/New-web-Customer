@@ -1,4 +1,6 @@
+import { Suspense } from 'react';
 import { NavLink, Outlet } from 'react-router-dom';
+import { CenterSpinner } from './ui';
 import { ReceiptText, ShoppingCart, Store, User } from 'lucide-react';
 import { useCart, cartCount } from '../store/cart';
 
@@ -38,7 +40,9 @@ export function TabLayout() {
         </div>
       </nav>
       <main className="tab-content">
-        <Outlet />
+        <Suspense fallback={<CenterSpinner />}>
+          <Outlet />
+        </Suspense>
       </main>
       <nav className="bottom-nav">
         {TABS.map(({ to, label, Icon, end }) => (
@@ -59,7 +63,9 @@ export function TabLayout() {
 export function PlainLayout() {
   return (
     <main className="plain-content">
-      <Outlet />
+      <Suspense fallback={<CenterSpinner />}>
+          <Outlet />
+        </Suspense>
     </main>
   );
 }

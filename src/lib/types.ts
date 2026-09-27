@@ -83,6 +83,8 @@ export interface Product {
   available_from?: string | null;
   available_until?: string | null;
   product_variants?: ProductVariant[] | null;
+  /** This city's price/stock row, embedded in the product query (0 or 1 rows). */
+  product_city_stock?: ProductCityStock[] | null;
 }
 
 export interface ProductCityStock {

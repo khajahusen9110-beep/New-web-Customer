@@ -1,4 +1,4 @@
-import { useEffect, useState, type ReactNode } from 'react';
+import { lazy, Suspense, useEffect, useState, type ReactNode } from 'react';
 import { IosInstallPrompt } from './components/IosInstallPrompt';
 import { AndroidAppPrompt } from './components/AndroidAppPrompt';
 import { useRouteSeo } from './lib/seo';
@@ -17,20 +17,39 @@ import { CenterSpinner, ToastHost, toast } from './components/ui';
 import { PlainLayout, TabLayout } from './components/Layout';
 import { CityPickerModal, LocationDetectDialog } from './components/CityPicker';
 import AuthPage from './pages/AuthPage';
-import LocationOnboardingPage from './pages/LocationOnboardingPage';
 import HomePage from './pages/HomePage';
-import HotelMenuPage from './pages/HotelMenuPage';
-import CartPage from './pages/CartPage';
-import CheckoutPage from './pages/CheckoutPage';
-import OrdersPage from './pages/OrdersPage';
-import OrderDetailPage from './pages/OrderDetailPage';
-import ProfilePage from './pages/ProfilePage';
-import NotificationsPage from './pages/NotificationsPage';
-import WalletPage from './pages/WalletPage';
-import MyReviewsPage from './pages/MyReviewsPage';
-import AddressBookPage from './pages/AddressBookPage';
-import EditProfilePage from './pages/EditProfilePage';
-import HelpSupportPage from './pages/HelpSupportPage';
+
+// Login and home load with the app; every other page is downloaded the first time it is opened
+// (and the main tabs are prefetched once the browser is idle, see prefetchTabs).
+const LocationOnboardingPage = lazy(() => import('./pages/LocationOnboardingPage'));
+const HotelMenuPage = lazy(() => import('./pages/HotelMenuPage'));
+const CartPage = lazy(() => import('./pages/CartPage'));
+const CheckoutPage = lazy(() => import('./pages/CheckoutPage'));
+const OrdersPage = lazy(() => import('./pages/OrdersPage'));
+const OrderDetailPage = lazy(() => import('./pages/OrderDetailPage'));
+const ProfilePage = lazy(() => import('./pages/ProfilePage'));
+const NotificationsPage = lazy(() => import('./pages/NotificationsPage'));
+const WalletPage = lazy(() => import('./pages/WalletPage'));
+const MyReviewsPage = lazy(() => import('./pages/MyReviewsPage'));
+const AddressBookPage = lazy(() => import('./pages/AddressBookPage'));
+const EditProfilePage = lazy(() => import('./pages/EditProfilePage'));
+const HelpSupportPage = lazy(() => import('./pages/HelpSupportPage'));
+
+let tabsPrefetched = false;
+/** Downloads the bottom-tab pages' code in the background so switching tabs stays instant. */
+function prefetchTabs() {
+  if (tabsPrefetched) return;
+  tabsPrefetched = true;
+  const run = () => {
+    void import('./pages/CartPage');
+    void import('./pages/OrdersPage');
+    void import('./pages/ProfilePage');
+    void import('./pages/HotelMenuPage');
+  };
+  const idle = (window as Window & { requestIdleCallback?: (cb: () => void) => void }).requestIdleCallback;
+  if (idle) idle(run);
+  else setTimeout(run, 2000);
+}
 import MaintenancePage from './pages/MaintenancePage';
 
 /** Keeps the local session store in sync with the Supabase auth session. */
@@ -167,6 +186,9 @@ export default function App() {
   const authReady = useAuthSync();
   const verified = useLoggedInEffects();
   const isLoggedIn = useSession((s) => s.isLoggedIn);
+  useEffect(() => {
+    if (isLoggedIn) prefetchTabs();
+  }, [isLoggedIn]);
   const [maintenance, setMaintenance] = useState<string | null | undefined>(undefined);
   const [checking, setChecking] = useState(false);
   // Only the very first bootstrap blocks rendering; later logins bootstrap in the background
@@ -194,47 +216,49 @@ export default function App() {
   return (
     <>
       <SessionExpiredRedirect />
-      <Routes>
-        <Route path="/auth" element={<AuthPage />} />
-        <Route
-          path="/onboarding"
-          element={
-            <RequireAuth>
-              <LocationOnboardingPage />
-            </RequireAuth>
-          }
-        />
-        <Route
-          element={
-            <RequireOnboarded>
-              <TabLayout />
-            </RequireOnboarded>
-          }
-        >
-          <Route path="/" element={<HomePage />} />
-          <Route path="/cart" element={<CartPage />} />
-          <Route path="/orders" element={<OrdersPage />} />
-          <Route path="/profile" element={<ProfilePage />} />
-        </Route>
-        <Route
-          element={
-            <RequireOnboarded>
-              <PlainLayout />
-            </RequireOnboarded>
-          }
-        >
-          <Route path="/hotel/:vendorId" element={<HotelMenuPage />} />
-          <Route path="/checkout/:type" element={<CheckoutPage />} />
-          <Route path="/orders/:orderId" element={<OrderDetailPage />} />
-          <Route path="/notifications" element={<NotificationsPage />} />
-          <Route path="/wallet" element={<WalletPage />} />
-          <Route path="/reviews" element={<MyReviewsPage />} />
-          <Route path="/addresses" element={<AddressBookPage />} />
-          <Route path="/profile/edit" element={<EditProfilePage />} />
-          <Route path="/help" element={<HelpSupportPage />} />
-        </Route>
-        <Route path="*" element={<Navigate to="/" replace />} />
-      </Routes>
+      <Suspense fallback={<CenterSpinner />}>
+        <Routes>
+          <Route path="/auth" element={<AuthPage />} />
+          <Route
+            path="/onboarding"
+            element={
+              <RequireAuth>
+                <LocationOnboardingPage />
+              </RequireAuth>
+            }
+          />
+          <Route
+            element={
+              <RequireOnboarded>
+                <TabLayout />
+              </RequireOnboarded>
+            }
+          >
+            <Route path="/" element={<HomePage />} />
+            <Route path="/cart" element={<CartPage />} />
+            <Route path="/orders" element={<OrdersPage />} />
+            <Route path="/profile" element={<ProfilePage />} />
+          </Route>
+          <Route
+            element={
+              <RequireOnboarded>
+                <PlainLayout />
+              </RequireOnboarded>
+            }
+          >
+            <Route path="/hotel/:vendorId" element={<HotelMenuPage />} />
+            <Route path="/checkout/:type" element={<CheckoutPage />} />
+            <Route path="/orders/:orderId" element={<OrderDetailPage />} />
+            <Route path="/notifications" element={<NotificationsPage />} />
+            <Route path="/wallet" element={<WalletPage />} />
+            <Route path="/reviews" element={<MyReviewsPage />} />
+            <Route path="/addresses" element={<AddressBookPage />} />
+            <Route path="/profile/edit" element={<EditProfilePage />} />
+            <Route path="/help" element={<HelpSupportPage />} />
+          </Route>
+          <Route path="*" element={<Navigate to="/" replace />} />
+        </Routes>
+      </Suspense>
       {isLoggedIn && (
         <>
           <CityPickerModal />

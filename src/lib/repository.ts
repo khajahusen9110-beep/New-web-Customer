@@ -49,37 +49,78 @@ function fail(error: PgError, fallback: string): never {
   throw new Error(errorMessage(error, fallback));
 }
 
-// ---------- simple TTL cache ----------
-const cache = new Map<string, { at: number; data: unknown }>();
+// ---------- TTL cache + in-flight request sharing ----------
+// Stable data (cities, categories, city settings) lives longer than lists.
+const STABLE_TTL_MS = 30 * 60 * 1000;
+const cache = new Map<string, { at: number; ttl: number; data: unknown }>();
+const inflight = new Map<string, Promise<unknown>>();
 function cacheGet<T>(key: string): T | null {
   const hit = cache.get(key);
-  if (!hit || Date.now() - hit.at > CACHE_TTL_MS) return null;
+  if (!hit || Date.now() - hit.at > hit.ttl) return null;
   return hit.data as T;
 }
-const cacheSet = (key: string, data: unknown) => cache.set(key, { at: Date.now(), data });
-export const clearCaches = () => cache.clear();
+const cacheSet = (key: string, data: unknown, ttl = CACHE_TTL_MS) => cache.set(key, { at: Date.now(), ttl, data });
+export const clearCaches = () => {
+  cache.clear();
+  inflight.clear();
+};
 export function invalidateCache(prefix: string) {
   for (const k of Array.from(cache.keys())) if (k.startsWith(prefix)) cache.delete(k);
+  for (const k of Array.from(inflight.keys())) if (k.startsWith(prefix)) inflight.delete(k);
+}
+
+/**
+ * Returns the cached value for `key`, or runs `load` once: callers asking for the same key
+ * while a request is running share that request instead of sending a duplicate.
+ * `load` may return `{ value, cache: false }` to skip caching (e.g. partial failures).
+ */
+async function cached<T>(
+  key: string,
+  ttl: number,
+  load: () => Promise<T | { value: T; cache: false }>,
+  force = false,
+): Promise<T> {
+  if (!force) {
+    const hit = cacheGet<T>(key);
+    if (hit !== null) return hit;
+    const running = inflight.get(key);
+    if (running) return running as Promise<T>;
+  }
+  const p = (async () => {
+    const r = await load();
+    if (r && typeof r === 'object' && (r as { cache?: unknown }).cache === false) return (r as { value: T }).value;
+    cacheSet(key, r, ttl);
+    return r as T;
+  })();
+  inflight.set(key, p);
+  try {
+    return await p;
+  } finally {
+    if (inflight.get(key) === p) inflight.delete(key);
+  }
 }
 
 const num = (v: unknown, d = 0) => (v === null || v === undefined || v === '' ? d : Number(v));
 
 // ---------- CITIES ----------
 
-export async function getActiveCities(forceRefresh = false): Promise<City[]> {
-  if (!forceRefresh) {
-    const c = cacheGet<City[]>('cities');
-    if (c) return c;
-  }
-  const { data, error } = await supabase
-    .from('cities')
-    .select('id,name,state,status,center_lat,center_lng,service_radius_km')
-    .eq('status', 'active')
-    .order('name', { ascending: true });
-  if (error) fail(error, 'Unable to load cities from backend');
-  const list = (data ?? []) as City[];
-  cacheSet('cities', list);
-  return list;
+const CITY_COLS = 'id,name,state,status,center_lat,center_lng,service_radius_km';
+
+export function getActiveCities(forceRefresh = false): Promise<City[]> {
+  return cached(
+    'cities',
+    STABLE_TTL_MS,
+    async () => {
+      const { data, error } = await supabase
+        .from('cities')
+        .select(CITY_COLS)
+        .eq('status', 'active')
+        .order('name', { ascending: true });
+      if (error) fail(error, 'Unable to load cities from backend');
+      return (data ?? []) as City[];
+    },
+    forceRefresh,
+  );
 }
 
 export async function findCityForLocation(lat: number, lng: number): Promise<CityLocationResult | null> {
@@ -93,7 +134,7 @@ export async function getCity(cityId: string): Promise<City | null> {
   const cities = await getActiveCities().catch(() => [] as City[]);
   const hit = cities.find((c) => c.id === cityId);
   if (hit) return hit;
-  const { data } = await supabase.from('cities').select('*').eq('id', cityId).limit(1);
+  const { data } = await supabase.from('cities').select(CITY_COLS).eq('id', cityId).limit(1);
   return ((data ?? [])[0] as City) ?? null;
 }
 
@@ -110,16 +151,20 @@ export async function verifyPhoneOtp(rawPhone: string, token: string) {
   return data;
 }
 
-export async function getProfile(userId: string, forceRefresh = false): Promise<Profile | null> {
-  const key = `profile:${userId}`;
-  if (!forceRefresh) {
-    const c = cacheGet<Profile>(key);
-    if (c) return c;
-  }
-  const { data, error } = await supabase.from('profiles').select('*').eq('id', userId).maybeSingle();
-  if (error) fail(error, 'Failed to load profile.');
-  if (data) cacheSet(key, data);
-  return (data as Profile) ?? null;
+const PROFILE_COLS = 'id,role,full_name,email,phone,city_id,current_device_session';
+
+export function getProfile(userId: string, forceRefresh = false): Promise<Profile | null> {
+  return cached(
+    `profile:${userId}`,
+    CACHE_TTL_MS,
+    async () => {
+      const { data, error } = await supabase.from('profiles').select(PROFILE_COLS).eq('id', userId).maybeSingle();
+      if (error) fail(error, 'Failed to load profile.');
+      // Do not cache "no profile yet": the first-login flow creates it right after.
+      return data ? (data as Profile) : { value: null, cache: false as const };
+    },
+    forceRefresh,
+  );
 }
 
 export async function createProfile(profile: Profile): Promise<Profile> {
@@ -127,7 +172,7 @@ export async function createProfile(profile: Profile): Promise<Profile> {
   const { data, error } = await supabase
     .from('profiles')
     .upsert(row, { onConflict: 'id' })
-    .select()
+    .select(PROFILE_COLS)
     .maybeSingle();
   if (error) fail(error, 'Could not save profile. Please try again.');
   invalidateCache(`profile:${profile.id}`);
@@ -164,8 +209,11 @@ export async function checkStillActiveDevice(): Promise<boolean> {
   const { userId, isLoggedIn, deviceId } = useSession.getState();
   if (!userId || !isLoggedIn) return true;
   try {
-    const profile = await getProfile(userId, true);
-    if (profile?.current_device_session && profile.current_device_session !== deviceId) {
+    // Runs every 2 minutes, so read just the one column instead of the whole profile.
+    const { data, error } = await supabase.from('profiles').select('current_device_session').eq('id', userId).maybeSingle();
+    if (error) throw error;
+    const active = (data as { current_device_session?: string | null } | null)?.current_device_session;
+    if (active && active !== deviceId) {
       await signOut('local');
       useSession.getState().notifySessionExpired(
         'You were logged out because your account was used on another device.',
@@ -199,29 +247,30 @@ export async function resolveUserCity(userId: string): Promise<City | null> {
 
 // ---------- CATEGORIES / VENDORS ----------
 
-export async function getGroceryCategories(forceRefresh = false): Promise<Category[]> {
-  if (!forceRefresh) {
-    const c = cacheGet<Category[]>('groceryCategories');
-    if (c) return c;
-  }
-  const { data, error } = await supabase
-    .from('categories')
-    .select('id,name,image_url,sort_order,vendor_type')
-    .eq('is_active', true)
-    .in('vendor_type', ['grocery', 'vegetable', 'fruit'])
-    .is('vendor_id', null)
-    .order('sort_order', { ascending: true });
-  if (error) fail(error, 'Categories fetch error');
-  const list = (data ?? []) as Category[];
-  cacheSet('groceryCategories', list);
-  return list;
+export function getGroceryCategories(forceRefresh = false): Promise<Category[]> {
+  return cached(
+    'groceryCategories',
+    STABLE_TTL_MS,
+    async () => {
+      const { data, error } = await supabase
+        .from('categories')
+        .select('id,name,image_url,sort_order,vendor_type')
+        .eq('is_active', true)
+        .in('vendor_type', ['grocery', 'vegetable', 'fruit'])
+        .is('vendor_id', null)
+        .order('sort_order', { ascending: true });
+      if (error) fail(error, 'Categories fetch error');
+      return (data ?? []) as Category[];
+    },
+    forceRefresh,
+  );
 }
 
 const vendorRank = (v: Vendor) => (v.is_active && v.is_featured ? 0 : v.is_active ? 1 : 2);
 const VENDOR_COLS =
   'id,name,banner_url,is_active,is_featured,is_open,address,latitude,longitude,opening_time,closing_time';
 
-export async function getHotels(
+export function getHotels(
   cityId: string,
   searchQuery: string | null,
   limit = 20,
@@ -229,32 +278,40 @@ export async function getHotels(
   forceRefresh = false,
 ): Promise<Vendor[]> {
   const q = (searchQuery ?? '').trim().toLowerCase();
-  const key = `hotels:${cityId}:${q}:${offset}`;
-  if (!forceRefresh) {
-    const c = cacheGet<Vendor[]>(key);
-    if (c) return c;
-  }
-  let query = supabase
-    .from('vendors')
-    .select(VENDOR_COLS)
-    .eq('city_id', cityId)
-    .eq('vendor_type', 'hotel')
-    .eq('approval_status', 'approved')
-    .order('is_featured', { ascending: false })
-    .range(offset, offset + limit - 1);
-  if (q) query = query.ilike('name', `%${q}%`);
-  const { data, error } = await query;
-  if (error) fail(error, 'Could not fetch hotels');
-  const list = ((data ?? []) as Vendor[]).sort(
-    (a, b) => vendorRank(a) - vendorRank(b) || a.name.toLowerCase().localeCompare(b.name.toLowerCase()),
+  return cached(
+    `hotels:${cityId}:${q}:${offset}:${limit}`,
+    CACHE_TTL_MS,
+    async () => {
+      let query = supabase
+        .from('vendors')
+        .select(VENDOR_COLS)
+        .eq('city_id', cityId)
+        .eq('vendor_type', 'hotel')
+        .eq('approval_status', 'approved')
+        .order('is_featured', { ascending: false })
+        .order('name', { ascending: true })
+        .range(offset, offset + limit - 1);
+      if (q) query = query.ilike('name', `%${q}%`);
+      const { data, error } = await query;
+      if (error) fail(error, 'Could not fetch hotels');
+      const list = ((data ?? []) as Vendor[]).sort(
+        (a, b) => vendorRank(a) - vendorRank(b) || a.name.toLowerCase().localeCompare(b.name.toLowerCase()),
+      );
+      // Hotel cards need hours and rating: fetch both for the whole page in 2 requests
+      // (instead of 2 per card) and keep them in the cache for the cards and the menu page.
+      await Promise.all([primeOperatingSlots(list.map((v) => v.id)), primeAverageRatings(list.map((v) => v.id))]);
+      for (const v of list) cacheSet(`vendor:${v.id}`, v);
+      return list;
+    },
+    forceRefresh,
   );
-  cacheSet(key, list);
-  return list;
 }
 
-export async function getVendor(vendorId: string): Promise<Vendor | null> {
-  const { data } = await supabase.from('vendors').select(VENDOR_COLS).eq('id', vendorId).maybeSingle();
-  return (data as Vendor) ?? null;
+export function getVendor(vendorId: string): Promise<Vendor | null> {
+  return cached(`vendor:${vendorId}`, CACHE_TTL_MS, async () => {
+    const { data } = await supabase.from('vendors').select(VENDOR_COLS).eq('id', vendorId).maybeSingle();
+    return data ? (data as Vendor) : { value: null, cache: false as const };
+  });
 }
 
 export async function getVendorNames(ids: string[]): Promise<Record<string, string>> {
@@ -275,29 +332,99 @@ export async function getVendorNames(ids: string[]): Promise<Record<string, stri
   return out;
 }
 
-export async function getVendorOperatingSlots(vendorId: string): Promise<OperatingSlot[]> {
+/** One request for the operating hours of many vendors; results are cached per vendor. */
+async function primeOperatingSlots(vendorIds: string[]) {
+  const missing = vendorIds.filter((id) => cacheGet(`slots:${id}`) === null);
+  if (!missing.length) return;
   const { data, error } = await supabase
     .from('vendor_operating_hours')
     .select('id,vendor_id,start_time,end_time,is_active')
-    .eq('vendor_id', vendorId)
+    .in('vendor_id', missing)
     .eq('is_active', true);
-  if (error) return [];
-  return (data ?? []) as OperatingSlot[];
+  if (error) return; // cards fall back to opening/closing time; the menu page retries
+  const rows = (data ?? []) as OperatingSlot[];
+  for (const id of missing) cacheSet(`slots:${id}`, rows.filter((r) => r.vendor_id === id));
+}
+
+export async function getVendorOperatingSlots(vendorId: string): Promise<OperatingSlot[]> {
+  return cached(`slots:${vendorId}`, CACHE_TTL_MS, async () => {
+    const { data, error } = await supabase
+      .from('vendor_operating_hours')
+      .select('id,vendor_id,start_time,end_time,is_active')
+      .eq('vendor_id', vendorId)
+      .eq('is_active', true);
+    if (error) return { value: [] as OperatingSlot[], cache: false as const };
+    return (data ?? []) as OperatingSlot[];
+  });
+}
+
+/** One request for the ratings of many vendors; averages are cached per vendor. */
+async function primeAverageRatings(vendorIds: string[]) {
+  const missing = vendorIds.filter((id) => cacheGet(`rating:${id}`) === null);
+  if (!missing.length) return;
+  const { data, error } = await supabase.from('vendor_reviews').select('vendor_id,rating').in('vendor_id', missing);
+  if (error) return;
+  const sums = new Map<string, { total: number; n: number }>();
+  for (const r of (data ?? []) as { vendor_id: string; rating: number }[]) {
+    const rating = Number(r.rating);
+    if (!(rating > 0)) continue;
+    const cur = sums.get(r.vendor_id) ?? { total: 0, n: 0 };
+    sums.set(r.vendor_id, { total: cur.total + rating, n: cur.n + 1 });
+  }
+  for (const id of missing) {
+    const s = sums.get(id);
+    cacheSet(`rating:${id}`, s ? s.total / s.n : 0);
+  }
 }
 
 export async function getVendorAverageRating(vendorId: string): Promise<number> {
-  const { data, error } = await supabase.from('vendor_reviews').select('rating').eq('vendor_id', vendorId);
-  if (error || !data?.length) return 0;
-  const ratings = (data as { rating: number }[]).map((r) => Number(r.rating)).filter((r) => r > 0);
-  return ratings.length ? ratings.reduce((a, b) => a + b, 0) / ratings.length : 0;
+  const hit = cacheGet<number>(`rating:${vendorId}`);
+  if (hit !== null) return hit;
+  await primeAverageRatings([vendorId]);
+  return cacheGet<number>(`rating:${vendorId}`) ?? 0;
 }
+
+/** Already-fetched hours/rating for a vendor (filled by getHotels), without a request. */
+export const peekVendorExtras = (vendorId: string) => ({
+  slots: cacheGet<OperatingSlot[]>(`slots:${vendorId}`),
+  rating: cacheGet<number>(`rating:${vendorId}`),
+});
 
 // ---------- PRODUCTS & CITY STOCK RESOLUTION ----------
 
+// City price/stock is embedded in the product request (one round trip instead of two) and
+// filtered to the current city by withCityStock().
+const CITY_STOCK_EMBED = 'product_city_stock(product_id,price,mrp,stock_qty,is_available,is_active)';
 const GROCERY_PRODUCT_COLS =
-  'id,category_id,vendor_id,name,description,image_url,price,mrp,unit,stock_qty,is_available,is_active,is_featured,product_variants(id,label,is_active,product_variant_city_stock(price,stock_qty,is_available,city_id))';
+  'id,category_id,vendor_id,name,description,image_url,price,mrp,unit,stock_qty,is_available,is_active,is_featured,' +
+  'product_variants(id,label,is_active,product_variant_city_stock(price,stock_qty,is_available,city_id)),' +
+  CITY_STOCK_EMBED;
 const HOTEL_PRODUCT_COLS =
-  'id,category_id,vendor_id,name,description,image_url,price,mrp,unit,stock_qty,is_available,is_active,is_featured,available_from,available_until';
+  'id,category_id,vendor_id,name,description,image_url,price,mrp,unit,stock_qty,is_available,is_active,is_featured,available_from,available_until,' +
+  CITY_STOCK_EMBED;
+// Cart lines can hold grocery and hotel items.
+const CART_PRODUCT_COLS =
+  'id,category_id,vendor_id,name,description,image_url,price,mrp,unit,stock_qty,is_available,is_active,is_featured,available_from,available_until,' +
+  'product_variants(id,label,is_active,product_variant_city_stock(price,stock_qty,is_available,city_id)),' +
+  CITY_STOCK_EMBED;
+
+/** Limits the embedded stock rows to this city (variant rows: this city or city-less). */
+function withCityStock<Q>(query: Q, cityId: string, variants = true): Q {
+  // Loosely typed on purpose: the builder's full generic type is too deep for TypeScript here.
+  type Filters = {
+    eq: (column: string, value: string) => Filters;
+    or: (filters: string, opts: { referencedTable: string }) => Filters;
+  };
+  let q = (query as unknown as Filters).eq('product_city_stock.city_id', cityId);
+  if (variants) {
+    q = q.or(`city_id.eq.${cityId},city_id.is.null`, { referencedTable: 'product_variants.product_variant_city_stock' });
+  }
+  return q as unknown as Q;
+}
+
+const REORDER_PRODUCT_COLS = 'id,vendor_id,is_active,is_available,' + CITY_STOCK_EMBED;
+
+const cityStockOf = (prod: Product) => (prod.product_city_stock ?? [])[0];
 
 function resolveVariants(prod: Product, cityId: string): ResolvedVariant[] {
   const variants = (prod.product_variants ?? []).filter((v) => v.is_active !== false);
@@ -352,22 +479,7 @@ function resolveProduct(
   };
 }
 
-/** City price/stock rows for the given products; `failed` means the request itself failed. */
-async function getCityStockMap(cityId: string, productIds: string[]) {
-  if (!productIds.length) return { map: new Map<string, ProductCityStock>(), failed: false };
-  const { data, error } = await supabase
-    .from('product_city_stock')
-    .select('product_id,price,mrp,stock_qty,is_available,is_active')
-    .eq('city_id', cityId)
-    .in('product_id', productIds);
-  if (error) console.warn('City stock request failed', error);
-  return {
-    map: new Map(((data ?? []) as ProductCityStock[]).map((s) => [s.product_id, s])),
-    failed: !!error,
-  };
-}
-
-export async function getResolvedGroceryProducts(p: {
+export function getResolvedGroceryProducts(p: {
   cityId: string;
   categoryId: string;
   searchQuery?: string | null;
@@ -377,54 +489,57 @@ export async function getResolvedGroceryProducts(p: {
 }): Promise<ResolvedProduct[]> {
   const { cityId, categoryId, limit = 30, offset = 0, forceRefresh = false } = p;
   const q = (p.searchQuery ?? '').trim().toLowerCase();
-  const key = `grocery:${cityId}:${categoryId}:${q}:${offset}`;
-  if (!forceRefresh) {
-    const c = cacheGet<ResolvedProduct[]>(key);
-    if (c) return c;
-  }
-  let query = supabase
-    .from('products')
-    .select(GROCERY_PRODUCT_COLS)
-    .eq('is_active', true)
-    .eq('category_id', categoryId)
-    .is('vendor_id', null)
-    .range(offset, offset + limit - 1);
-  if (q) query = query.ilike('name', `%${q}%`);
-  const { data, error } = await query;
-  if (error) fail(error, 'Could not fetch products');
-  const products = (data ?? []) as unknown as Product[];
-  const stock = await getCityStockMap(cityId, products.map((x) => x.id));
-  const resolved = products
-    .map((prod) => resolveProduct(prod, stock.map.get(prod.id), cityId, stock.failed))
-    .sort(
-      (a, b) =>
-        Number(isInStockAndActive(b)) - Number(isInStockAndActive(a)) ||
-        a.name.toLowerCase().localeCompare(b.name.toLowerCase()),
-    );
-  // Never cache a page whose stock failed to load, so the next load retries.
-  if (!stock.failed) cacheSet(key, resolved);
-  return resolved;
+  return cached(
+    `grocery:${cityId}:${categoryId}:${q}:${offset}:${limit}`,
+    CACHE_TTL_MS,
+    async () => {
+      // Only this category's page, with this city's stock embedded, filtered in the database.
+      let query = withCityStock(
+        supabase
+          .from('products')
+          .select(GROCERY_PRODUCT_COLS)
+          .eq('is_active', true)
+          .eq('category_id', categoryId)
+          .is('vendor_id', null),
+        cityId,
+      )
+        .order('name', { ascending: true })
+        .range(offset, offset + limit - 1);
+      if (q) query = query.ilike('name', `%${q}%`);
+      const { data, error } = await query;
+      if (error) fail(error, 'Could not fetch products');
+      const products = (data ?? []) as unknown as Product[];
+      return products
+        .map((prod) => resolveProduct(prod, cityStockOf(prod), cityId))
+        .sort(
+          (a, b) =>
+            Number(isInStockAndActive(b)) - Number(isInStockAndActive(a)) ||
+            a.name.toLowerCase().localeCompare(b.name.toLowerCase()),
+        );
+    },
+    forceRefresh,
+  );
 }
 
-export async function getHotelCategories(vendorId: string, forceRefresh = false): Promise<Category[]> {
-  const key = `hotelCats:${vendorId}`;
-  if (!forceRefresh) {
-    const c = cacheGet<Category[]>(key);
-    if (c) return c;
-  }
-  const { data, error } = await supabase
-    .from('categories')
-    .select('id,name,image_url,vendor_id,is_active,sort_order')
-    .eq('vendor_id', vendorId)
-    .eq('is_active', true)
-    .order('sort_order', { ascending: true });
-  if (error) fail(error, 'Could not fetch hotel categories');
-  const list = (data ?? []) as Category[];
-  cacheSet(key, list);
-  return list;
+export function getHotelCategories(vendorId: string, forceRefresh = false): Promise<Category[]> {
+  return cached(
+    `hotelCats:${vendorId}`,
+    STABLE_TTL_MS,
+    async () => {
+      const { data, error } = await supabase
+        .from('categories')
+        .select('id,name,image_url,vendor_id,is_active,sort_order')
+        .eq('vendor_id', vendorId)
+        .eq('is_active', true)
+        .order('sort_order', { ascending: true });
+      if (error) fail(error, 'Could not fetch hotel categories');
+      return (data ?? []) as Category[];
+    },
+    forceRefresh,
+  );
 }
 
-export async function getHotelProducts(p: {
+export function getHotelProducts(p: {
   vendorId: string;
   cityId: string;
   categoryId?: string | null;
@@ -433,52 +548,84 @@ export async function getHotelProducts(p: {
   forceRefresh?: boolean;
 }): Promise<ResolvedProduct[]> {
   const { vendorId, cityId, categoryId, limit = 25, offset = 0, forceRefresh = false } = p;
-  const key = `hotelProducts:${vendorId}:${cityId}:${categoryId ?? ''}:${offset}`;
-  if (!forceRefresh) {
-    const c = cacheGet<ResolvedProduct[]>(key);
-    if (c) return c;
-  }
-  let query = supabase
-    .from('products')
-    .select(HOTEL_PRODUCT_COLS)
-    .eq('is_active', true)
-    .eq('vendor_id', vendorId)
-    .order('is_featured', { ascending: false })
-    .range(offset, offset + limit - 1);
-  if (categoryId) query = query.eq('category_id', categoryId);
-  const { data, error } = await query;
-  if (error) fail(error, 'Could not fetch hotel products');
-  const products = (data ?? []) as unknown as Product[];
-  const stock = await getCityStockMap(cityId, products.map((x) => x.id));
-  const tier = (x: ResolvedProduct) => {
-    const avail = isHotelItemAvailable(x);
-    return avail && x.isFeatured ? 0 : avail ? 1 : 2;
-  };
-  const resolved = products
-    .map((prod) => ({ ...resolveProduct(prod, stock.map.get(prod.id), cityId), variants: [] }))
-    .sort((a, b) => tier(a) - tier(b) || a.name.toLowerCase().localeCompare(b.name.toLowerCase()));
-  cacheSet(key, resolved);
-  return resolved;
+  return cached(
+    `hotelProducts:${vendorId}:${cityId}:${categoryId ?? ''}:${offset}:${limit}`,
+    CACHE_TTL_MS,
+    async () => {
+      let query = withCityStock(
+        supabase.from('products').select(HOTEL_PRODUCT_COLS).eq('is_active', true).eq('vendor_id', vendorId),
+        cityId,
+        false,
+      )
+        .order('is_featured', { ascending: false })
+        .order('name', { ascending: true })
+        .range(offset, offset + limit - 1);
+      if (categoryId) query = query.eq('category_id', categoryId);
+      const { data, error } = await query;
+      if (error) fail(error, 'Could not fetch hotel products');
+      const products = (data ?? []) as unknown as Product[];
+      const tier = (x: ResolvedProduct) => {
+        const avail = isHotelItemAvailable(x);
+        return avail && x.isFeatured ? 0 : avail ? 1 : 2;
+      };
+      return products
+        .map((prod) => ({ ...resolveProduct(prod, cityStockOf(prod), cityId), variants: [] }))
+        .sort((a, b) => tier(a) - tier(b) || a.name.toLowerCase().localeCompare(b.name.toLowerCase()));
+    },
+    forceRefresh,
+  );
 }
 
 // ---------- FRESH CART PRICING ----------
 
-/** Re-fetches current price/stock for every cart item (prices are never cached in the cart). */
-export async function getFreshCartItems(items: CartItem[], cityId: string): Promise<CartItemUi[]> {
-  if (!items.length) return [];
-  const ids = Array.from(new Set(items.map((i) => i.product_id).filter(Boolean)));
-  const [prodRes, stock] = await Promise.all([
-    supabase.from('products').select(GROCERY_PRODUCT_COLS).in('id', ids),
-    getCityStockMap(cityId, ids),
-  ]);
-  if (prodRes.error) fail(prodRes.error, 'Could not load live prices');
-  if (stock.failed) throw new Error('Could not refresh prices');
-  const products = new Map(((prodRes.data ?? []) as unknown as Product[]).map((x) => [x.id, x]));
+// Live prices are shared by every page showing the cart (home bar, hotel menu, cart,
+// checkout) for a short time, so changing a quantity does not re-download the cart.
+const LIVE_PRICE_TTL_MS = 30 * 1000;
+
+/**
+ * Current price/stock for the given cart products. Only products without a fresh entry are
+ * requested; `force` re-fetches all of them (e.g. the cart page's retry).
+ */
+export async function getLiveCartProducts(
+  productIds: string[],
+  cityId: string,
+  force = false,
+): Promise<Map<string, ResolvedProduct>> {
+  const ids = Array.from(new Set(productIds.filter(Boolean))).sort();
+  const key = (id: string) => `live:${cityId}:${id}`;
+  const missing = force ? ids : ids.filter((id) => cacheGet(key(id)) === null);
+  if (missing.length) {
+    await cached(
+      `liveBatch:${cityId}:${missing.join(',')}`,
+      1,
+      async () => {
+        const { data, error } = await withCityStock(
+          supabase.from('products').select(CART_PRODUCT_COLS).in('id', missing),
+          cityId,
+        );
+        if (error) fail(error, 'Could not load live prices');
+        for (const prod of (data ?? []) as unknown as Product[]) {
+          cacheSet(key(prod.id), resolveProduct(prod, cityStockOf(prod), cityId), LIVE_PRICE_TTL_MS);
+        }
+        return { value: true, cache: false as const };
+      },
+      force,
+    );
+  }
+  const out = new Map<string, ResolvedProduct>();
+  for (const id of ids) {
+    const rp = cacheGet<ResolvedProduct>(key(id));
+    if (rp) out.set(id, rp);
+  }
+  return out;
+}
+
+/** Builds priced cart lines from the cart and already-fetched live products (no request). */
+export function buildCartLines(items: CartItem[], live: Map<string, ResolvedProduct>): CartItemUi[] {
   const out: CartItemUi[] = [];
   for (const item of items) {
-    const prod = products.get(item.product_id);
-    if (!prod) continue;
-    const rp = resolveProduct(prod, stock.map.get(prod.id), cityId);
+    const rp = live.get(item.product_id);
+    if (!rp) continue;
     const variant = item.variant_id ? rp.variants.find((v) => v.id === item.variant_id) ?? null : null;
     const price = variant?.price ?? rp.effectivePrice;
     out.push({
@@ -493,37 +640,54 @@ export async function getFreshCartItems(items: CartItem[], cityId: string): Prom
   return out;
 }
 
+/** Re-fetches current price/stock for every cart item (prices are never stored in the cart). */
+export async function getFreshCartItems(items: CartItem[], cityId: string, force = false): Promise<CartItemUi[]> {
+  if (!items.length) return [];
+  return buildCartLines(items, await getLiveCartProducts(items.map((i) => i.product_id), cityId, force));
+}
+
 // ---------- DELIVERY ----------
 
-export async function getDeliverySlots(cityId: string): Promise<DeliverySlot[]> {
-  const { data, error } = await supabase
-    .from('delivery_slots')
-    .select('id,name,start_time,end_time,min_order_amount,is_free_delivery,delivery_fee,is_active,city_id')
-    .eq('city_id', cityId)
-    .eq('is_active', true)
-    .order('start_time', { ascending: true });
-  if (error) return [];
-  return (data ?? []) as DeliverySlot[];
+// City delivery settings change rarely: cached for 5 minutes and shared by home and checkout.
+// Failed requests are not cached, so the next page retries.
+export function getDeliverySlots(cityId: string): Promise<DeliverySlot[]> {
+  return cached(`slotsCity:${cityId}`, CACHE_TTL_MS, async () => {
+    const { data, error } = await supabase
+      .from('delivery_slots')
+      .select('id,name,start_time,end_time,min_order_amount,is_free_delivery,delivery_fee,is_active,city_id')
+      .eq('city_id', cityId)
+      .eq('is_active', true)
+      .order('start_time', { ascending: true });
+    if (error) return { value: [] as DeliverySlot[], cache: false as const };
+    return (data ?? []) as DeliverySlot[];
+  });
 }
 
-export async function getExpressDeliverySettings(cityId: string): Promise<ExpressDeliverySettings | null> {
-  const { data, error } = await supabase
-    .from('express_delivery_settings')
-    .select('*')
-    .eq('city_id', cityId)
-    .eq('is_active', true);
-  if (error) return null;
-  return ((data ?? [])[0] as ExpressDeliverySettings) ?? null;
+export function getExpressDeliverySettings(cityId: string): Promise<ExpressDeliverySettings | null> {
+  return cached(`express:${cityId}`, CACHE_TTL_MS, async () => {
+    const { data, error } = await supabase
+      .from('express_delivery_settings')
+      .select(
+        'city_id,is_active,max_delivery_minutes,base_km,base_charge,per_km_charge_beyond,free_delivery_min_order,free_delivery_max_km,min_order_amount',
+      )
+      .eq('city_id', cityId)
+      .eq('is_active', true)
+      .limit(1);
+    if (error) return { value: null, cache: false as const };
+    return ((data ?? [])[0] as ExpressDeliverySettings) ?? null;
+  });
 }
 
-export async function getCityDeliverySettings(cityId: string): Promise<CityDeliverySettings | null> {
-  const { data, error } = await supabase
-    .from('city_delivery_settings')
-    .select('city_id,free_delivery_min_order_amount,handling_fee')
-    .eq('city_id', cityId)
-    .maybeSingle();
-  if (error) return null;
-  return (data as CityDeliverySettings) ?? null;
+export function getCityDeliverySettings(cityId: string): Promise<CityDeliverySettings | null> {
+  return cached(`citySettings:${cityId}`, CACHE_TTL_MS, async () => {
+    const { data, error } = await supabase
+      .from('city_delivery_settings')
+      .select('city_id,free_delivery_min_order_amount,handling_fee')
+      .eq('city_id', cityId)
+      .maybeSingle();
+    if (error) return { value: null, cache: false as const };
+    return (data as CityDeliverySettings) ?? null;
+  });
 }
 
 export async function getFreeDeliveryThreshold(cityId: string): Promise<number | null> {
@@ -580,10 +744,22 @@ export async function resolveDeliveryDistanceKm(
 
 // ---------- COUPONS ----------
 
-export async function getCoupons(cityId: string): Promise<Coupon[]> {
-  const { data, error } = await supabase.from('coupons').select('*').eq('city_id', cityId).eq('is_active', true);
-  if (error) return [];
-  return (data ?? []) as Coupon[];
+const COUPON_COLS =
+  'id,code,description,discount_type,discount_value,min_order_amount,max_discount_amount,usage_limit,used_count,starts_at,expires_at,is_active,city_id';
+
+/** The one coupon the home screen advertises: a single active, already-started, unexpired row. */
+export async function getPromoCoupon(cityId: string): Promise<Coupon | null> {
+  const now = new Date().toISOString();
+  const { data, error } = await supabase
+    .from('coupons')
+    .select('id,code,description,discount_type,discount_value,max_discount_amount,min_order_amount,is_active')
+    .eq('city_id', cityId)
+    .eq('is_active', true)
+    .lte('starts_at', now)
+    .or(`expires_at.is.null,expires_at.gt."${now}"`)
+    .limit(1);
+  if (error) return null;
+  return ((data ?? [])[0] as Coupon) ?? null;
 }
 
 export async function validateAndApplyCoupon(
@@ -595,7 +771,7 @@ export async function validateAndApplyCoupon(
   if (!trimmed) return { isValid: false, discountAmount: 0, errorMessage: 'Please enter a coupon code' };
   const { data, error } = await supabase
     .from('coupons')
-    .select('*')
+    .select(COUPON_COLS)
     .eq('city_id', cityId)
     .eq('is_active', true)
     .eq('code', trimmed)
@@ -629,45 +805,65 @@ export async function validateAndApplyCoupon(
 
 // ---------- ADDRESSES ----------
 
-export async function getAddresses(userId: string): Promise<CustomerAddress[]> {
-  const { data, error } = await supabase
-    .from('customer_addresses')
-    .select('*')
-    .eq('user_id', userId)
-    .order('is_default', { ascending: false })
-    .order('id', { ascending: false });
-  if (error) fail(error, 'Failed to load addresses');
-  return (data ?? []) as CustomerAddress[];
+const ADDRESS_COLS = 'id,user_id,label,recipient_name,phone,address_line,landmark,lat,lng,city_id,is_default';
+
+// Addresses are read at login, on checkout and in the address book: one cached copy per user,
+// dropped after any change so every page sees the update.
+export function getAddresses(userId: string, forceRefresh = false): Promise<CustomerAddress[]> {
+  return cached(
+    `addresses:${userId}`,
+    CACHE_TTL_MS,
+    async () => {
+      const { data, error } = await supabase
+        .from('customer_addresses')
+        .select(ADDRESS_COLS)
+        .eq('user_id', userId)
+        .order('is_default', { ascending: false })
+        .order('id', { ascending: false });
+      if (error) fail(error, 'Failed to load addresses');
+      return (data ?? []) as CustomerAddress[];
+    },
+    forceRefresh,
+  );
 }
 
 export async function getAddressById(id: string): Promise<CustomerAddress | null> {
-  const { data } = await supabase.from('customer_addresses').select('*').eq('id', id).maybeSingle();
+  const { data } = await supabase.from('customer_addresses').select(ADDRESS_COLS).eq('id', id).maybeSingle();
   return (data as CustomerAddress) ?? null;
 }
 
 export async function addAddress(address: CustomerAddress): Promise<CustomerAddress> {
   const { id: _omit, ...row } = address;
   void _omit;
-  const { data, error } = await supabase.from('customer_addresses').insert(row).select().single();
+  const { data, error } = await supabase.from('customer_addresses').insert(row).select(ADDRESS_COLS).single();
   if (error) fail(error, 'Failed to save delivery address.');
+  invalidateCache('addresses:');
   return data as CustomerAddress;
 }
 
 export async function updateAddress(id: string, fields: Partial<CustomerAddress>) {
   const { error } = await supabase.from('customer_addresses').update(fields).eq('id', id);
+  invalidateCache('addresses:');
   if (error) fail(error, 'Failed to update address');
 }
 
 export async function deleteAddress(id: string) {
   const { error } = await supabase.from('customer_addresses').delete().eq('id', id);
+  invalidateCache('addresses:');
   if (error) fail(error, 'Failed to delete address');
 }
 
-/** Only one default address: unset the previous default first. */
+/** Only one default address: unset the previous default(s) in one request, then set the new one. */
 export async function setDefaultAddress(userId: string, addressId: string) {
-  const current = await getAddresses(userId);
-  for (const prev of current.filter((a) => a.is_default && a.id !== addressId)) {
-    if (prev.id) await updateAddress(prev.id, { is_default: false });
+  const { error } = await supabase
+    .from('customer_addresses')
+    .update({ is_default: false })
+    .eq('user_id', userId)
+    .eq('is_default', true)
+    .neq('id', addressId);
+  if (error) {
+    invalidateCache('addresses:');
+    fail(error, 'Failed to update address');
   }
   await updateAddress(addressId, { is_default: true });
 }
@@ -700,6 +896,9 @@ function parseOrderFromRpc(data: unknown): Order | null {
   return { ...fallback(id), ...(obj as Partial<Order>), id };
 }
 
+/** Thrown by placeOrder when the service is in maintenance, so checkout can show its maintenance screen. */
+export class MaintenanceError extends Error {}
+
 export async function checkMaintenanceMode(): Promise<MaintenanceSettings> {
   const { data, error } = await supabase.from('app_settings').select('value').eq('key', 'maintenance_mode').limit(1);
   if (error || !data?.length) return { enabled: false };
@@ -726,7 +925,7 @@ export async function placeOrder(p: {
 
   const maintenance = await checkMaintenanceMode();
   if (maintenance.enabled) {
-    throw new Error(maintenance.message ?? 'Service temporarily unavailable. Please try again shortly.');
+    throw new MaintenanceError(maintenance.message ?? 'Service temporarily unavailable. Please try again shortly.');
   }
 
   // Only COD and UPI (Razorpay) have a working payment flow; never create an unpaid "card" order.
@@ -815,10 +1014,16 @@ export async function verifyRazorpayPayment(p: {
 
 // ---------- ORDERS ----------
 
+// List rows only need what the order card shows.
+const ORDER_LIST_COLS = 'id,order_number,customer_id,vendor_id,status,payment_method,payment_status,total_amount,placed_at,created_at';
+const ORDER_DETAIL_COLS =
+  'id,order_number,customer_id,vendor_id,delivery_partner_id,address_id,slot_id,status,payment_method,payment_status,' +
+  'subtotal,discount_amount,delivery_fee,handling_fee,total_amount,city_id,delivery_type,placed_at,created_at';
+
 export async function getOrders(userId: string, limit = 20, offset = 0): Promise<Order[]> {
   const { data, error } = await supabase
     .from('orders')
-    .select('*')
+    .select(ORDER_LIST_COLS)
     .eq('customer_id', userId)
     .order('placed_at', { ascending: false, nullsFirst: false })
     .order('created_at', { ascending: false })
@@ -827,38 +1032,44 @@ export async function getOrders(userId: string, limit = 20, offset = 0): Promise
   return (data ?? []) as Order[];
 }
 
-export async function getCompletedOrderCount(userId: string): Promise<number> {
-  const { count, error } = await supabase
-    .from('orders')
-    .select('id', { count: 'exact', head: true })
-    .eq('customer_id', userId)
-    .eq('status', 'delivered');
-  if (error) return 0;
-  return count ?? 0;
+export function getCompletedOrderCount(userId: string): Promise<number> {
+  // Only drives the rating popup: once per 5 minutes is plenty (not on every home visit).
+  return cached(`completedCount:${userId}`, CACHE_TTL_MS, async () => {
+    const { count, error } = await supabase
+      .from('orders')
+      .select('id', { count: 'exact', head: true })
+      .eq('customer_id', userId)
+      .eq('status', 'delivered');
+    if (error) return { value: 0, cache: false as const };
+    return count ?? 0;
+  });
 }
 
 export async function getOrderById(orderId: string): Promise<Order> {
   const joined = await supabase
     .from('orders')
-    .select('*,delivery_partners(id,name,phone,latitude,longitude,vehicle_type,vehicle_number)')
+    .select(`${ORDER_DETAIL_COLS},delivery_partners(id,name,phone,latitude,longitude,vehicle_type,vehicle_number)`)
     .eq('id', orderId)
     .maybeSingle();
   if (!joined.error && joined.data) return joined.data as unknown as Order;
-  const plain = await supabase.from('orders').select('*').eq('id', orderId).maybeSingle();
+  const plain = await supabase.from('orders').select(ORDER_DETAIL_COLS).eq('id', orderId).maybeSingle();
   if (plain.error) fail(plain.error, 'Failed to load order');
   if (!plain.data) throw new Error(`Order not found: ${orderId}`);
-  return plain.data as Order;
+  return plain.data as unknown as Order;
 }
 
 export async function getOrderItems(orderId: string): Promise<OrderItem[]> {
-  const { data } = await supabase.from('order_items').select('*').eq('order_id', orderId);
+  const { data } = await supabase
+    .from('order_items')
+    .select('id,order_id,product_id,variant_id,product_name,variant_label,quantity,unit_price,total_price,vendor_id')
+    .eq('order_id', orderId);
   return ((data ?? []) as OrderItem[]).map((i) => ({ ...i, quantity: Number(i.quantity) }));
 }
 
 export async function getOrderStatusHistory(orderId: string): Promise<OrderStatusHistory[]> {
   const { data } = await supabase
     .from('order_status_history')
-    .select('*')
+    .select('id,order_id,status,note,created_at')
     .eq('order_id', orderId)
     .order('created_at', { ascending: true });
   return (data ?? []) as OrderStatusHistory[];
@@ -892,18 +1103,19 @@ export async function getDeliveryPartner(partnerId: string): Promise<DeliveryPar
 export async function reorder(orderItems: OrderItem[], cityId: string): Promise<string> {
   const ids = Array.from(new Set(orderItems.map((i) => i.product_id).filter(Boolean)));
   if (!ids.length) return 'No items to reorder.';
-  const [prodRes, stock] = await Promise.all([
-    supabase.from('products').select('id,vendor_id,is_active,is_available').in('id', ids),
-    getCityStockMap(cityId, ids),
-  ]);
-  if (prodRes.error || stock.failed) throw new Error('Could not check item availability. Please try again.');
-  const products = new Map(((prodRes.data ?? []) as Product[]).map((x) => [x.id, x]));
+  const prodRes = await supabase
+    .from('products')
+    .select(REORDER_PRODUCT_COLS)
+    .in('id', ids)
+    .eq('product_city_stock.city_id', cityId);
+  if (prodRes.error) throw new Error('Could not check item availability. Please try again.');
+  const products = new Map(((prodRes.data ?? []) as unknown as Product[]).map((x) => [x.id, x]));
   let added = 0;
   const skipped: string[] = [];
   for (const item of orderItems) {
     const prod = products.get(item.product_id);
     // Same city rule as the product lists: grocery items need an active city stock row.
-    const avail = !!prod && resolveProduct(prod, stock.map.get(item.product_id), cityId).effectiveIsAvailable;
+    const avail = !!prod && resolveProduct(prod, cityStockOf(prod), cityId).effectiveIsAvailable;
     if (prod && prod.is_active !== false && avail) {
       const res: AddToCartResult = useCart.getState().addToCart({
         productId: item.product_id,
@@ -936,7 +1148,7 @@ export async function submitDeliveryPartnerReview(r: DeliveryPartnerReview) {
 export async function getMyVendorReviews(customerId: string, limit = 20): Promise<VendorReview[]> {
   const { data, error } = await supabase
     .from('vendor_reviews')
-    .select('*')
+    .select('vendor_id,customer_id,order_id,rating,comment,created_at')
     .eq('customer_id', customerId)
     .order('created_at', { ascending: false })
     .limit(limit);
@@ -947,7 +1159,7 @@ export async function getMyVendorReviews(customerId: string, limit = 20): Promis
 export async function getMyDeliveryPartnerReviews(customerId: string, limit = 20): Promise<DeliveryPartnerReview[]> {
   const { data, error } = await supabase
     .from('delivery_partner_reviews')
-    .select('*')
+    .select('delivery_partner_id,customer_id,order_id,rating,comment,created_at')
     .eq('customer_id', customerId)
     .order('created_at', { ascending: false })
     .limit(limit);
@@ -955,13 +1167,15 @@ export async function getMyDeliveryPartnerReviews(customerId: string, limit = 20
   return (data ?? []) as DeliveryPartnerReview[];
 }
 
-export async function getReviewedOrderIds(customerId: string): Promise<Set<string>> {
+/** Which of the given orders this customer already reviewed (only the order_id column, only these orders). */
+export async function getReviewedOrderIds(customerId: string, orderIds: string[]): Promise<Set<string>> {
   const ids = new Set<string>();
+  if (!orderIds.length) return ids;
   const [v, d] = await Promise.all([
-    getMyVendorReviews(customerId, 200).catch(() => []),
-    getMyDeliveryPartnerReviews(customerId, 200).catch(() => []),
+    supabase.from('vendor_reviews').select('order_id').eq('customer_id', customerId).in('order_id', orderIds),
+    supabase.from('delivery_partner_reviews').select('order_id').eq('customer_id', customerId).in('order_id', orderIds),
   ]);
-  for (const r of [...v, ...d]) if (r.order_id) ids.add(r.order_id);
+  for (const r of [...(v.data ?? []), ...(d.data ?? [])] as { order_id: string | null }[]) if (r.order_id) ids.add(r.order_id);
   return ids;
 }
 
@@ -970,7 +1184,7 @@ export async function getReviewedOrderIds(customerId: string): Promise<Set<strin
 export async function getWalletTransactions(customerId: string, limit = 20, offset = 0): Promise<WalletTransaction[]> {
   const { data, error } = await supabase
     .from('customer_wallet_transactions')
-    .select('*')
+    .select('id,customer_id,order_id,type,amount,reason,created_at')
     .eq('customer_id', customerId)
     .order('created_at', { ascending: false })
     .range(offset, offset + limit - 1);

@@ -6,6 +6,7 @@ import { BillRow, ErrorCard, PageHeader, Spinner, toast } from '../components/ui
 import MaintenancePage from './MaintenancePage';
 import {
   checkMaintenanceMode,
+  MaintenanceError,
   createRazorpayOrder,
   getAddresses,
   getCityDeliverySettings,
@@ -246,11 +247,7 @@ export default function CheckoutPage() {
     setPlacingMsg('Placing Order...');
     setPlacementError(null);
     try {
-      const m = await checkMaintenanceMode();
-      if (m.enabled) {
-        setMaintenanceMsg(m.message ?? 'Service temporarily unavailable. Please try again shortly.');
-        return;
-      }
+      // placeOrder checks maintenance mode itself right before checkout (no separate request here).
       const order = await placeOrder({ userId, isHotel, vendorId: hotelVendorId, addressId, paymentMethod: payment, coupon });
       if (payment === 'upi') {
         try {
@@ -264,6 +261,10 @@ export default function CheckoutPage() {
         navigate(`/orders/${order.id}`, { replace: true });
       }
     } catch (e) {
+      if (e instanceof MaintenanceError) {
+        setMaintenanceMsg(e.message);
+        return;
+      }
       const msg = errorMessage(e, 'Failed to place order');
       // Server rejected the coupon (no order created): drop it so the order can be placed without it.
       if (coupon && /coupon|minimum order amount/i.test(msg)) {
