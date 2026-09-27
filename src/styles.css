@@ -431,3 +431,5 @@ code { background: var(--surface-variant); padding: 1px 5px; border-radius: 4px;
 .install-step { margin-top: 12px; font-size: 14px; }
 .install-inline-icon { vertical-align: -3px; color: var(--primary); }
 .install-ok { width: 100%; margin-top: 12px; }
+a.install-ok { display: flex; align-items: center; justify-content: center; text-decoration: none; }
+.install-later { display: block; width: 100%; text-align: center; margin-top: 6px; padding: 8px; font-size: 14px; font-weight: 600; color: var(--muted); }

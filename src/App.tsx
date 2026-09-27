@@ -1,5 +1,6 @@
 import { useEffect, useState, type ReactNode } from 'react';
 import { IosInstallPrompt } from './components/IosInstallPrompt';
+import { AndroidAppPrompt } from './components/AndroidAppPrompt';
 import { Navigate, Route, Routes, useLocation, useNavigate } from 'react-router-dom';
 import { supabase, isSupabaseConfigured } from './lib/supabase';
 import {
@@ -240,6 +241,7 @@ export default function App() {
       )}
       <ToastHost />
       <IosInstallPrompt loggedIn={isLoggedIn} />
+      <AndroidAppPrompt loggedIn={isLoggedIn} />
     </>
   );
 }
