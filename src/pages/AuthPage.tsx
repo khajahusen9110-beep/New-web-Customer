@@ -235,6 +235,24 @@ export default function AuthPage() {
           </form>
         )}
 
+        {step === 'phone' && (
+          <section className="auth-about" aria-labelledby="about-sndmart">
+            <h2 id="about-sndmart">Grocery &amp; food delivery in Sindhanur</h2>
+            <p>
+              Sndmart brings fresh groceries, fruits, vegetables and food from local hotels to your doorstep in
+              Sindhanur, Karnataka.
+            </p>
+            <ul>
+              <li>Daily groceries and fresh fruits at local prices</li>
+              <li>Order food from nearby hotels and restaurants</li>
+              <li>Pay with Cash on Delivery or UPI</li>
+            </ul>
+            <a href="https://play.google.com/store/apps/details?id=in.sndmart.app" target="_blank" rel="noopener noreferrer">
+              Get the Sndmart app on Google Play
+            </a>
+          </section>
+        )}
+
         {step === 'otp' && (
           <div className="auth-card">
             <div className="hero-icon">

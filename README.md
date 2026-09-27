@@ -28,6 +28,14 @@ It is a static single-page app. Build with `npm run build` and host `dist/` anyw
 - **Netlify**: build command `npm run build`, publish directory `dist`, same env vars.
   `public/_redirects` handles SPA routing.
 
+**SEO**
+
+Set `VITE_SITE_URL` (e.g. `https://sndmart.in`) in the hosting env vars. The build then fills the
+canonical, Open Graph and structured-data URLs in `index.html` and writes `robots.txt` and
+`sitemap.xml` (the Vercel/Netlify production URL is used if it is not set). Only the home/login
+page is indexed; pages behind login are blocked in `robots.txt` and marked `noindex`. After going
+live, add the site in Google Search Console and submit `/sitemap.xml`.
+
 **Supabase settings to check before going live**
 
 1. *Authentication → URL Configuration*: add your web domain to the allowed site / redirect URLs.

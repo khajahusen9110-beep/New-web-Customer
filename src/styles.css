@@ -433,3 +433,10 @@ code { background: var(--surface-variant); padding: 1px 5px; border-radius: 4px;
 .install-ok { width: 100%; margin-top: 12px; }
 a.install-ok { display: flex; align-items: center; justify-content: center; text-decoration: none; }
 .install-later { display: block; width: 100%; text-align: center; margin-top: 6px; padding: 8px; font-size: 14px; font-weight: 600; color: var(--muted); }
+
+/* Public "about" text under the login form (read by search engines) */
+.auth-about { max-width: 440px; margin: 28px auto 0; padding: 0 4px 24px; color: var(--muted); font-size: 14px; line-height: 1.5; }
+.auth-about h2 { font-size: 16px; color: var(--text, #1d1b20); margin: 0 0 6px; }
+.auth-about p { margin: 0 0 8px; }
+.auth-about ul { margin: 0 0 10px; padding-left: 18px; }
+.auth-about a { color: var(--primary); font-weight: 600; }

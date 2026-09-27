@@ -1,6 +1,7 @@
 import { useEffect, useState, type ReactNode } from 'react';
 import { IosInstallPrompt } from './components/IosInstallPrompt';
 import { AndroidAppPrompt } from './components/AndroidAppPrompt';
+import { useRouteSeo } from './lib/seo';
 import { Navigate, Route, Routes, useLocation, useNavigate } from 'react-router-dom';
 import { supabase, isSupabaseConfigured } from './lib/supabase';
 import {
@@ -162,6 +163,7 @@ function ConfigMissing() {
 }
 
 export default function App() {
+  useRouteSeo();
   const authReady = useAuthSync();
   const verified = useLoggedInEffects();
   const isLoggedIn = useSession((s) => s.isLoggedIn);

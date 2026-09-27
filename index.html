@@ -4,7 +4,13 @@
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
     <meta name="theme-color" content="#6750A4" />
-    <meta name="description" content="Sndmart - fresh groceries, fruits and hotel food delivered to your doorstep." />
+    <title>Sndmart – Online Grocery, Fruits &amp; Food Delivery in Sindhanur</title>
+    <meta
+      name="description"
+      content="Order fresh groceries, fruits, vegetables and hotel food online in Sindhanur with Sndmart. Fast home delivery, Cash on Delivery and UPI payments."
+    />
+    <meta name="robots" content="index, follow" />
+    <link rel="canonical" href="%SITE_URL%/" />
     <link rel="icon" type="image/jpeg" href="/sndmart-icon.jpg" />
     <link rel="manifest" href="/manifest.webmanifest" />
     <link rel="apple-touch-icon" href="/apple-touch-icon.png" />
@@ -12,10 +18,79 @@
     <meta name="mobile-web-app-capable" content="yes" />
     <meta name="apple-mobile-web-app-title" content="Sndmart" />
     <meta name="apple-mobile-web-app-status-bar-style" content="default" />
-    <title>Sndmart</title>
+    <meta name="google-play-app" content="app-id=in.sndmart.app" />
+
+    <!-- Social sharing (WhatsApp, Facebook, X) -->
+    <meta property="og:type" content="website" />
+    <meta property="og:site_name" content="Sndmart" />
+    <meta property="og:locale" content="en_IN" />
+    <meta property="og:title" content="Sndmart – Grocery & Food Delivery in Sindhanur" />
+    <meta property="og:description" content="Fresh groceries, fruits and hotel food delivered to your doorstep in Sindhanur. Pay by Cash on Delivery or UPI." />
+    <meta property="og:url" content="%SITE_URL%/" />
+    <meta property="og:image" content="%SITE_URL%/og-image.png" />
+    <meta property="og:image:width" content="1200" />
+    <meta property="og:image:height" content="630" />
+    <meta property="og:image:alt" content="Sndmart – grocery and food delivery" />
+    <meta name="twitter:card" content="summary_large_image" />
+    <meta name="twitter:title" content="Sndmart – Grocery & Food Delivery in Sindhanur" />
+    <meta name="twitter:description" content="Fresh groceries, fruits and hotel food delivered to your doorstep in Sindhanur." />
+    <meta name="twitter:image" content="%SITE_URL%/og-image.png" />
+
+    <script type="application/ld+json">
+      {
+        "@context": "https://schema.org",
+        "@graph": [
+          {
+            "@type": "Organization",
+            "@id": "%SITE_URL%/#organization",
+            "name": "Sndmart",
+            "url": "%SITE_URL%/",
+            "logo": "%SITE_URL%/icon-512.png",
+            "email": "sndmartt@gmail.com",
+            "contactPoint": {
+              "@type": "ContactPoint",
+              "telephone": "+91-9353461742",
+              "contactType": "customer support",
+              "areaServed": "IN",
+              "availableLanguage": ["en", "kn", "hi"]
+            },
+            "sameAs": ["https://play.google.com/store/apps/details?id=in.sndmart.app"]
+          },
+          {
+            "@type": "WebSite",
+            "@id": "%SITE_URL%/#website",
+            "name": "Sndmart",
+            "url": "%SITE_URL%/",
+            "publisher": { "@id": "%SITE_URL%/#organization" },
+            "inLanguage": "en-IN"
+          },
+          {
+            "@type": "MobileApplication",
+            "name": "Sndmart",
+            "operatingSystem": "ANDROID",
+            "applicationCategory": "ShoppingApplication",
+            "installUrl": "https://play.google.com/store/apps/details?id=in.sndmart.app",
+            "offers": { "@type": "Offer", "price": "0", "priceCurrency": "INR" }
+          }
+        ]
+      }
+    </script>
   </head>
   <body>
-    <div id="root"></div>
+    <div id="root">
+      <!-- Shown until the app loads, and to crawlers that do not run JavaScript. -->
+      <main style="font-family: system-ui, sans-serif; max-width: 640px; margin: 40px auto; padding: 0 16px; color: #1d1b20">
+        <h1>Sndmart – Grocery &amp; Food Delivery in Sindhanur</h1>
+        <p>
+          Order fresh groceries, fruits, vegetables and food from local hotels online. Sndmart delivers to your doorstep
+          in Sindhanur, Karnataka. Pay with Cash on Delivery or UPI.
+        </p>
+        <p>
+          <a href="https://play.google.com/store/apps/details?id=in.sndmart.app">Get the Sndmart app on Google Play</a>
+        </p>
+      </main>
+    </div>
+    <noscript>Please enable JavaScript to use Sndmart.</noscript>
     <script type="module" src="/src/main.tsx"></script>
   </body>
 </html>
