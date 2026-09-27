@@ -36,8 +36,6 @@ import type {
 import { errorMessage, haversineKm, isHotelItemAvailable, isInStockAndActive, KNOWN_HUBS, toE164 } from './utils';
 
 const CACHE_TTL_MS = 5 * 60 * 1000;
-/** Set VITE_CHECKOUT_COUPON_RPC=true once the checkout RPCs accept p_coupon_code. */
-const COUPON_IN_CHECKOUT = import.meta.env.VITE_CHECKOUT_COUPON_RPC === 'true';
 const SESSION_EXPIRED = 'Your session expired, please log in again';
 
 type PgError = { code?: string; message?: string; status?: number } | null;
@@ -740,9 +738,8 @@ export async function placeOrder(p: {
   };
   // The checkout RPC validates the coupon, applies the discount to the order total and
   // records the usage itself, so the customer is charged exactly what checkout showed.
-  // Needs supabase/migrations/20260927_checkout_coupon.sql applied first; until then the
-  // RPC has no p_coupon_code parameter, so the flag stays off.
-  if (p.coupon?.code && COUPON_IN_CHECKOUT) args.p_coupon_code = p.coupon.code;
+  // Do not send p_slot_id / p_delivery_type: the RPCs do not accept them yet.
+  args.p_coupon_code = p.coupon?.code?.trim().toUpperCase() || null;
   if (p.isHotel) {
     const vendorId = p.vendorId || raw.find((i) => i.vendor_id)?.vendor_id;
     if (!vendorId) throw new Error('Hotel / Vendor ID is missing for this order');

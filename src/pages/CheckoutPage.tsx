@@ -265,6 +265,11 @@ export default function CheckoutPage() {
       }
     } catch (e) {
       const msg = errorMessage(e, 'Failed to place order');
+      // Server rejected the coupon (no order created): drop it so the order can be placed without it.
+      if (coupon && /coupon|minimum order amount/i.test(msg)) {
+        setCoupon(null);
+        setCouponError(msg);
+      }
       setPlacementError(msg);
       toast(msg);
     } finally {
