@@ -406,6 +406,16 @@ export interface DishCategory {
   name: string;
   imageUrl: string | null;
   vendorIds: string[];
+  /** Hotel menu sections grouped under this dish (e.g. each hotel's "Biryani's"). */
+  categoryIds: string[];
+}
+
+/** A hotel's items that match a dish, cheapest first, with this city's price. */
+export interface DishMatch {
+  id: string;
+  name: string;
+  price: number;
+  available: boolean;
 }
 
 // Menu sections that are not a dish people look for.
@@ -468,7 +478,10 @@ export function getHotelDishCategories(cityId: string, forceRefresh = false): Pr
         .eq('vendors.vendor_type', 'hotel')
         .eq('vendors.approval_status', 'approved')
         .limit(1000);
-      const { data, error } = (await query) as { data: { name: string; image_url: string | null; vendor_id: string }[] | null; error: PgError };
+      const { data, error } = (await query) as {
+        data: { id: string; name: string; image_url: string | null; vendor_id: string }[] | null;
+        error: PgError;
+      };
       if (error) fail(error, 'Could not load dishes');
       const groups = new Map<string, DishCategory>();
       for (const row of data ?? []) {
@@ -479,9 +492,11 @@ export function getHotelDishCategories(cityId: string, forceRefresh = false): Pr
           name: DISH_LABELS[key] ?? titleCase(cleanSectionName(row.name ?? '')),
           imageUrl: null,
           vendorIds: [],
+          categoryIds: [],
         };
         g.imageUrl ??= row.image_url ?? null;
         if (!g.vendorIds.includes(row.vendor_id)) g.vendorIds.push(row.vendor_id);
+        g.categoryIds.push(row.id);
         groups.set(key, g);
       }
       return Array.from(groups.values())
@@ -491,7 +506,71 @@ export function getHotelDishCategories(cityId: string, forceRefresh = false): Pr
     forceRefresh,
   );
 }
-const DISH_CATEGORY_COLS: string = 'name,image_url,vendor_id,vendors!inner(id)';
+const DISH_CATEGORY_COLS: string = 'id,name,image_url,vendor_id,vendors!inner(id)';
+
+/** Words that identify a dish in item names ("Chicken Dum Biryani" is a biryani wherever it is listed). */
+function dishSearchTerms(key: string): string[] {
+  const synonyms: Record<string, string[]> = {
+    biryani: ['biryani', 'biriyani', 'briyani'],
+    roti: ['roti', 'parota', 'paratha', 'naan', 'chapati', 'kulcha'],
+    shake: ['shake'],
+    mocktail: ['mocktail', 'moctail', 'mojito'],
+    'ice cream': ['ice cream', 'icecream', 'ice-cream'],
+    fries: ['fries'],
+    momos: ['momo', 'mamo'],
+    seafood: ['fish', 'prawn', 'seafood'],
+  };
+  if (synonyms[key]) return synonyms[key];
+  // curry -> "curr" also finds "curries"; others as they are (noodle finds noodles).
+  return [key.endsWith('y') ? key.slice(0, -1) : key];
+}
+
+const DISH_PRODUCT_COLS: string =
+  'id,name,price,vendor_id,category_id,is_available,is_active,is_featured,available_from,available_until,' +
+  'product_city_stock(product_id,price,mrp,stock_qty,is_available,is_active),vendors!inner(id)';
+
+/**
+ * Hotels in this city serving a dish, and which of their items match (by item name, or by being
+ * in a menu section of that dish), with this city's prices. One request, cached for 5 minutes.
+ */
+export function getHotelsServingDish(
+  cityId: string,
+  dish: DishCategory,
+): Promise<{ vendorIds: string[]; matches: Record<string, DishMatch[]> }> {
+  return cached(`dishHotels:${cityId}:${dish.key}`, CACHE_TTL_MS, async () => {
+    const quote = (v: string) => `"${v.replace(/"/g, '')}"`;
+    const filters = dishSearchTerms(dish.key).map((t) => `name.ilike.${quote(`*${t}*`)}`);
+    if (dish.categoryIds.length) filters.push(`category_id.in.(${dish.categoryIds.join(',')})`);
+    const query = supabase
+      .from('products')
+      .select(DISH_PRODUCT_COLS)
+      .eq('is_active', true)
+      .not('vendor_id', 'is', null)
+      .or(filters.join(','))
+      .eq('vendors.city_id', cityId)
+      .eq('vendors.vendor_type', 'hotel')
+      .eq('vendors.approval_status', 'approved')
+      .eq('product_city_stock.city_id', cityId)
+      .limit(500);
+    const { data, error } = (await query) as { data: Product[] | null; error: PgError };
+    if (error) fail(error, 'Could not load hotels for this dish');
+    const matches: Record<string, DishMatch[]> = {};
+    for (const prod of data ?? []) {
+      if (!prod.vendor_id) continue;
+      const rp = resolveProduct(prod, cityStockOf(prod), cityId);
+      (matches[prod.vendor_id] ??= []).push({
+        id: rp.id,
+        name: rp.name,
+        price: rp.effectivePrice,
+        available: isHotelItemAvailable(rp),
+      });
+    }
+    for (const list of Object.values(matches)) {
+      list.sort((a, b) => Number(b.available) - Number(a.available) || a.price - b.price);
+    }
+    return { vendorIds: Object.keys(matches), matches };
+  });
+}
 
 // ---------- PRODUCTS & CITY STOCK RESOLUTION ----------
 

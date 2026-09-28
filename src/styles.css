@@ -470,3 +470,9 @@ a.install-ok { display: flex; align-items: center; justify-content: center; text
 .hotels-heading { margin: 4px 0 8px; gap: 8px; }
 .hotels-heading .section-title { margin: 0; }
 .chip-clear { display: inline-flex; align-items: center; gap: 4px; padding: 5px 10px; border-radius: 16px; background: #fff0e6; color: #fc8019; font-size: 12px; font-weight: 700; border: 1px solid #ffd2b3; }
+/* Hotel card: this hotel's items for the chosen dish, with prices */
+.dish-matches { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 6px; }
+.dish-match { font-size: 12px; background: #fff4ec; color: #8a3c00; border: 1px solid #ffd9bf; border-radius: 8px; padding: 3px 8px; }
+.dish-match strong { color: #fc8019; margin-left: 2px; }
+.dish-match.unavailable { opacity: 0.55; text-decoration: line-through; }
+.dish-match.more { background: transparent; border-style: dashed; color: var(--muted); }

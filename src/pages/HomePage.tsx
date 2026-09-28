@@ -38,7 +38,9 @@ import {
   getGroceryCategories,
   getHotelDishCategories,
   getHotels,
+  getHotelsServingDish,
   type DishCategory,
+  type DishMatch,
   getResolvedGroceryProducts,
   getVendorAverageRating,
   getVendorOperatingSlots,
@@ -355,7 +357,23 @@ function VariantPicker({ product, cityId, onClose }: { product: ResolvedProduct;
   );
 }
 
-function HotelCard({ vendor, onClick }: { vendor: Vendor; onClick: () => void }) {
+/** "Chicken Biryani ₹190 · Special Chicken Biryani ₹266 · +1 more" under a hotel for the chosen dish. */
+function DishMatches({ items }: { items: DishMatch[] }) {
+  const shown = items.slice(0, 3);
+  const more = items.length - shown.length;
+  return (
+    <div className="dish-matches">
+      {shown.map((m) => (
+        <span key={m.id} className={`dish-match${m.available ? '' : ' unavailable'}`}>
+          {m.name} <strong>{rupees(m.price)}</strong>
+        </span>
+      ))}
+      {more > 0 && <span className="dish-match more">+{more} more</span>}
+    </div>
+  );
+}
+
+function HotelCard({ vendor, onClick, matches }: { vendor: Vendor; onClick: () => void; matches?: DishMatch[] }) {
   // getHotels already fetched hours and ratings for the whole page; only ask again if they expired.
   const [slots, setSlots] = useState<OperatingSlot[]>(() => peekVendorExtras(vendor.id).slots ?? []);
   const [rating, setRating] = useState(() => peekVendorExtras(vendor.id).rating ?? 0);
@@ -405,6 +423,7 @@ function HotelCard({ vendor, onClick }: { vendor: Vendor; onClick: () => void })
             <Clock size={14} /> <span className="ellipsis">{hours}</span>
           </div>
         )}
+        {matches && matches.length > 0 && <DishMatches items={matches} />}
       </div>
     </button>
   );
@@ -450,6 +469,13 @@ export default function HomePage() {
   const [promoCoupon, setPromoCoupon] = useState<Coupon | null>(null);
   const hotelsListRef = useRef<HTMLDivElement | null>(null);
   const selectedDish = dishes.find((d) => d.key === dishKeySel) ?? null;
+  // Hotels serving the chosen dish + their matching items (null while none chosen / loading).
+  const [dishServing, setDishServing] = useState<{
+    key: string;
+    vendorIds: string[];
+    matches: Record<string, DishMatch[]>;
+  } | null>(null);
+  const dishPending = !!selectedDish && dishServing?.key !== selectedDish.key;
 
   const [threshold, setThreshold] = useState<number | null>(null);
   const [coupon, setCoupon] = useState<Coupon | null>(null);
@@ -519,7 +545,7 @@ export default function HomePage() {
       } else setHotelsMore(true);
       try {
         const offset = reset ? 0 : hotels.length;
-        const list = await getHotels(cityId, query, HOTEL_PAGE, offset, force, selectedDish?.vendorIds ?? null);
+        const list = await getHotels(cityId, query, HOTEL_PAGE, offset, force, dishServing?.vendorIds ?? null);
         if (id !== reqId.current) return;
         setHotels((cur) => {
           if (reset) return list;
@@ -536,7 +562,7 @@ export default function HomePage() {
         }
       }
     },
-    [cityId, query, hotels.length, selectedDish],
+    [cityId, query, hotels.length, dishServing],
   );
 
   useEffect(() => {
@@ -548,7 +574,28 @@ export default function HomePage() {
     if (mode === 'grocery') void loadProducts(true);
     else void loadHotels(true);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [mode, cityId, categoryId, query, dishKeySel]);
+  }, [mode, cityId, categoryId, query, dishServing]);
+
+  // Choosing a dish: find every hotel whose items match it (not only hotels with a section named
+  // after it), then the list above reloads with just those hotels.
+  useEffect(() => {
+    if (!selectedDish || !cityId) {
+      setDishServing(null);
+      return;
+    }
+    let cancelled = false;
+    setHotelsLoading(true);
+    getHotelsServingDish(cityId, selectedDish)
+      .then((r) => !cancelled && setDishServing({ key: selectedDish.key, ...r }))
+      .catch((e) => {
+        if (cancelled) return;
+        setHotelsError(errorMessage(e));
+        setHotelsLoading(false);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [selectedDish, cityId]);
 
   // Food tab only: dish categories and the promo coupon (not fetched while browsing grocery).
   useEffect(() => {
@@ -754,7 +801,7 @@ export default function HomePage() {
               </button>
             )}
           </div>
-          {hotelsLoading && hotels.length === 0 ? (
+          {(hotelsLoading && hotels.length === 0) || dishPending ? (
             <ListSkeleton count={4} height={220} />
           ) : hotelsError && hotels.length === 0 ? (
             <ErrorCard message={hotelsError} onRetry={() => void loadHotels(true, true)} />
@@ -766,7 +813,12 @@ export default function HomePage() {
             <>
               <div className="hotel-grid">
                 {hotels.map((h) => (
-                  <HotelCard key={h.id} vendor={h} onClick={() => navigate(`/hotel/${h.id}?name=${encodeURIComponent(h.name)}`)} />
+                  <HotelCard
+                    key={h.id}
+                    vendor={h}
+                    matches={dishServing?.matches[h.id]}
+                    onClick={() => navigate(`/hotel/${h.id}?name=${encodeURIComponent(h.name)}`)}
+                  />
                 ))}
               </div>
               {hotelsHasMore && (
