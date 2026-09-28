@@ -1,7 +1,10 @@
 // Browser replacement for LocationDetector / HighAccuracyLocationManager / MapLocationHelper.
-// Uses the browser Geolocation API and OpenStreetMap Nominatim (no API key needed).
+// Uses the browser Geolocation API, and Google Places/Geocoding when a Google Maps key is set
+// (see googleMaps.ts), otherwise OpenStreetMap Nominatim (no API key needed).
 import type { City } from './types';
 import { haversineKm, KNOWN_HUBS } from './utils';
+import { googleLib, mapsProvider, reportGoogleFailure } from './googleMaps';
+import { useSession } from '../store/session';
 
 export interface Coords {
   lat: number;
@@ -54,8 +57,20 @@ export interface PlaceResult {
   id: string;
   primaryText: string;
   secondaryText: string;
-  lat: number;
-  lng: number;
+  /** Known up front for OpenStreetMap; Google results get them from resolvePlace(). */
+  lat?: number;
+  lng?: number;
+  /** Google: fetches the chosen place's coordinates (ends the billing session). */
+  resolve?: () => Promise<{ lat: number; lng: number } | null>;
+}
+
+export type PickedPlace = PlaceResult & { lat: number; lng: number };
+
+/** Coordinates for a picked suggestion (one Place Details request for Google results). */
+export async function resolvePlace(r: PlaceResult): Promise<PickedPlace | null> {
+  if (r.lat != null && r.lng != null) return { ...r, lat: r.lat, lng: r.lng };
+  const c = await r.resolve?.().catch(() => null);
+  return c ? { ...r, ...c } : null;
 }
 
 export interface GeocodeResult {
@@ -81,8 +96,104 @@ interface NominatimAddress {
   building?: string;
 }
 
+// ---- Google (Places API New + Geocoding) ----
+
+// One Autocomplete session per search: all keystrokes + the final Place Details are billed as a
+// single session. The token is dropped after a place is picked.
+let sessionToken: google.maps.places.AutocompleteSessionToken | null = null;
+const reverseCache = new Map<string, GeocodeResult | null>();
+
+async function googleSearch(query: string, signal?: AbortSignal): Promise<PlaceResult[]> {
+  const { AutocompleteSuggestion, AutocompleteSessionToken } = await googleLib<google.maps.PlacesLibrary>('places');
+  sessionToken ??= new AutocompleteSessionToken();
+  const city = useSession.getState().selectedCity;
+  const request: google.maps.places.AutocompleteRequest = {
+    input: query.trim().slice(0, 100),
+    sessionToken,
+    includedRegionCodes: ['in'],
+    language: 'en',
+    region: 'in',
+  };
+  if (city?.center_lat != null && city.center_lng != null) {
+    request.locationBias = { center: { lat: Number(city.center_lat), lng: Number(city.center_lng) }, radius: 30000 };
+  }
+  const { suggestions } = await AutocompleteSuggestion.fetchAutocompleteSuggestions(request);
+  if (signal?.aborted) return [];
+  return suggestions.slice(0, 6).flatMap((sug) => {
+    const p = sug.placePrediction;
+    if (!p) return [];
+    return [
+      {
+        id: p.placeId,
+        primaryText: p.mainText?.text ?? p.text.text,
+        secondaryText: p.secondaryText?.text ?? '',
+        resolve: async () => {
+          const place = p.toPlace();
+          await place.fetchFields({ fields: ['location'] });
+          sessionToken = null;
+          const loc = place.location;
+          return loc ? { lat: loc.lat(), lng: loc.lng() } : null;
+        },
+      },
+    ];
+  });
+}
+
+const component = (r: google.maps.GeocoderResult, ...types: string[]) =>
+  types.map((t) => r.address_components.find((c) => c.types.includes(t))?.long_name).find(Boolean) ?? null;
+
+async function googleReverse(lat: number, lng: number): Promise<GeocodeResult | null> {
+  const { Geocoder } = await googleLib<google.maps.GeocodingLibrary>('geocoding');
+  const { results } = await new Geocoder().geocode({ location: { lat, lng }, language: 'en', region: 'in' });
+  const best = results.find((r) => !r.types.includes('plus_code')) ?? results[0];
+  if (!best) return null;
+  return {
+    addressLine: best.formatted_address,
+    featureName: component(best, 'premise', 'point_of_interest', 'establishment', 'street_number'),
+    subLocality: component(best, 'sublocality_level_1', 'sublocality', 'neighborhood'),
+    locality: component(best, 'locality', 'administrative_area_level_3', 'administrative_area_level_2'),
+    postalCode: component(best, 'postal_code'),
+  };
+}
+
+// ---- Public API (Google when available, OpenStreetMap otherwise or on failure) ----
+
 export async function searchPlaces(query: string, signal?: AbortSignal): Promise<PlaceResult[]> {
   if (query.trim().length < 3) return [];
+  if (mapsProvider() === 'google') {
+    try {
+      return await googleSearch(query, signal);
+    } catch (e) {
+      reportGoogleFailure(e);
+      if (signal?.aborted) return [];
+    }
+  }
+  return nominatimSearch(query, signal);
+}
+
+export async function reverseGeocode(lat: number, lng: number): Promise<GeocodeResult | null> {
+  // ~1 m precision: the same pin position is never looked up twice.
+  const key = `${lat.toFixed(5)},${lng.toFixed(5)}`;
+  if (reverseCache.has(key)) return reverseCache.get(key) ?? null;
+  let result: GeocodeResult | null = null;
+  if (mapsProvider() === 'google') {
+    try {
+      result = await googleReverse(lat, lng);
+    } catch (e) {
+      reportGoogleFailure(e);
+    }
+  }
+  result ??= await nominatimReverse(lat, lng);
+  if (result) {
+    if (reverseCache.size > 200) reverseCache.clear();
+    reverseCache.set(key, result);
+  }
+  return result;
+}
+
+// ---- OpenStreetMap Nominatim ----
+
+async function nominatimSearch(query: string, signal?: AbortSignal): Promise<PlaceResult[]> {
   const url = `${NOMINATIM}/search?format=jsonv2&addressdetails=1&limit=6&countrycodes=in&q=${encodeURIComponent(query)}`;
   const res = await fetch(url, { signal, headers: { 'Accept-Language': 'en' } });
   if (!res.ok) return [];
@@ -99,7 +210,7 @@ export async function searchPlaces(query: string, signal?: AbortSignal): Promise
   });
 }
 
-export async function reverseGeocode(lat: number, lng: number): Promise<GeocodeResult | null> {
+async function nominatimReverse(lat: number, lng: number): Promise<GeocodeResult | null> {
   try {
     const url = `${NOMINATIM}/reverse?format=jsonv2&addressdetails=1&zoom=18&lat=${lat}&lon=${lng}`;
     const res = await fetch(url, { headers: { 'Accept-Language': 'en' } });

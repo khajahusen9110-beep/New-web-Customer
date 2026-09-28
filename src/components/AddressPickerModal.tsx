@@ -2,7 +2,7 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 import { Briefcase, Check, Home, LocateFixed, MapPin, Search, X } from 'lucide-react';
 import { Modal, Spinner } from './ui';
 import { PinPickerMap, type LatLng } from './MapView';
-import { getCurrentPosition, reverseGeocode, searchPlaces, type PlaceResult } from '../lib/geo';
+import { getCurrentPosition, resolvePlace, reverseGeocode, searchPlaces, type PickedPlace, type PlaceResult } from '../lib/geo';
 import { addAddress, updateAddress } from '../lib/repository';
 import type { CustomerAddress } from '../lib/types';
 import { DEFAULT_CENTER, errorMessage, isValidIndianCoordinate, toE164 } from '../lib/utils';
@@ -15,7 +15,7 @@ export const ADDRESS_LABELS = [
 ] as const;
 
 /** Debounced place search box with a suggestion dropdown. */
-export function PlaceSearch({ onPick }: { onPick: (p: PlaceResult) => void }) {
+export function PlaceSearch({ onPick }: { onPick: (p: PickedPlace) => void }) {
   const [query, setQuery] = useState('');
   const [results, setResults] = useState<PlaceResult[]>([]);
   const [loading, setLoading] = useState(false);
@@ -72,11 +72,14 @@ export function PlaceSearch({ onPick }: { onPick: (p: PlaceResult) => void }) {
           {results.map((r) => (
             <li key={r.id}>
               <button
-                onClick={() => {
+                onClick={async () => {
                   skipNext.current = true;
                   setQuery(r.primaryText);
                   setResults([]);
-                  onPick(r);
+                  setLoading(true);
+                  const picked = await resolvePlace(r);
+                  setLoading(false);
+                  if (picked) onPick(picked);
                 }}
               >
                 <MapPin size={16} className="text-primary" />

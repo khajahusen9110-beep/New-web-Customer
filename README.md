@@ -28,6 +28,9 @@ It is a static single-page app. Build with `npm run build` and host `dist/` anyw
 - **Netlify**: build command `npm run build`, publish directory `dist`, same env vars.
   `public/_redirects` handles SPA routing.
 
+**Google Maps:** set `VITE_GOOGLE_MAPS_API_KEY` (a restricted browser key, see SECURITY.md) to use Google Maps
+for maps, place search and address lookup everywhere; without it the site uses OpenStreetMap.
+
 **Security / paid APIs:** see [SECURITY.md](SECURITY.md) for the kill switch, usage dashboard, limits and
 provider settings (MSG91, Razorpay, Firebase, Supabase spend cap, CAPTCHA).
 

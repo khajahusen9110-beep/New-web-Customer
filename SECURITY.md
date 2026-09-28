@@ -8,7 +8,8 @@
 | Razorpay | Fee per successful payment only | `create-razorpay-order`, `verify-razorpay-payment` (login required) | Per-user + per-IP limits, amount taken from DB (max Rs 50,000), payment must match the order, kill switch |
 | Telegram bot | Free | `send-telegram-order-alert` (DB trigger) | Order must exist and be new, one alert per order, text built from DB values |
 | Firebase Cloud Messaging | Free | `send-fcm-*` (DB triggers) | Needs the device token, which only the database knows |
-| OpenStreetMap tiles / Nominatim | Free (fair-use) | Browser | Debounced search; no key |
+| Google Maps (maps, Places search, Geocoding) | **Yes, per map load / search / lookup** | Browser (only when `VITE_GOOGLE_MAPS_API_KEY` is set) | Restricted browser key + daily quotas + budget (below); 400 ms debounce, 3+ letters, India only, session tokens, reverse-geocode cache; falls back to OpenStreetMap if Google rejects the key |
+| OpenStreetMap tiles / Nominatim | Free (fair-use) | Browser (fallback) | Debounced search; no key |
 | Supabase | Plan + usage | Browser (anon key, RLS) | RLS on every table; set a spend cap |
 
 The browser only has the Supabase URL and the **anon** key (public by design; RLS decides
@@ -73,6 +74,27 @@ Telegram bot/chat (`TELEGRAM_BOT_TOKEN_1` / `TELEGRAM_CHAT_ID_1`) gets a message
 3. Hosting env var: `VITE_TURNSTILE_SITE_KEY=<site key>` and redeploy the website.
    Do step 3 before or together with step 2: once CAPTCHA is on in Supabase, apps that do not
    send a token (including the Android apps) can no longer request OTPs.
+
+## Google Maps key (must be restricted)
+
+The Maps JavaScript API always runs in the browser, so this key is visible in the page by
+design. What protects it is the restriction, not secrecy:
+
+1. Google Cloud Console → APIs & Services → Credentials → Create credentials → API key.
+2. **Application restrictions:** Websites → add `https://your-domain.com/*` (and
+   `https://*.vercel.app/*` or your preview domain only if you need it).
+3. **API restrictions:** Restrict key → only **Maps JavaScript API**, **Places API (New)**,
+   **Geocoding API**. Enable just these three APIs in the project.
+4. **Quotas** (APIs & Services → each API → Quotas): set a per-day cap, e.g. Maps JavaScript
+   map loads 2,000/day, Places Autocomplete 3,000/day, Place Details 1,000/day, Geocoding
+   1,000/day. Raise them as real traffic grows.
+5. **Billing → Budgets & alerts:** a monthly budget (e.g. Rs 1,000) with email alerts at 50%,
+   90%, 100%.
+6. Put the key in the hosting env var `VITE_GOOGLE_MAPS_API_KEY` and redeploy. Do not reuse the
+   Android app's Maps key (that one is restricted to the Android app).
+
+If the key is missing, wrong, over quota or billing is off, the website switches to
+OpenStreetMap automatically.
 
 ## Provider-side settings to configure
 
