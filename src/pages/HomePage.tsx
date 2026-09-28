@@ -146,6 +146,17 @@ function DealsBanner() {
 }
 
 /** Swiggy-style "What's on your mind?" row: dishes served by this city's hotels, with images. */
+// A different starting dish on every visit, so other hotels' dishes come first too.
+const DISH_ROTATION_SEED = Math.random();
+const DISH_AUTO_SCROLL_MS = 2500;
+const DISH_RESUME_AFTER_MS = 4000;
+
+/**
+ * Swiggy-style "What's on your mind?" row: dishes served by this city's hotels, in round images.
+ * When the dishes do not fit on screen the row moves one dish every few seconds and wraps around
+ * endlessly (a circle); touching, scrolling or hovering pauses it, and it stays still while a dish
+ * is selected or when the device asks for reduced motion.
+ */
 function DishRow({
   dishes,
   selectedKey,
@@ -155,27 +166,97 @@ function DishRow({
   selectedKey: string | null;
   onSelect: (key: string | null) => void;
 }) {
+  const rowRef = useRef<HTMLDivElement | null>(null);
+  const pausedUntil = useRef(0);
+  const hovering = useRef(false);
+  const [looping, setLooping] = useState(true);
+
+  const ordered = useMemo(() => {
+    if (dishes.length < 2) return dishes;
+    const start = Math.floor(DISH_ROTATION_SEED * dishes.length);
+    return [...dishes.slice(start), ...dishes.slice(0, start)];
+  }, [dishes]);
+
+  // Loop only when one copy of the dishes is wider than the screen.
+  useEffect(() => {
+    const el = rowRef.current;
+    if (!el) return;
+    const check = () => {
+      const oneCopy = looping ? el.scrollWidth / 2 : el.scrollWidth;
+      setLooping(oneCopy > el.clientWidth + 4);
+    };
+    check();
+    window.addEventListener('resize', check);
+    return () => window.removeEventListener('resize', check);
+  }, [ordered, looping]);
+
+  useEffect(() => {
+    const el = rowRef.current;
+    if (!el || !looping || selectedKey) return;
+    if (window.matchMedia?.('(prefers-reduced-motion: reduce)').matches) return;
+    const t = window.setInterval(() => {
+      if (hovering.current || Date.now() < pausedUntil.current || document.hidden) return;
+      const card = el.querySelector<HTMLElement>('.dish-card');
+      if (!card) return;
+      const step = card.offsetWidth + 12;
+      const half = el.scrollWidth / 2;
+      // The second copy is identical, so jumping back by one copy is invisible.
+      if (el.scrollLeft + step >= half) el.scrollLeft -= half;
+      el.scrollBy({ left: step, behavior: 'smooth' });
+    }, DISH_AUTO_SCROLL_MS);
+    return () => window.clearInterval(t);
+  }, [looping, selectedKey, ordered]);
+
+  const pause = () => {
+    pausedUntil.current = Date.now() + DISH_RESUME_AFTER_MS;
+  };
+  // Keep the manual scroll position inside the first copy so the loop never runs out.
+  const onScroll = () => {
+    const el = rowRef.current;
+    if (!el || !looping) return;
+    const half = el.scrollWidth / 2;
+    if (el.scrollLeft >= half) el.scrollLeft -= half;
+  };
+
+  const renderCard = (d: DishCategory, copy: boolean) => {
+    const selected = selectedKey === d.key;
+    return (
+      <button
+        key={copy ? `${d.key}~copy` : d.key}
+        role={copy ? undefined : 'listitem'}
+        aria-hidden={copy || undefined}
+        tabIndex={copy ? -1 : undefined}
+        className={`dish-card${selected ? ' selected' : ''}`}
+        aria-pressed={copy ? undefined : selected}
+        onClick={() => onSelect(selected ? null : d.key)}
+      >
+        <span className="dish-img">
+          <img src={d.imageUrl ?? ''} alt="" loading="lazy" decoding="async" />
+        </span>
+        <span className="dish-name">{d.name}</span>
+      </button>
+    );
+  };
+
   return (
     <section className="dish-section">
       <h3 className="section-title">What's on your mind?</h3>
-      <div className={`dish-row${dishes.length > 8 ? ' two-rows' : ''}`} role="list">
-        {dishes.map((d) => {
-          const selected = selectedKey === d.key;
-          return (
-            <button
-              key={d.key}
-              role="listitem"
-              className={`dish-card${selected ? ' selected' : ''}`}
-              aria-pressed={selected}
-              onClick={() => onSelect(selected ? null : d.key)}
-            >
-              <span className="dish-img">
-                <img src={d.imageUrl ?? ''} alt="" loading="lazy" decoding="async" />
-              </span>
-              <span className="dish-name">{d.name}</span>
-            </button>
-          );
-        })}
+      <div
+        ref={rowRef}
+        className="dish-row"
+        role="list"
+        onPointerDown={pause}
+        onTouchStart={pause}
+        onWheel={pause}
+        onScroll={onScroll}
+        onMouseEnter={() => (hovering.current = true)}
+        onMouseLeave={() => {
+          hovering.current = false;
+          pause();
+        }}
+      >
+        {ordered.map((d) => renderCard(d, false))}
+        {looping && ordered.map((d) => renderCard(d, true))}
       </div>
     </section>
   );
