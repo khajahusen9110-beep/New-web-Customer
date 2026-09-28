@@ -280,10 +280,14 @@ export function getHotels(
   limit = 20,
   offset = 0,
   forceRefresh = false,
+  /** Only these hotels (e.g. the ones serving a chosen dish). */
+  vendorIds?: string[] | null,
 ): Promise<Vendor[]> {
   const q = (searchQuery ?? '').trim().toLowerCase();
+  const ids = vendorIds ? Array.from(new Set(vendorIds)).sort() : null;
+  if (ids && !ids.length) return Promise.resolve([]);
   return cached(
-    `hotels:${cityId}:${q}:${offset}:${limit}`,
+    `hotels:${cityId}:${q}:${offset}:${limit}:${ids ? ids.join(',') : '*'}`,
     CACHE_TTL_MS,
     async () => {
       let query = supabase
@@ -296,6 +300,7 @@ export function getHotels(
         .order('name', { ascending: true })
         .range(offset, offset + limit - 1);
       if (q) query = query.ilike('name', `%${q}%`);
+      if (ids) query = query.in('id', ids);
       const { data, error } = await query;
       if (error) fail(error, 'Could not fetch hotels');
       const list = ((data ?? []) as Vendor[]).sort(
@@ -393,6 +398,100 @@ export const peekVendorExtras = (vendorId: string) => ({
   slots: cacheGet<OperatingSlot[]>(`slots:${vendorId}`),
   rating: cacheGet<number>(`rating:${vendorId}`),
 });
+
+// ---------- HOTEL DISH CATEGORIES ("What's on your mind?") ----------
+
+export interface DishCategory {
+  key: string;
+  name: string;
+  imageUrl: string | null;
+  vendorIds: string[];
+}
+
+// Menu sections that are not a dish people look for.
+const GENERIC_SECTIONS = new Set(['general', 'dish', 'dishe', 'other', 'misc', 'uncategorized', 'mud', 'kaju', 'papad', 'naati']);
+
+/** Section name without noise words: "HALF BIRIYANI'S" -> "biriyani", "RICE ITEMS" -> "rice". */
+function cleanSectionName(raw: string): string {
+  return raw
+    .toLowerCase()
+    .replace(/['’]s\b/g, '')
+    .replace(/[^a-z\s&-]/g, ' ')
+    .replace(/\b(half|full|items?|variet(y|ies)|verit(y|ies)|veriety|special|spl|combo)\b/g, ' ')
+    .replace(/\s+/g, ' ')
+    .trim();
+}
+
+/** Groups hotels' own menu sections ("Rotis", "ROTI", "HALF BIRIYANI'S") into one dish name. */
+function dishKey(raw: string): string {
+  let k = cleanSectionName(raw);
+  if (/b[ie]r[iy]?y?ani|briyani/.test(k)) return 'biryani';
+  if (/\b(mocktail|moctail|mojito)/.test(k)) return 'mocktail';
+  if (/\bshakes?\b|milkshake/.test(k)) return 'shake';
+  if (/\b(see|sea) ?food/.test(k)) return 'seafood';
+  if (/\bice[- ]?cream/.test(k)) return 'ice cream';
+  if (/\b(roti|parota|paratha|naan|chapati)/.test(k)) return 'roti';
+  if (/\bfries\b/.test(k)) return 'fries';
+  if (/\bmomo|\bmamo/.test(k)) return 'momos';
+  // Singular last word: curries -> curry, rolls -> roll, burgers -> burger.
+  k = k.replace(/ies$/, 'y').replace(/([^s])s$/, '$1');
+  return k;
+}
+
+const DISH_LABELS: Record<string, string> = {
+  biryani: 'Biryani',
+  mocktail: 'Mocktails',
+  shake: 'Shakes',
+  'ice cream': 'Ice Cream',
+  roti: 'Roti & Parota',
+  fries: 'Fries',
+  momos: 'Momos',
+  seafood: 'Seafood',
+};
+const titleCase = (s: string) => s.replace(/\b[a-z]/g, (c) => c.toUpperCase());
+
+/**
+ * Dish categories across this city's approved hotels, with an image each, most common first.
+ * One request (hotel menu sections joined to their hotel); cached like other stable data.
+ */
+export function getHotelDishCategories(cityId: string, forceRefresh = false): Promise<DishCategory[]> {
+  return cached(
+    `dishCats:${cityId}`,
+    STABLE_TTL_MS,
+    async () => {
+      const query = supabase
+        .from('categories')
+        .select(DISH_CATEGORY_COLS)
+        .eq('is_active', true)
+        .not('vendor_id', 'is', null)
+        .eq('vendors.city_id', cityId)
+        .eq('vendors.vendor_type', 'hotel')
+        .eq('vendors.approval_status', 'approved')
+        .limit(1000);
+      const { data, error } = (await query) as { data: { name: string; image_url: string | null; vendor_id: string }[] | null; error: PgError };
+      if (error) fail(error, 'Could not load dishes');
+      const groups = new Map<string, DishCategory>();
+      for (const row of data ?? []) {
+        const key = dishKey(row.name ?? '');
+        if (!key || key.length < 3 || GENERIC_SECTIONS.has(key)) continue;
+        const g = groups.get(key) ?? {
+          key,
+          name: DISH_LABELS[key] ?? titleCase(cleanSectionName(row.name ?? '')),
+          imageUrl: null,
+          vendorIds: [],
+        };
+        g.imageUrl ??= row.image_url ?? null;
+        if (!g.vendorIds.includes(row.vendor_id)) g.vendorIds.push(row.vendor_id);
+        groups.set(key, g);
+      }
+      return Array.from(groups.values())
+        .filter((g) => g.imageUrl)
+        .sort((a, b) => b.vendorIds.length - a.vendorIds.length || a.name.localeCompare(b.name));
+    },
+    forceRefresh,
+  );
+}
+const DISH_CATEGORY_COLS: string = 'name,image_url,vendor_id,vendors!inner(id)';
 
 // ---------- PRODUCTS & CITY STOCK RESOLUTION ----------
 
@@ -752,7 +851,12 @@ const COUPON_COLS =
   'id,code,description,discount_type,discount_value,min_order_amount,max_discount_amount,usage_limit,used_count,starts_at,expires_at,is_active,city_id';
 
 /** The one coupon the home screen advertises: a single active, already-started, unexpired row. */
-export async function getPromoCoupon(cityId: string): Promise<Coupon | null> {
+export function getPromoCoupon(cityId: string): Promise<Coupon | null> {
+  // Shared by the home popup and the food promo banner (one request per 5 minutes).
+  return cached(`promoCoupon:${cityId}`, CACHE_TTL_MS, () => fetchPromoCoupon(cityId));
+}
+
+async function fetchPromoCoupon(cityId: string): Promise<Coupon | null> {
   const now = new Date().toISOString();
   const { data, error } = await supabase
     .from('coupons')

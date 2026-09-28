@@ -36,7 +36,9 @@ import {
   getPromoCoupon,
   getFreeDeliveryThreshold,
   getGroceryCategories,
+  getHotelDishCategories,
   getHotels,
+  type DishCategory,
   getResolvedGroceryProducts,
   getVendorAverageRating,
   getVendorOperatingSlots,
@@ -137,6 +139,101 @@ function DealsBanner() {
         </div>
       </div>
       <span className="deals-cta">SHOP NOW</span>
+    </div>
+  );
+}
+
+/** Swiggy-style "What's on your mind?" row: dishes served by this city's hotels, with images. */
+function DishRow({
+  dishes,
+  selectedKey,
+  onSelect,
+}: {
+  dishes: DishCategory[];
+  selectedKey: string | null;
+  onSelect: (key: string | null) => void;
+}) {
+  return (
+    <section className="dish-section">
+      <h3 className="section-title">What's on your mind?</h3>
+      <div className={`dish-row${dishes.length > 8 ? ' two-rows' : ''}`} role="list">
+        {dishes.map((d) => {
+          const selected = selectedKey === d.key;
+          return (
+            <button
+              key={d.key}
+              role="listitem"
+              className={`dish-card${selected ? ' selected' : ''}`}
+              aria-pressed={selected}
+              onClick={() => onSelect(selected ? null : d.key)}
+            >
+              <span className="dish-img">
+                <img src={d.imageUrl ?? ''} alt="" loading="lazy" decoding="async" />
+              </span>
+              <span className="dish-name">{d.name}</span>
+            </button>
+          );
+        })}
+      </div>
+    </section>
+  );
+}
+
+function offerHeadline(c: Coupon) {
+  const isPercent = c.discount_type === 'percent' || c.discount_type === 'percentage';
+  const value = Math.trunc(Number(c.discount_value));
+  const cap = c.max_discount_amount != null && isPercent ? ` up to ₹${Math.trunc(Number(c.max_discount_amount))}` : '';
+  return isPercent ? `${value}% OFF${cap}` : `Flat ₹${value} OFF`;
+}
+
+/**
+ * Always-visible food promotion banner. Shows only real offers: the city's active coupon, else
+ * the free-delivery threshold, else a plain invitation (never an invented discount).
+ */
+function FoodPromoBanner({
+  coupon,
+  threshold,
+  imageUrl,
+  onOrder,
+}: {
+  coupon: Coupon | null;
+  threshold: number | null;
+  imageUrl: string | null;
+  onOrder: () => void;
+}) {
+  const style = imageUrl ? { backgroundImage: `linear-gradient(90deg, rgba(20,12,6,0.88) 0%, rgba(20,12,6,0.55) 55%, rgba(20,12,6,0.1) 100%), url("${imageUrl}")` } : undefined;
+  if (coupon) {
+    const min = coupon.min_order_amount && Number(coupon.min_order_amount) > 0 ? ` on orders above ₹${Math.trunc(Number(coupon.min_order_amount))}` : '';
+    return (
+      <div className="food-promo" style={style}>
+        <div className="food-promo-kicker">TODAY'S OFFER</div>
+        <div className="food-promo-title">{offerHeadline(coupon)}</div>
+        <div className="food-promo-sub">
+          Use code <strong>{coupon.code}</strong>
+          {min}
+        </div>
+        <button
+          className="food-promo-cta"
+          onClick={() => {
+            void navigator.clipboard?.writeText(coupon.code);
+            toast(`Coupon code ${coupon.code} copied`);
+          }}
+        >
+          <Copy size={13} /> COPY CODE
+        </button>
+      </div>
+    );
+  }
+  return (
+    <div className="food-promo" style={style}>
+      <div className="food-promo-kicker">HOT &amp; FRESH</div>
+      <div className="food-promo-title">
+        {threshold != null ? `FREE delivery above ₹${Math.trunc(threshold)}` : 'Your favourite hotels, delivered'}
+      </div>
+      <div className="food-promo-sub">Biryani, meals, snacks &amp; more from local hotels</div>
+      <button className="food-promo-cta" onClick={onOrder}>
+        ORDER NOW <ChevronRight size={13} />
+      </button>
     </div>
   );
 }
@@ -348,6 +445,11 @@ export default function HomePage() {
   const [hotelsMore, setHotelsMore] = useState(false);
   const [hotelsHasMore, setHotelsHasMore] = useState(true);
   const [hotelsError, setHotelsError] = useState<string | null>(null);
+  const [dishes, setDishes] = useState<DishCategory[]>([]);
+  const [dishKeySel, setDishKeySel] = useState<string | null>(null);
+  const [promoCoupon, setPromoCoupon] = useState<Coupon | null>(null);
+  const hotelsListRef = useRef<HTMLDivElement | null>(null);
+  const selectedDish = dishes.find((d) => d.key === dishKeySel) ?? null;
 
   const [threshold, setThreshold] = useState<number | null>(null);
   const [coupon, setCoupon] = useState<Coupon | null>(null);
@@ -417,7 +519,7 @@ export default function HomePage() {
       } else setHotelsMore(true);
       try {
         const offset = reset ? 0 : hotels.length;
-        const list = await getHotels(cityId, query, HOTEL_PAGE, offset, force);
+        const list = await getHotels(cityId, query, HOTEL_PAGE, offset, force, selectedDish?.vendorIds ?? null);
         if (id !== reqId.current) return;
         setHotels((cur) => {
           if (reset) return list;
@@ -434,19 +536,35 @@ export default function HomePage() {
         }
       }
     },
-    [cityId, query, hotels.length],
+    [cityId, query, hotels.length, selectedDish],
   );
 
   useEffect(() => {
     void loadCategories();
   }, [loadCategories]);
 
-  // Reload the active view when city / category / search / mode changes.
+  // Reload the active view when city / category / dish / search / mode changes.
   useEffect(() => {
     if (mode === 'grocery') void loadProducts(true);
     else void loadHotels(true);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [mode, cityId, categoryId, query]);
+  }, [mode, cityId, categoryId, query, dishKeySel]);
+
+  // Food tab only: dish categories and the promo coupon (not fetched while browsing grocery).
+  useEffect(() => {
+    if (mode !== 'hotels' || !cityId) return;
+    let cancelled = false;
+    getHotelDishCategories(cityId)
+      .then((d) => !cancelled && setDishes(d))
+      .catch(() => !cancelled && setDishes([]));
+    getPromoCoupon(cityId).then((c) => !cancelled && setPromoCoupon(c));
+    return () => {
+      cancelled = true;
+    };
+  }, [mode, cityId]);
+
+  // A dish from another city does not apply.
+  useEffect(() => setDishKeySel(null), [cityId]);
 
   useEffect(() => {
     if (!cityId) return;
@@ -608,12 +726,42 @@ export default function HomePage() {
       ) : (
         <div className="content-pad">
           {threshold != null && <FreeDeliveryBanner threshold={threshold} />}
+          {!search && dishes.length > 0 && (
+            <DishRow
+              dishes={dishes}
+              selectedKey={dishKeySel}
+              onSelect={(k) => {
+                setDishKeySel(k);
+                if (k) hotelsListRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+              }}
+            />
+          )}
+          {!search && (
+            <FoodPromoBanner
+              coupon={promoCoupon}
+              threshold={threshold}
+              imageUrl={dishes.find((d) => d.key === 'biryani')?.imageUrl ?? dishes[0]?.imageUrl ?? null}
+              onOrder={() => hotelsListRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' })}
+            />
+          )}
+          <div ref={hotelsListRef} className="row between hotels-heading">
+            <h3 className="section-title">
+              {selectedDish ? `Hotels serving ${selectedDish.name}` : search ? 'Search results' : 'All hotels & restaurants'}
+            </h3>
+            {selectedDish && (
+              <button className="chip-clear" onClick={() => setDishKeySel(null)} aria-label="Clear dish filter">
+                {selectedDish.name} <X size={14} />
+              </button>
+            )}
+          </div>
           {hotelsLoading && hotels.length === 0 ? (
             <ListSkeleton count={4} height={220} />
           ) : hotelsError && hotels.length === 0 ? (
             <ErrorCard message={hotelsError} onRetry={() => void loadHotels(true, true)} />
           ) : hotels.length === 0 ? (
-            <p className="muted center-pad">No hotels or restaurants available in this city.</p>
+            <p className="muted center-pad">
+              {selectedDish ? `No hotels serve ${selectedDish.name} right now.` : 'No hotels or restaurants available in this city.'}
+            </p>
           ) : (
             <>
               <div className="hotel-grid">
