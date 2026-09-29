@@ -33,7 +33,7 @@ import type {
   VendorReview,
   WalletTransaction,
 } from './types';
-import { errorMessage, haversineKm, isHotelItemAvailable, isInStockAndActive, KNOWN_HUBS, toE164 } from './utils';
+import { errorMessage, haversineKm, isHotelItemAvailable, isInStockAndActive, KNOWN_HUBS, sortGroceryProducts, toE164 } from './utils';
 
 const CACHE_TTL_MS = 5 * 60 * 1000;
 const SESSION_EXPIRED = 'Your session expired, please log in again';
@@ -270,7 +270,6 @@ export function getGroceryCategories(forceRefresh = false): Promise<Category[]> 
   );
 }
 
-const vendorRank = (v: Vendor) => (v.is_active && v.is_featured ? 0 : v.is_active ? 1 : 2);
 const VENDOR_COLS =
   'id,name,banner_url,is_active,is_featured,is_open,address,latitude,longitude,opening_time,closing_time';
 
@@ -303,9 +302,9 @@ export function getHotels(
       if (ids) query = query.in('id', ids);
       const { data, error } = await query;
       if (error) fail(error, 'Could not fetch hotels');
-      const list = ((data ?? []) as Vendor[]).sort(
-        (a, b) => vendorRank(a) - vendorRank(b) || a.name.toLowerCase().localeCompare(b.name.toLowerCase()),
-      );
+      // Server order (featured, name) keeps paging stable; the page orders by open-now + featured
+      // (sortHotels) once it has the hours, and re-orders as hotels open and close.
+      const list = (data ?? []) as Vendor[];
       // Hotel cards need hours and rating: fetch both for the whole page in 2 requests
       // (instead of 2 per card) and keep them in the cache for the cards and the menu page.
       await Promise.all([primeOperatingSlots(list.map((v) => v.id)), primeAverageRatings(list.map((v) => v.id))]);
@@ -391,6 +390,24 @@ export async function getVendorAverageRating(vendorId: string): Promise<number> 
   if (hit !== null) return hit;
   await primeAverageRatings([vendorId]);
   return cacheGet<number>(`rating:${vendorId}`) ?? 0;
+}
+
+/**
+ * Hours and ratings for a list of hotels: whatever is not cached yet is fetched for all of them in
+ * one request each (never one per card). A vendor missing from `slots` means its hours could not be
+ * loaded; callers then use its opening/closing time.
+ */
+export async function getHotelExtras(vendorIds: string[]) {
+  const ids = Array.from(new Set(vendorIds));
+  await Promise.all([primeOperatingSlots(ids), primeAverageRatings(ids)]);
+  const slots: Record<string, OperatingSlot[]> = {};
+  const ratings: Record<string, number> = {};
+  for (const id of ids) {
+    const s = cacheGet<OperatingSlot[]>(`slots:${id}`);
+    if (s) slots[id] = s;
+    ratings[id] = cacheGet<number>(`rating:${id}`) ?? 0;
+  }
+  return { slots, ratings };
 }
 
 /** Already-fetched hours/rating for a vendor (filled by getHotels), without a request. */
@@ -685,19 +702,75 @@ export function getResolvedGroceryProducts(p: {
           .is('vendor_id', null),
         cityId,
       )
+        .order('is_featured', { ascending: false })
         .order('name', { ascending: true })
         .range(offset, offset + limit - 1);
       if (q) query = query.ilike('name', `%${q}%`);
       const { data, error } = await query;
       if (error) fail(error, 'Could not fetch products');
       const products = (data ?? []) as unknown as Product[];
-      return products
+      return sortGroceryProducts(products.map((prod) => resolveProduct(prod, cityStockOf(prod), cityId)));
+    },
+    forceRefresh,
+  );
+}
+
+/**
+ * Up to 10 featured grocery products that are in stock and available in this city, for the
+ * "Featured Products" row. One request (city stock embedded), cached for 5 minutes.
+ */
+export function getFeaturedGroceryProducts(cityId: string, forceRefresh = false): Promise<ResolvedProduct[]> {
+  return cached(
+    `featuredGrocery:${cityId}`,
+    CACHE_TTL_MS,
+    async () => {
+      const { data, error } = await withCityStock(
+        supabase
+          .from('products')
+          .select(GROCERY_PRODUCT_COLS)
+          .eq('is_active', true)
+          .eq('is_featured', true)
+          .is('vendor_id', null),
+        cityId,
+      )
+        .order('name', { ascending: true })
+        .limit(40);
+      if (error) fail(error, 'Could not load featured products');
+      return ((data ?? []) as unknown as Product[])
         .map((prod) => resolveProduct(prod, cityStockOf(prod), cityId))
-        .sort(
-          (a, b) =>
-            Number(isInStockAndActive(b)) - Number(isInStockAndActive(a)) ||
-            a.name.toLowerCase().localeCompare(b.name.toLowerCase()),
-        );
+        .filter(isInStockAndActive)
+        .slice(0, 10);
+    },
+    forceRefresh,
+  );
+}
+
+/**
+ * A hotel's featured menu items (all categories), with this city's price/availability. The menu
+ * page keeps only those orderable right now. One request, cached for 5 minutes.
+ */
+export function getHotelFeaturedItems(vendorId: string, cityId: string, forceRefresh = false): Promise<ResolvedProduct[]> {
+  return cached(
+    `hotelFeatured:${vendorId}:${cityId}`,
+    CACHE_TTL_MS,
+    async () => {
+      const { data, error } = await withCityStock(
+        supabase
+          .from('products')
+          .select(HOTEL_PRODUCT_COLS)
+          .eq('is_active', true)
+          .eq('is_featured', true)
+          .eq('vendor_id', vendorId),
+        cityId,
+        false,
+      )
+        .order('name', { ascending: true })
+        .limit(30);
+      if (error) fail(error, 'Could not load featured items');
+      return ((data ?? []) as unknown as Product[]).map((prod) => ({
+        ...resolveProduct(prod, cityStockOf(prod), cityId),
+        variants: [],
+      }));
     },
     forceRefresh,
   );

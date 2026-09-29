@@ -5,6 +5,7 @@ import type {
   ExpressDeliverySettings,
   OperatingSlot,
   ResolvedProduct,
+  Vendor,
 } from './types';
 
 // ---------- Phone numbers (ported from PhoneUtils.kt) ----------
@@ -115,6 +116,49 @@ export function isHotelItemAvailable(p: ResolvedProduct, vendorSlots: OperatingS
     return isWithinOperatingHours(p.base.available_from, p.base.available_until);
   }
   return isWithinAnySlot(vendorSlots);
+}
+
+// ---------- Featured / open-now ordering ----------
+
+/** A hotel's operating hours: its hour slots, else opening/closing time, else none (= always open). */
+export function vendorHours(v: Vendor, slots?: OperatingSlot[] | null): OperatingSlot[] {
+  if (slots && slots.length) return slots;
+  if (v.opening_time && v.closing_time) {
+    return [{ id: 'vendor', vendor_id: v.id, start_time: v.opening_time, end_time: v.closing_time }];
+  }
+  return [];
+}
+
+/**
+ * Open right now: active, not switched off by the hotel, and inside its hours. The single check
+ * behind the OPEN NOW / CLOSED badge, the grayscale card, the menu page and the list order.
+ */
+export function isVendorOpenNow(v: Vendor, slots?: OperatingSlot[] | null): boolean {
+  return v.is_active !== false && v.is_open !== false && isWithinAnySlot(vendorHours(v, slots));
+}
+
+/** 0 open + featured, 1 open, 2 closed + featured, 3 closed. Featured never beats open. */
+export function hotelTier(v: Vendor, slots?: OperatingSlot[] | null): number {
+  const open = isVendorOpenNow(v, slots);
+  const featured = v.is_featured === true;
+  return open && featured ? 0 : open ? 1 : featured ? 2 : 3;
+}
+
+export function sortHotels(list: Vendor[], slotsOf: (vendorId: string) => OperatingSlot[] | null | undefined): Vendor[] {
+  return list
+    .map((v) => ({ v, tier: hotelTier(v, slotsOf(v.id)) }))
+    .sort((a, b) => a.tier - b.tier || a.v.name.toLowerCase().localeCompare(b.v.name.toLowerCase()))
+    .map((x) => x.v);
+}
+
+/** 0 in stock + featured, 1 in stock, 2 unavailable + featured, 3 unavailable. */
+export function groceryTier(p: ResolvedProduct): number {
+  const inStock = isInStockAndActive(p);
+  return inStock && p.isFeatured ? 0 : inStock ? 1 : p.isFeatured ? 2 : 3;
+}
+
+export function sortGroceryProducts(list: ResolvedProduct[]): ResolvedProduct[] {
+  return [...list].sort((a, b) => groceryTier(a) - groceryTier(b) || a.name.toLowerCase().localeCompare(b.name.toLowerCase()));
 }
 
 export const startingPrice = (p: ResolvedProduct) =>

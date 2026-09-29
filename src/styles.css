@@ -475,3 +475,12 @@ a.install-ok { display: flex; align-items: center; justify-content: center; text
 .dish-match strong { color: #fc8019; margin-left: 2px; }
 .dish-match.unavailable { opacity: 0.55; text-decoration: line-through; }
 .dish-match.more { background: transparent; border-style: dashed; color: var(--muted); }
+
+/* Featured Products (grocery) and Featured (hotel menu): one scrolling row */
+.featured-section { margin: 4px 0 10px; }
+.featured-row { display: flex; gap: 10px; overflow-x: auto; padding: 6px 2px 10px; scrollbar-width: none; scroll-snap-type: x proximity; }
+.featured-row::-webkit-scrollbar { display: none; }
+.featured-item { flex: 0 0 158px; scroll-snap-align: start; }
+.featured-item .product-card { height: 100%; }
+.featured-menu-item { flex-basis: min(320px, 85vw); }
+.featured-menu-item .menu-item { height: 100%; }

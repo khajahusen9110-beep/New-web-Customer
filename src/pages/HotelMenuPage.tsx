@@ -13,10 +13,10 @@ import {
   Spinner,
   toast,
 } from '../components/ui';
-import { getHotelCategories, getHotelProducts, getVendor, getVendorOperatingSlots } from '../lib/repository';
+import { getHotelCategories, getHotelFeaturedItems, getHotelProducts, getVendor, getVendorOperatingSlots } from '../lib/repository';
 import type { Category, CartItem, OperatingSlot, ResolvedProduct, Vendor } from '../lib/types';
 import { useFreshCart, useInfiniteSentinel } from '../lib/hooks';
-import { cartTotal, errorMessage, isHotelItemAvailable, isWithinAnySlot } from '../lib/utils';
+import { cartTotal, errorMessage, isHotelItemAvailable, isVendorOpenNow, isWithinAnySlot, vendorHours } from '../lib/utils';
 import { useSession } from '../store/session';
 import { cartCount, useCart } from '../store/cart';
 
@@ -42,7 +42,7 @@ function MenuItemCard({
     <div className={`card menu-item${available ? '' : ' dimmed'}`}>
       <div className="menu-img">
         <ProductImage url={product.imageUrl} alt={product.name} />
-        {available && product.isFeatured && <span className="tag tag-peach">POPULAR</span>}
+        {available && product.isFeatured && <span className="tag tag-blue">FEATURED</span>}
         {!available && (
           <div className="img-overlay">
             <span className="tag tag-red">{hotelOpen ? 'UNAVAILABLE' : 'CLOSED'}</span>
@@ -157,17 +157,27 @@ export default function HotelMenuPage() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [categoryId]);
 
-  const effectiveSlots: OperatingSlot[] = useMemo(() => {
-    if (slots.length) return slots;
-    if (vendor?.opening_time && vendor.closing_time) {
-      return [{ id: 'vendor', vendor_id: vendor.id, start_time: vendor.opening_time, end_time: vendor.closing_time }];
-    }
-    return [];
-  }, [slots, vendor]);
+  const effectiveSlots: OperatingSlot[] = useMemo(() => (vendor ? vendorHours(vendor, slots) : slots), [slots, vendor]);
 
   const withinHours = isWithinAnySlot(effectiveSlots);
-  const hotelActive = vendor ? vendor.is_active !== false : true;
-  const hotelOpen = hotelActive && withinHours;
+  // Same check as the OPEN NOW badge on Home (active, not switched off, inside hours).
+  const hotelOpen = vendor ? isVendorOpenNow(vendor, slots) : withinHours;
+
+  // "Featured" row: this hotel's featured items that can be ordered right now (max 10).
+  const [featuredItems, setFeaturedItems] = useState<ResolvedProduct[]>([]);
+  useEffect(() => {
+    let cancelled = false;
+    getHotelFeaturedItems(vendorId, cityId)
+      .then((list) => !cancelled && setFeaturedItems(list))
+      .catch(() => !cancelled && setFeaturedItems([]));
+    return () => {
+      cancelled = true;
+    };
+  }, [vendorId, cityId]);
+  const featuredNow = useMemo(
+    () => (hotelOpen ? featuredItems.filter((p) => isHotelItemAvailable(p, effectiveSlots)).slice(0, 10) : []),
+    [featuredItems, hotelOpen, effectiveSlots],
+  );
 
   const displayed = useMemo(() => {
     const tier = (p: ResolvedProduct) => {
@@ -212,6 +222,7 @@ export default function HotelMenuPage() {
   const refresh = () => {
     void loadInitial(true);
     void loadProducts(true, true);
+    getHotelFeaturedItems(vendorId, cityId, true).then(setFeaturedItems).catch(() => undefined);
   };
 
   return (
@@ -248,6 +259,28 @@ export default function HotelMenuPage() {
                 <Info size={18} /> {closedMessage}
               </div>
             </div>
+          )}
+          {featuredNow.length > 0 && (
+            <section className="content-pad featured-section">
+              <h3 className="section-title">Featured</h3>
+              <div className="featured-row">
+                {featuredNow.map((p) => (
+                  <div key={p.id} className="featured-item featured-menu-item">
+                    <MenuItemCard
+                      product={p}
+                      quantity={hotelCart.find((i) => i.product_id === p.id)?.quantity ?? 0}
+                      hotelOpen={hotelOpen}
+                      slots={effectiveSlots}
+                      onIncrease={() => {
+                        const r = addToCart({ productId: p.id, vendorId, cityId, quantityDelta: 1, isHotel: true });
+                        if (r.kind === 'hotelConflict') setConflict(r.pendingItem);
+                      }}
+                      onDecrease={() => addToCart({ productId: p.id, vendorId, cityId, quantityDelta: -1, isHotel: true })}
+                    />
+                  </div>
+                ))}
+              </div>
+            </section>
           )}
           {categories.length > 0 && (
             <div className="hotel-cats">

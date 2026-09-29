@@ -42,9 +42,8 @@ import {
   type DishCategory,
   type DishMatch,
   getResolvedGroceryProducts,
-  getVendorAverageRating,
-  getVendorOperatingSlots,
-  peekVendorExtras,
+  getFeaturedGroceryProducts,
+  getHotelExtras,
 } from '../lib/repository';
 import type { CartItem, Category, Coupon, OperatingSlot, ResolvedProduct, Vendor } from '../lib/types';
 import { useDebounced, useFreshCart, useInfiniteSentinel } from '../lib/hooks';
@@ -52,9 +51,10 @@ import {
   cartTotal,
   errorMessage,
   isInStockAndActive,
-  isWithinAnySlot,
-  isWithinOperatingHours,
+  isVendorOpenNow,
   rupees,
+  sortGroceryProducts,
+  sortHotels,
   startingPrice,
 } from '../lib/utils';
 import { shouldShowRatingPopup, useSession } from '../store/session';
@@ -64,12 +64,8 @@ const GROCERY_PAGE = 30;
 const HOTEL_PAGE = 20;
 let couponShownThisSession = false;
 
-const sortGrocery = (list: ResolvedProduct[]) =>
-  [...list].sort(
-    (a, b) =>
-      Number(isInStockAndActive(b)) - Number(isInStockAndActive(a)) ||
-      a.name.toLowerCase().localeCompare(b.name.toLowerCase()),
-  );
+// In stock + featured, in stock, unavailable + featured, unavailable; then by name.
+const sortGrocery = sortGroceryProducts;
 
 function discountSummary(c: Coupon) {
   const part = c.discount_type === 'flat' ? `Flat Rs ${Math.trunc(c.discount_value)} OFF` : `${Math.trunc(c.discount_value)}% OFF`;
@@ -409,21 +405,23 @@ function DishMatches({ items }: { items: DishMatch[] }) {
   );
 }
 
-function HotelCard({ vendor, onClick, matches }: { vendor: Vendor; onClick: () => void; matches?: DishMatch[] }) {
-  // getHotels already fetched hours and ratings for the whole page; only ask again if they expired.
-  const [slots, setSlots] = useState<OperatingSlot[]>(() => peekVendorExtras(vendor.id).slots ?? []);
-  const [rating, setRating] = useState(() => peekVendorExtras(vendor.id).rating ?? 0);
-  useEffect(() => {
-    const known = peekVendorExtras(vendor.id);
-    if (known.slots) setSlots(known.slots);
-    else void getVendorOperatingSlots(vendor.id).then(setSlots);
-    if (known.rating !== null) setRating(known.rating);
-    else void getVendorAverageRating(vendor.id).then(setRating);
-  }, [vendor.id]);
-  const withinHours = slots.length ? isWithinAnySlot(slots) : isWithinOperatingHours(vendor.opening_time, vendor.closing_time);
+function HotelCard({
+  vendor,
+  slots,
+  rating,
+  onClick,
+  matches,
+}: {
+  vendor: Vendor;
+  /** Hours loaded for the whole list in one request; undefined = use opening/closing time. */
+  slots?: OperatingSlot[];
+  rating: number;
+  onClick: () => void;
+  matches?: DishMatch[];
+}) {
   const isActive = vendor.is_active !== false;
-  const isOpen = vendor.is_open !== false && isActive && withinHours;
-  const hours = slots.length
+  const isOpen = isVendorOpenNow(vendor, slots);
+  const hours = slots?.length
     ? `Hours: ${slots.map((s) => `${s.start_time}-${s.end_time}`).join(', ')}`
     : vendor.opening_time && vendor.closing_time
       ? `Hours: ${vendor.opening_time} - ${vendor.closing_time}`
@@ -433,7 +431,7 @@ function HotelCard({ vendor, onClick, matches }: { vendor: Vendor; onClick: () =
       <div className="hotel-banner">
         <ProductImage url={vendor.banner_url} alt={vendor.name} grayscale={!isOpen} />
         <div className="hotel-tags">
-          {isActive && vendor.is_featured ? <span className="tag tag-blue">FEATURED</span> : <span />}
+          {vendor.is_featured ? <span className="tag tag-blue">FEATURED</span> : <span />}
           <span className={`tag ${!isActive ? 'tag-red' : isOpen ? 'tag-green' : 'tag-grey'}`}>
             {!isActive ? 'CURRENTLY CLOSED' : isOpen ? 'OPEN NOW' : 'CLOSED'}
           </span>
@@ -500,6 +498,14 @@ export default function HomePage() {
   const [hotelsMore, setHotelsMore] = useState(false);
   const [hotelsHasMore, setHotelsHasMore] = useState(true);
   const [hotelsError, setHotelsError] = useState<string | null>(null);
+  // Hours + ratings for every loaded hotel (fetched in batches, never per card).
+  const [hotelExtras, setHotelExtras] = useState<{ slots: Record<string, OperatingSlot[]>; ratings: Record<string, number> }>({
+    slots: {},
+    ratings: {},
+  });
+  // Re-evaluated every minute and when the tab comes back, since hotels open and close.
+  const [clock, setClock] = useState(() => Date.now());
+  const [featuredProducts, setFeaturedProducts] = useState<ResolvedProduct[]>([]);
   const [dishes, setDishes] = useState<DishCategory[]>([]);
   const [dishKeySel, setDishKeySel] = useState<string | null>(null);
   const [promoCoupon, setPromoCoupon] = useState<Coupon | null>(null);
@@ -646,6 +652,57 @@ export default function HomePage() {
     };
   }, [mode, cityId]);
 
+  // Hours/ratings for hotels that do not have them yet (one request each for the whole list).
+  useEffect(() => {
+    const missing = hotels.map((h) => h.id).filter((id) => !(id in hotelExtras.slots) || !(id in hotelExtras.ratings));
+    if (!missing.length) return;
+    let cancelled = false;
+    getHotelExtras(missing)
+      .then((x) => {
+        if (cancelled) return;
+        setHotelExtras((cur) => ({ slots: { ...cur.slots, ...x.slots }, ratings: { ...cur.ratings, ...x.ratings } }));
+      })
+      .catch(() => {
+        /* cards fall back to opening/closing time */
+      });
+    return () => {
+      cancelled = true;
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [hotels]);
+
+  // Open/closed changes with the time: refresh the order every minute while the food list shows.
+  useEffect(() => {
+    if (mode !== 'hotels') return;
+    const tick = () => setClock(Date.now());
+    const t = window.setInterval(() => !document.hidden && tick(), 60_000);
+    const onVisible = () => document.visibilityState === 'visible' && tick();
+    document.addEventListener('visibilitychange', onVisible);
+    return () => {
+      window.clearInterval(t);
+      document.removeEventListener('visibilitychange', onVisible);
+    };
+  }, [mode]);
+
+  // Open + featured, open, closed + featured, closed; then by name (search results too).
+  const orderedHotels = useMemo(
+    () => sortHotels(hotels, (id) => hotelExtras.slots[id]),
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [hotels, hotelExtras, clock],
+  );
+
+  // Grocery tab only: featured products in stock in this city.
+  useEffect(() => {
+    if (mode !== 'grocery' || !cityId) return;
+    let cancelled = false;
+    getFeaturedGroceryProducts(cityId)
+      .then((list) => !cancelled && setFeaturedProducts(list))
+      .catch(() => !cancelled && setFeaturedProducts([]));
+    return () => {
+      cancelled = true;
+    };
+  }, [mode, cityId]);
+
   // A dish from another city does not apply.
   useEffect(() => setDishKeySel(null), [cityId]);
 
@@ -710,7 +767,11 @@ export default function HomePage() {
     if (mode === 'grocery') {
       void loadCategories(true);
       void loadProducts(true, true);
-    } else void loadHotels(true, true);
+      if (cityId) getFeaturedGroceryProducts(cityId, true).then(setFeaturedProducts).catch(() => undefined);
+    } else {
+      setHotelExtras({ slots: {}, ratings: {} });
+      void loadHotels(true, true);
+    }
   };
 
   return (
@@ -758,6 +819,24 @@ export default function HomePage() {
           {!search && (
             <>
               <DealsBanner />
+              {featuredProducts.length > 0 && (
+                <section className="featured-section">
+                  <h3 className="section-title">Featured Products</h3>
+                  <div className="featured-row">
+                    {featuredProducts.map((p) => (
+                      <div key={p.id} className="featured-item">
+                        <GroceryProductCard
+                          product={p}
+                          quantity={groceryCart.filter((i) => i.product_id === p.id).reduce((s, i) => s + i.quantity, 0)}
+                          onIncrease={() => addToCart({ productId: p.id, cityId, quantityDelta: 1, isHotel: false })}
+                          onDecrease={() => addToCart({ productId: p.id, cityId, quantityDelta: -1, isHotel: false })}
+                          onSelectSize={() => setVariantProduct(p)}
+                        />
+                      </div>
+                    ))}
+                  </div>
+                </section>
+              )}
               <CategoryRow categories={categories} selectedId={categoryId} onSelect={setCategoryId} />
             </>
           )}
@@ -848,10 +927,12 @@ export default function HomePage() {
           ) : (
             <>
               <div className="hotel-grid">
-                {hotels.map((h) => (
+                {orderedHotels.map((h) => (
                   <HotelCard
                     key={h.id}
                     vendor={h}
+                    slots={hotelExtras.slots[h.id]}
+                    rating={hotelExtras.ratings[h.id] ?? 0}
                     matches={dishServing?.matches[h.id]}
                     onClick={() => navigate(`/hotel/${h.id}?name=${encodeURIComponent(h.name)}`)}
                   />
