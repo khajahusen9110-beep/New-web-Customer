@@ -25,8 +25,8 @@ It is a static single-page app. Build with `npm run build` and host `dist/` anyw
 
 - **Vercel**: import the repo, set the two `VITE_SUPABASE_*` env vars. `vercel.json` already
   rewrites all routes to `index.html`.
-- **Netlify**: build command `npm run build`, publish directory `dist`, same env vars.
-  `public/_redirects` handles SPA routing.
+- **Netlify**: build command `npm run build`, publish directory `dist`, same env vars, plus a
+  redirect rule `/*  /index.html  200` for SPA routing.
 
 **Google Maps:** set `VITE_GOOGLE_MAPS_API_KEY` (a restricted browser key, see SECURITY.md) to use Google Maps
 for maps, place search and address lookup everywhere; without it the site uses OpenStreetMap.
@@ -42,6 +42,10 @@ canonical, Open Graph and structured-data URLs in `index.html` and writes `robot
 page is indexed; pages behind login are blocked in `robots.txt` and marked `noindex`. After going
 live, add the site in Google Search Console and submit `/sitemap.xml`.
 
+- **Cloudflare Workers** (Workers & Pages → Create → Import a repository): build command
+  `npm run build`, deploy command `npx wrangler deploy`. `wrangler.jsonc` serves `dist/` with SPA
+  routing; its `name` must match the Worker's name in the dashboard. Add the `VITE_*` variables
+  under Settings → Build → Variables and secrets (they are needed at build time).
 - **Cloudflare Pages**: Workers & Pages → Create → Pages → Connect to Git → pick this repo, branch
   `main`. Framework preset **Vite** (or None), build command `npm run build`, output directory
   `dist`. Environment variables (Production): `VITE_SUPABASE_URL`, `VITE_SUPABASE_ANON_KEY`,

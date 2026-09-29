@@ -1,0 +1,12 @@
+// Cloudflare Workers (static assets) config: serves the built site from dist/.
+// "name" must match the Worker's name in the Cloudflare dashboard.
+{
+  "$schema": "node_modules/wrangler/config-schema.json",
+  "name": "new-web-customer",
+  "compatibility_date": "2026-09-01",
+  "assets": {
+    "directory": "./dist",
+    // Unknown paths (/orders, /cart, ...) serve index.html so the app's routes work on refresh.
+    "not_found_handling": "single-page-application"
+  }
+}
