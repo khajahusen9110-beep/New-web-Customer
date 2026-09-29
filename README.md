@@ -42,6 +42,13 @@ canonical, Open Graph and structured-data URLs in `index.html` and writes `robot
 page is indexed; pages behind login are blocked in `robots.txt` and marked `noindex`. After going
 live, add the site in Google Search Console and submit `/sitemap.xml`.
 
+- **Cloudflare Pages**: Workers & Pages → Create → Pages → Connect to Git → pick this repo, branch
+  `main`. Framework preset **Vite** (or None), build command `npm run build`, output directory
+  `dist`. Environment variables (Production): `VITE_SUPABASE_URL`, `VITE_SUPABASE_ANON_KEY`,
+  `VITE_SITE_URL` (your domain), `NODE_VERSION=22`, plus optional `VITE_GOOGLE_MAPS_API_KEY` /
+  `VITE_TURNSTILE_SITE_KEY`. SPA routing works out of the box (no `404.html`); `public/_headers`
+  sets caching and security headers.
+
 **Supabase settings to check before going live**
 
 1. *Authentication → URL Configuration*: add your web domain to the allowed site / redirect URLs.
