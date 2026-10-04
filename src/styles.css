@@ -484,3 +484,13 @@ a.install-ok { display: flex; align-items: center; justify-content: center; text
 .featured-item .product-card { height: 100%; }
 .featured-menu-item { flex-basis: min(320px, 85vw); }
 .featured-menu-item .menu-item { height: 100%; }
+
+/* Cart: items that cannot be ordered right now */
+.unavailable-banner { display: flex; flex-wrap: wrap; gap: 10px; align-items: center; justify-content: space-between; padding: 12px 14px; border-radius: 12px; background: color-mix(in srgb, var(--pastel-coral) 70%, white); color: var(--red); border: 1px solid color-mix(in srgb, var(--red) 25%, white); font-size: 14px; }
+.cart-row.unavailable .thumb, .cart-row.unavailable strong.ellipsis { filter: grayscale(1); opacity: 0.55; }
+.cart-row.unavailable { background: var(--surface-variant); }
+.cart-row.flagged { outline: 2px solid var(--red); outline-offset: -2px; }
+.bill-unavailable { text-decoration: line-through; opacity: 0.6; }
+.spin { animation: spin 0.9s linear infinite; }
+.sticky-bottom > div { flex-shrink: 0; }
+.sticky-bottom > .btn { min-width: 0; flex-shrink: 1; white-space: normal; text-align: center; line-height: 1.2; height: auto; min-height: 52px; padding-top: 8px; padding-bottom: 8px; }

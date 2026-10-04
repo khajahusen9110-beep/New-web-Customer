@@ -16,7 +16,7 @@ import {
 import { getHotelCategories, getHotelFeaturedItems, getHotelProducts, getVendor, getVendorOperatingSlots } from '../lib/repository';
 import type { Category, CartItem, OperatingSlot, ResolvedProduct, Vendor } from '../lib/types';
 import { useFreshCart, useInfiniteSentinel } from '../lib/hooks';
-import { cartTotal, errorMessage, isHotelItemAvailable, isVendorOpenNow, isWithinAnySlot, vendorHours } from '../lib/utils';
+import { cartTotal, errorMessage, hotelClosedMessage, isHotelItemAvailable, isVendorOpenNow, isWithinAnySlot, vendorHours } from '../lib/utils';
 import { useSession } from '../store/session';
 import { cartCount, useCart } from '../store/cart';
 
@@ -211,13 +211,7 @@ export default function HotelMenuPage() {
     hasMore && products.length > 0,
   );
 
-  const closedMessage = !withinHours
-    ? slots.length
-      ? `This hotel is currently closed outside operating hours (${slots.map((s) => `${s.start_time}-${s.end_time}`).join(', ')}). Ordering is unavailable.`
-      : vendor?.opening_time
-        ? `This hotel is currently closed. Opens at ${vendor.opening_time}.`
-        : 'This hotel is currently closed outside operating hours. Ordering is unavailable.'
-    : 'This restaurant is currently closed. You can browse the menu, but ordering is unavailable.';
+  const closedMessage = hotelClosedMessage(vendor, slots);
 
   const refresh = () => {
     void loadInitial(true);

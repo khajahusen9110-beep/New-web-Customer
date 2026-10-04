@@ -19,10 +19,11 @@ import {
 } from '../lib/repository';
 import { openUpiCheckout } from '../lib/razorpay';
 import type { Coupon, CustomerAddress, DeliverySlot, ExpressDeliverySettings } from '../lib/types';
-import { useFreshCart } from '../lib/hooks';
+import { useCartCheck } from '../lib/hooks';
+import type { CartNavState } from './CartPage';
 import {
-  cartTotal,
   errorMessage,
+  isItemAvailabilityError,
   expressCharge,
   expressEstimatedMinutes,
   rupees,
@@ -60,8 +61,16 @@ export default function CheckoutPage() {
   const selectedAddress = addresses.find((a) => a.id === addressId) ?? null;
   const cityId = selectedAddress?.city_id || selectedCity?.id || null;
 
-  const { fresh, loading: loadingCart } = useFreshCart(cart, cityId);
-  const subtotal = cartTotal(fresh);
+  const {
+    lines: fresh,
+    available,
+    unavailable,
+    subtotal,
+    hotelClosed,
+    allChecked,
+    loading: loadingCart,
+    removeUnavailable,
+  } = useCartCheck(cart, cityId, isHotel);
 
   const [slots, setSlots] = useState<DeliverySlot[]>([]);
   const [express, setExpress] = useState<ExpressDeliverySettings | null>(null);
@@ -190,10 +199,15 @@ export default function CheckoutPage() {
 
   const total = deliveryFee != null ? Math.max(subtotal - discount + deliveryFee + handlingFee, 0) : null;
 
-  const disabled =
-    placing ||
+  // Removing unavailable items is always possible; placing the order needs everything below.
+  const removeMode = unavailable.length > 0 && !hotelClosed;
+  const disabled = removeMode
+    ? placing || !allChecked
+    : placing ||
     loadingDelivery ||
     loadingCart ||
+    !allChecked ||
+    !!hotelClosed ||
     !deliveryAvailable ||
     (deliveryType === 'scheduled' && !matchedSlot) ||
     expressMinNotMet ||
@@ -203,10 +217,14 @@ export default function CheckoutPage() {
 
   const bottomNotice = useMemo(() => {
     if (placementError) return placementError;
+    if (hotelClosed) return hotelClosed;
+    if (unavailable.length) {
+      return `${unavailable.length} item${unavailable.length > 1 ? 's are' : ' is'} not available right now and will not be ordered`;
+    }
     if (!deliveryAvailable && !loadingDelivery) return "Delivery isn't currently available in your area";
     if (expressMinNotMet) return `Minimum order ${rupees(express?.min_order_amount)} required for Express Delivery`;
     return null;
-  }, [placementError, deliveryAvailable, loadingDelivery, expressMinNotMet, express]);
+  }, [placementError, hotelClosed, unavailable.length, deliveryAvailable, loadingDelivery, expressMinNotMet, express]);
 
   async function runUpiPayment(orderId: string, orderNumber: string) {
     setPlacingMsg('Initiating UPI payment...');
@@ -238,6 +256,15 @@ export default function CheckoutPage() {
 
   async function onPlaceOrder() {
     if (!isLoggedIn || !userId) return navigate('/auth');
+    if (hotelClosed) return toast(hotelClosed);
+    if (unavailable.length) {
+      // One tap removes them; the customer then sees the new total before placing the order.
+      const n = unavailable.length;
+      removeUnavailable();
+      setPlacementError(null);
+      toast(`Removed ${n} unavailable item${n > 1 ? 's' : ''}. Please check the new total.`);
+      return;
+    }
     if (!addressId) return toast('Please select or add a delivery address');
     if (!cityId) return toast('Please select a serviceable city');
     if (!deliveryAvailable) return toast("Delivery isn't currently available in your area");
@@ -248,7 +275,16 @@ export default function CheckoutPage() {
     setPlacementError(null);
     try {
       // placeOrder checks maintenance mode itself right before checkout (no separate request here).
-      const order = await placeOrder({ userId, isHotel, vendorId: hotelVendorId, addressId, paymentMethod: payment, coupon });
+      // Only lines checked as available right now are sent.
+      const order = await placeOrder({
+        userId,
+        isHotel,
+        vendorId: hotelVendorId,
+        addressId,
+        paymentMethod: payment,
+        coupon,
+        items: available.map((l) => l.cartItem),
+      });
       if (payment === 'upi') {
         try {
           await runUpiPayment(order.id, order.order_number || order.id);
@@ -266,6 +302,12 @@ export default function CheckoutPage() {
         return;
       }
       const msg = errorMessage(e, 'Failed to place order');
+      // An item changed in the last seconds: back to the cart, refreshed, with that item highlighted.
+      if (isItemAvailabilityError(msg)) {
+        toast(msg);
+        navigate('/cart', { replace: true, state: { checkoutError: msg, isHotel } satisfies CartNavState });
+        return;
+      }
       // Server rejected the coupon (no order created): drop it so the order can be placed without it.
       if (coupon && /coupon|minimum order amount/i.test(msg)) {
         setCoupon(null);
@@ -535,9 +577,17 @@ export default function CheckoutPage() {
               </div>
             ) : (
               <>
-                {fresh.map((i) => (
-                  <BillRow key={`${i.cartItem.product_id}_${i.cartItem.variant_id ?? ''}`} label={`${i.displayName} × ${i.cartItem.quantity}`} value={rupees(i.totalPrice)} />
-                ))}
+                {fresh.map((i) =>
+                  i.state === 'ok' && !hotelClosed ? (
+                    <BillRow key={i.key} label={`${i.displayName} × ${i.cartItem.quantity}`} value={rupees(i.totalPrice)} />
+                  ) : (
+                    <BillRow
+                      key={i.key}
+                      label={<span className="bill-unavailable">{`${i.displayName} × ${i.cartItem.quantity}`}</span>}
+                      value={<span className="text-danger small">{hotelClosed ? 'Closed' : i.label}</span>}
+                    />
+                  ),
+                )}
                 <hr />
                 <BillRow label="Items Subtotal" value={rupees(subtotal)} />
                 {discount > 0 && <BillRow label="Coupon Discount" value={`-${rupees(discount)}`} accent />}
@@ -570,6 +620,10 @@ export default function CheckoutPage() {
                 <>
                   <Spinner size={20} light /> {placing ? placingMsg : 'Loading Options...'}
                 </>
+              ) : hotelClosed ? (
+                'Hotel is closed'
+              ) : unavailable.length ? (
+                'Remove unavailable items & continue'
               ) : (
                 `${payment === 'upi' ? 'Pay via UPI' : 'Confirm & Place Order'}${total != null ? ` • ${rupees(total)}` : ''}`
               )}

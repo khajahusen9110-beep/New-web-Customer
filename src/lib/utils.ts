@@ -118,6 +118,84 @@ export function isHotelItemAvailable(p: ResolvedProduct, vendorSlots: OperatingS
   return isWithinAnySlot(vendorSlots);
 }
 
+/** "07:00:00" / "7:00" / "7:00 AM" -> "7:00 AM". */
+export function clockLabel(t?: string | null): string {
+  const m = t ? parseTimeString(t) : null;
+  if (m === null) return t ?? '';
+  const h = Math.floor(m / 60);
+  const min = Math.floor(m % 60);
+  return `${h % 12 || 12}:${String(min).padStart(2, '0')} ${h < 12 ? 'AM' : 'PM'}`;
+}
+
+// ---------- Cart availability ----------
+
+export type CartLineState = 'ok' | 'unavailable' | 'out_of_stock';
+
+export interface CartLineCheck {
+  state: CartLineState;
+  /** Red label shown on the line ("No longer available", "Out of stock", "Available from 7:00 AM"). */
+  label: string | null;
+  /** Grocery: units in stock when the cart holds more (quantity is lowered to this). */
+  maxQty: number | null;
+}
+
+/**
+ * Whether a cart line can be ordered right now. Same rules as the product lists and the checkout
+ * RPCs: grocery needs an active product and an active, available city stock row with stock (a
+ * variant needs its own active city row); hotel food needs an active, available item inside its own
+ * timing (whether the hotel itself is open is checked once for the whole cart).
+ */
+export function checkCartLine(line: CartItemUi, isHotel: boolean): CartLineCheck {
+  const p = line.product;
+  const no = (label: string, state: CartLineState = 'unavailable'): CartLineCheck => ({ state, label, maxQty: null });
+  if (p.missing || !p.isActive) return no('No longer available');
+  const qty = line.cartItem.quantity;
+  if (isHotel) {
+    if (p.base.is_available === false || !p.effectiveIsAvailable) return no('No longer available');
+    const { available_from: from, available_until: until } = p.base;
+    if (from && until && !isWithinOperatingHours(from, until)) return no(`Available from ${clockLabel(from)}`);
+    return { state: 'ok', label: null, maxQty: null };
+  }
+  let stock: number;
+  if (line.cartItem.variant_id) {
+    const v = line.variant;
+    if (!v || !v.isAvailable) return no('No longer available');
+    stock = v.stockQty;
+  } else {
+    if (!p.effectiveIsAvailable) return no('No longer available');
+    stock = p.effectiveStock;
+  }
+  if (stock <= 0) return no('Out of stock', 'out_of_stock');
+  return { state: 'ok', label: null, maxQty: qty > stock ? Math.floor(stock) : null };
+}
+
+/** Closed message for a hotel (same wording as its menu page). */
+export function hotelClosedMessage(v: Vendor | null, slots: OperatingSlot[]): string {
+  const hours = v ? vendorHours(v, slots) : slots;
+  if (!isWithinAnySlot(hours)) {
+    if (slots.length) {
+      return `This hotel is currently closed outside operating hours (${slots.map((s) => `${s.start_time}-${s.end_time}`).join(', ')}). Ordering is unavailable.`;
+    }
+    return v?.opening_time
+      ? `This hotel is currently closed. Opens at ${v.opening_time}.`
+      : 'This hotel is currently closed outside operating hours. Ordering is unavailable.';
+  }
+  return 'This restaurant is currently closed. You can browse the menu, but ordering is unavailable.';
+}
+
+/** Cart line a checkout error is about ("Carrot (250 g) is no longer available..."). */
+export function cartLineForError<T extends CartItemUi>(msg: string, lines: T[]): T | null {
+  const m = msg.match(/^(.*?)(?: is no longer available| is not available in your city| — only | - only )/);
+  if (!m) return null;
+  const name = m[1].trim().toLowerCase();
+  const full = (l: T) => (l.variant?.label ? `${l.product.name} (${l.variant.label})` : l.product.name).toLowerCase();
+  return lines.find((l) => full(l) === name) ?? lines.find((l) => l.product.name.toLowerCase() === name) ?? null;
+}
+
+/** Checkout errors caused by an item that changed (show as-is and send the customer back to the cart). */
+export const isItemAvailabilityError = (msg: string) =>
+  /no longer available|not available in your city|only .* in stock/i.test(msg);
+
 // ---------- Featured / open-now ordering ----------
 
 /** A hotel's operating hours: its hour slots, else opening/closing time, else none (= always open). */

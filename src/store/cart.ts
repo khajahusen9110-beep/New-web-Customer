@@ -28,6 +28,8 @@ interface CartState {
   }) => AddToCartResult;
   forceClearHotelCartAndAdd: (item: CartItem) => void;
   updateQuantity: (productId: string, isHotel: boolean, newQty: number, variantId?: string | null) => void;
+  /** Removes several lines in one change (e.g. all unavailable items). */
+  removeItems: (isHotel: boolean, items: { product_id: string; variant_id?: string | null }[]) => void;
   clearCart: (isHotel: boolean) => void;
   clearAllCarts: () => void;
   clearLocal: () => void;
@@ -152,6 +154,14 @@ export const useCart = create<CartState>()(
           newQty <= 0
             ? list.filter((i) => !same(i, productId, variantId))
             : list.map((i) => (same(i, productId, variantId) ? { ...i, quantity: newQty } : i));
+        set({ [key]: next } as Pick<CartState, typeof key>);
+        persistCart();
+      },
+
+      removeItems: (isHotel, items) => {
+        if (!items.length) return;
+        const key = isHotel ? 'hotelCart' : 'groceryCart';
+        const next = get()[key].filter((i) => !items.some((r) => same(i, r.product_id, r.variant_id)));
         set({ [key]: next } as Pick<CartState, typeof key>);
         persistCart();
       },

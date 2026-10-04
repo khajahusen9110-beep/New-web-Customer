@@ -315,11 +315,16 @@ export function getHotels(
   );
 }
 
-export function getVendor(vendorId: string): Promise<Vendor | null> {
-  return cached(`vendor:${vendorId}`, CACHE_TTL_MS, async () => {
-    const { data } = await supabase.from('vendors').select(VENDOR_COLS).eq('id', vendorId).maybeSingle();
-    return data ? (data as Vendor) : { value: null, cache: false as const };
-  });
+export function getVendor(vendorId: string, forceRefresh = false): Promise<Vendor | null> {
+  return cached(
+    `vendor:${vendorId}`,
+    CACHE_TTL_MS,
+    async () => {
+      const { data } = await supabase.from('vendors').select(VENDOR_COLS).eq('id', vendorId).maybeSingle();
+      return data ? (data as Vendor) : { value: null, cache: false as const };
+    },
+    forceRefresh,
+  );
 }
 
 export async function getVendorNames(ids: string[]): Promise<Record<string, string>> {
@@ -354,7 +359,7 @@ async function primeOperatingSlots(vendorIds: string[]) {
   for (const id of missing) cacheSet(`slots:${id}`, rows.filter((r) => r.vendor_id === id));
 }
 
-export async function getVendorOperatingSlots(vendorId: string): Promise<OperatingSlot[]> {
+export async function getVendorOperatingSlots(vendorId: string, forceRefresh = false): Promise<OperatingSlot[]> {
   return cached(`slots:${vendorId}`, CACHE_TTL_MS, async () => {
     const { data, error } = await supabase
       .from('vendor_operating_hours')
@@ -363,7 +368,7 @@ export async function getVendorOperatingSlots(vendorId: string): Promise<Operati
       .eq('is_active', true);
     if (error) return { value: [] as OperatingSlot[], cache: false as const };
     return (data ?? []) as OperatingSlot[];
-  });
+  }, forceRefresh);
 }
 
 /** One request for the ratings of many vendors; averages are cached per vendor. */
@@ -596,7 +601,7 @@ export function getHotelsServingDish(
 const CITY_STOCK_EMBED = 'product_city_stock(product_id,price,mrp,stock_qty,is_available,is_active)';
 const GROCERY_PRODUCT_COLS =
   'id,category_id,vendor_id,name,description,image_url,price,mrp,unit,stock_qty,is_available,is_active,is_featured,' +
-  'product_variants(id,label,is_active,product_variant_city_stock(price,stock_qty,is_available,city_id)),' +
+  'product_variants(id,label,is_active,product_variant_city_stock(price,stock_qty,is_available,is_active,city_id)),' +
   CITY_STOCK_EMBED;
 const HOTEL_PRODUCT_COLS =
   'id,category_id,vendor_id,name,description,image_url,price,mrp,unit,stock_qty,is_available,is_active,is_featured,available_from,available_until,' +
@@ -604,7 +609,7 @@ const HOTEL_PRODUCT_COLS =
 // Cart lines can hold grocery and hotel items.
 const CART_PRODUCT_COLS =
   'id,category_id,vendor_id,name,description,image_url,price,mrp,unit,stock_qty,is_available,is_active,is_featured,available_from,available_until,' +
-  'product_variants(id,label,is_active,product_variant_city_stock(price,stock_qty,is_available,city_id)),' +
+  'product_variants(id,label,is_active,product_variant_city_stock(price,stock_qty,is_available,is_active,city_id)),' +
   CITY_STOCK_EMBED;
 
 /** Limits the embedded stock rows to this city (variant rows: this city or city-less). */
@@ -636,7 +641,7 @@ function resolveVariants(prod: Product, cityId: string): ResolvedVariant[] {
         label: v.label,
         price: num(row.price),
         stockQty: num(row.stock_qty),
-        isAvailable: row.is_available !== false,
+        isAvailable: row.is_available !== false && row.is_active !== false,
       });
     }
   }
@@ -859,8 +864,14 @@ export async function getLiveCartProducts(
           cityId,
         );
         if (error) fail(error, 'Could not load live prices');
+        const found = new Set<string>();
         for (const prod of (data ?? []) as unknown as Product[]) {
+          found.add(prod.id);
           cacheSet(key(prod.id), resolveProduct(prod, cityStockOf(prod), cityId), LIVE_PRICE_TTL_MS);
+        }
+        // Deleted or hidden products still need a cart line so the customer can remove them.
+        for (const id of missing) {
+          if (!found.has(id)) cacheSet(key(id), missingProduct(id), LIVE_PRICE_TTL_MS);
         }
         return { value: true, cache: false as const };
       },
@@ -873,6 +884,21 @@ export async function getLiveCartProducts(
     if (rp) out.set(id, rp);
   }
   return out;
+}
+
+function missingProduct(id: string): ResolvedProduct {
+  return {
+    base: { id, name: 'This item', price: 0, is_active: false, is_available: false },
+    id,
+    name: 'This item',
+    isFeatured: false,
+    isActive: false,
+    effectivePrice: 0,
+    effectiveStock: 0,
+    effectiveIsAvailable: false,
+    variants: [],
+    missing: true,
+  };
 }
 
 /** Builds priced cart lines from the cart and already-fetched live products (no request). */
@@ -1177,9 +1203,11 @@ export async function placeOrder(p: {
   addressId: string;
   paymentMethod: 'cod' | 'upi';
   coupon: Coupon | null;
+  /** Lines to order (checkout passes only the available ones); defaults to the whole cart. */
+  items?: CartItem[];
 }): Promise<Order> {
   const { groceryCart, hotelCart } = useCart.getState();
-  const raw = (p.isHotel ? hotelCart : groceryCart).filter((i) => i.quantity > 0);
+  const raw = (p.items ?? (p.isHotel ? hotelCart : groceryCart)).filter((i) => i.quantity > 0);
   if (!raw.length) throw new Error('Cart is empty');
   if (!p.addressId) throw new Error('Please select a delivery address');
 

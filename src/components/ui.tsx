@@ -257,7 +257,7 @@ export function ProductImage({ url, alt, grayscale = false }: { url?: string | n
   return <img className={`cover-img${grayscale ? ' grayscale' : ''}`} src={url} alt={alt} loading="lazy" decoding="async" />;
 }
 
-export function BillRow({ label, value, bold, accent }: { label: string; value: ReactNode; bold?: boolean; accent?: boolean }) {
+export function BillRow({ label, value, bold, accent }: { label: ReactNode; value: ReactNode; bold?: boolean; accent?: boolean }) {
   return (
     <div className={`bill-row${bold ? ' bold' : ''}`}>
       <span>{label}</span>

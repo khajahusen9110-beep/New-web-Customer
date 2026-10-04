@@ -55,6 +55,7 @@ export interface ProductVariantCityStock {
   price: number;
   stock_qty?: number | null;
   is_available?: boolean;
+  is_active?: boolean | null;
   city_id?: string | null;
 }
 
@@ -122,6 +123,8 @@ export interface ResolvedProduct {
   variants: ResolvedVariant[];
   /** City stock request failed: availability is unknown, so the item is shown as unavailable. */
   stockLoadFailed?: boolean;
+  /** Cart only: the product no longer exists or is hidden from customers. */
+  missing?: boolean;
 }
 
 export interface CartItem {
