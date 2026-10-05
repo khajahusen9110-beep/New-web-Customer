@@ -70,9 +70,10 @@ live, add the site in Google Search Console and submit `/sitemap.xml`.
 - **Smart pagination:** the next page is fetched while the browser is idle, and the list asks for
   more 1200 px before the end, so scrolling does not wait. The other grocery category is
   prefetched; a hotel's menu starts loading when the finger touches its card.
-- **Images:** Supabase Storage images are served resized as WebP through Supabase image
-  transformation (Pro plan; billed per distinct source image after the included quota). Set
-  `VITE_IMAGE_TRANSFORM=false` to serve originals; a resized image that fails falls back to the original.
+- **Images:** Supabase Storage originals are served by default. With image transformation
+  enabled on the Supabase project (Pro plan; billed per distinct source image after the included
+  quota), set `VITE_IMAGE_TRANSFORM=true` to serve them resized as WebP; a resized image that fails
+  falls back to the original.
 - **Database:** customer RLS checks run once per query (`20261005120000_faster_customer_rls.sql`).
 
 ## Screens (mobile → web)

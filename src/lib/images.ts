@@ -4,9 +4,10 @@
  * Product photos are ~100 KB and hotel banners up to several MB at full size. Supabase's image
  * transformation (Pro plan) serves them resized and as WebP/AVIF from its CDN, usually 5-20x
  * smaller. Only a few fixed widths are used so the CDN cache is shared by every customer.
- * Turn it off with VITE_IMAGE_TRANSFORM=false; if a resized image fails, the original is used.
+ * Off unless VITE_IMAGE_TRANSFORM=true: on a project without image transformation every resized
+ * URL returns 403 and each image loads twice. If a resized image fails, the original is used.
  */
-const ENABLED = (import.meta.env.VITE_IMAGE_TRANSFORM as string | undefined)?.trim().toLowerCase() !== 'false';
+const ENABLED = (import.meta.env.VITE_IMAGE_TRANSFORM as string | undefined)?.trim().toLowerCase() === 'true';
 const OBJECT_PATH = '/storage/v1/object/public/';
 const RENDER_PATH = '/storage/v1/render/image/public/';
 export const IMAGE_WIDTHS = [160, 320, 480, 800, 1200] as const;
