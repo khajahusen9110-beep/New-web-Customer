@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useNavigate, useParams, useSearchParams } from 'react-router-dom';
-import { Info, RefreshCw, ShoppingCart, Utensils, UtensilsCrossed } from 'lucide-react';
+import { Clock, Info, RefreshCw, ShoppingCart, Utensils, UtensilsCrossed } from 'lucide-react';
 import {
   ConfirmDialog,
   ErrorCard,
@@ -13,10 +13,28 @@ import {
   Spinner,
   toast,
 } from '../components/ui';
-import { getHotelCategories, getHotelFeaturedItems, getHotelProducts, getVendor, getVendorOperatingSlots } from '../lib/repository';
+import {
+  getHotelCategories,
+  getHotelFeaturedItems,
+  getHotelMenuAvailability,
+  getHotelProducts,
+  getVendor,
+  getVendorOperatingSlots,
+} from '../lib/repository';
 import type { Category, CartItem, OperatingSlot, ResolvedProduct, Vendor } from '../lib/types';
 import { useFreshCart, useInfiniteSentinel } from '../lib/hooks';
-import { cartTotal, errorMessage, hotelClosedMessage, isHotelItemAvailable, isVendorOpenNow, isWithinAnySlot, vendorHours } from '../lib/utils';
+import {
+  cartTotal,
+  defaultMenuTab,
+  errorMessage,
+  hotelClosedMessage,
+  isHotelItemAvailable,
+  isVendorOpenNow,
+  isWithinAnySlot,
+  menuTabs,
+  vendorHours,
+  type MenuTab,
+} from '../lib/utils';
 import { useSession } from '../store/session';
 import { cartCount, useCart } from '../store/cart';
 
@@ -97,16 +115,15 @@ export default function HotelMenuPage() {
       setError(null);
       setLoadingInitial(true);
       const [v, s, c] = await Promise.allSettled([
-        getVendor(vendorId),
-        getVendorOperatingSlots(vendorId),
+        getVendor(vendorId, force),
+        getVendorOperatingSlots(vendorId, force),
         getHotelCategories(vendorId, force),
       ]);
       if (v.status === 'fulfilled') setVendor(v.value);
       if (s.status === 'fulfilled') setSlots(s.value);
-      if (c.status === 'fulfilled') {
-        setCategories(c.value);
-        setCategoryId((cur) => (cur && c.value.some((x) => x.id === cur) ? cur : c.value[0]?.id ?? null));
-      } else setError(errorMessage(c.reason));
+      // The selected tab is chosen once the tab order is known (see below).
+      if (c.status === 'fulfilled') setCategories(c.value);
+      else setError(errorMessage(c.reason));
       setLoadingInitial(false);
     },
     [vendorId],
@@ -179,6 +196,101 @@ export default function HotelMenuPage() {
     [featuredItems, hotelOpen, effectiveSlots],
   );
 
+  // Which categories have something orderable right now (one light request for the whole menu).
+  // null = not loaded or failed; then the tabs keep their normal order and nothing is greyed.
+  const [availItems, setAvailItems] = useState<ResolvedProduct[] | null>(null);
+  const [availDone, setAvailDone] = useState(false);
+  const loadAvailability = useCallback(
+    (force = false) => {
+      if (!cityId) return setAvailDone(true);
+      getHotelMenuAvailability(vendorId, cityId, force)
+        .then(setAvailItems)
+        .catch(() => setAvailItems((cur) => cur))
+        .finally(() => setAvailDone(true));
+    },
+    [vendorId, cityId],
+  );
+  useEffect(() => {
+    setAvailDone(false);
+    setAvailItems(null);
+    loadAvailability();
+  }, [loadAvailability]);
+
+  // Re-check once a minute (item timings, hotel hours) and when the customer comes back to the tab.
+  const [minute, setMinute] = useState(0);
+  useEffect(() => {
+    const timer = setInterval(() => {
+      if (document.visibilityState !== 'visible') return;
+      setMinute((m) => m + 1);
+      loadAvailability(); // served from the 5-minute cache in between
+    }, 60_000);
+    const onVisible = () => {
+      if (document.visibilityState !== 'visible') return;
+      setMinute((m) => m + 1);
+      loadAvailability(true);
+      Promise.all([getVendor(vendorId, true), getVendorOperatingSlots(vendorId, true)])
+        .then(([v, sl]) => {
+          if (v) setVendor(v);
+          setSlots(sl);
+        })
+        .catch(() => undefined);
+    };
+    document.addEventListener('visibilitychange', onVisible);
+    return () => {
+      clearInterval(timer);
+      document.removeEventListener('visibilitychange', onVisible);
+    };
+  }, [loadAvailability, vendorId]);
+
+  const tabs: MenuTab[] = useMemo(
+    () =>
+      availItems
+        ? menuTabs(categories, availItems, hotelOpen, effectiveSlots)
+        : menuTabs(categories, [], false, effectiveSlots).map((t) => ({ ...t, availableNow: hotelOpen, fromLabel: null })),
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [categories, availItems, hotelOpen, effectiveSlots, minute],
+  );
+
+  // Default tab until the customer taps one; their choice is kept while the menu is open.
+  const userPicked = useRef(false);
+  const tabsReady = !loadingInitial && availDone;
+  useEffect(() => {
+    if (!tabsReady || !tabs.length) return;
+    const stillThere = categoryId && tabs.some((t) => t.category.id === categoryId);
+    if (userPicked.current && stillThere) return;
+    const next = defaultMenuTab(tabs, vendor?.default_category_id);
+    if (next !== categoryId) setCategoryId(next);
+  }, [tabsReady, tabs, vendor?.default_category_id, categoryId]);
+
+  const showSkeleton = (loadingInitial || loadingProducts || (!tabsReady && !error)) && products.length === 0;
+  // The tab row is mounted only once the menu shows (not during the first skeleton).
+  const menuShown = !showSkeleton && !(error && products.length === 0);
+
+  // Keep the selected tab fully visible in the side-scrolling row.
+  const tabRow = useRef<HTMLDivElement | null>(null);
+  const tabOrder = tabs.map((t) => t.category.id).join(',');
+  useEffect(() => {
+    const row = tabRow.current;
+    const el = row?.querySelector<HTMLElement>('.hotel-cat.selected');
+    if (!row || !el) return;
+    const left = el.getBoundingClientRect().left - row.getBoundingClientRect().left + row.scrollLeft;
+    if (left < row.scrollLeft || left + el.offsetWidth > row.scrollLeft + row.clientWidth) {
+      row.scrollTo({ left: Math.max(left - (row.clientWidth - el.offsetWidth) / 2, 0), behavior: 'smooth' });
+    }
+  }, [categoryId, tabOrder, menuShown]);
+
+  // After a tap, show the start of that category's items (just below the sticky tabs).
+  const itemsTop = useRef<HTMLDivElement | null>(null);
+  const pickTab = (id: string) => {
+    userPicked.current = true;
+    setCategoryId(id);
+    const row = tabRow.current;
+    const top = itemsTop.current;
+    if (!row || !top) return;
+    const gap = top.getBoundingClientRect().top - row.getBoundingClientRect().bottom;
+    if (gap < 0) window.scrollBy({ top: gap - 4 });
+  };
+
   const displayed = useMemo(() => {
     const tier = (p: ResolvedProduct) => {
       const a = hotelOpen && isHotelItemAvailable(p, effectiveSlots);
@@ -216,6 +328,7 @@ export default function HotelMenuPage() {
   const refresh = () => {
     void loadInitial(true);
     void loadProducts(true, true);
+    loadAvailability(true);
     getHotelFeaturedItems(vendorId, cityId, true).then(setFeaturedItems).catch(() => undefined);
   };
 
@@ -237,7 +350,7 @@ export default function HotelMenuPage() {
         }
       />
 
-      {(loadingInitial || loadingProducts) && products.length === 0 ? (
+      {showSkeleton ? (
         <div className="content-pad">
           <ListSkeleton count={5} />
         </div>
@@ -276,23 +389,34 @@ export default function HotelMenuPage() {
               </div>
             </section>
           )}
-          {categories.length > 0 && (
-            <div className="hotel-cats">
-              {categories.map((c) => (
-                <button
-                  key={c.id}
-                  className={`hotel-cat${categoryId === c.id ? ' selected' : ''}`}
-                  onClick={() => setCategoryId(c.id)}
-                >
-                  <span className="hotel-cat-img">
-                    {c.image_url ? <img src={c.image_url} alt="" loading="lazy" /> : <Utensils size={24} />}
-                  </span>
-                  <span className="hotel-cat-name">{c.name}</span>
-                </button>
-              ))}
+          {tabs.length > 0 && (
+            <div className="hotel-cats" ref={tabRow} role="tablist">
+              {tabs.map(({ category: c, availableNow, fromLabel }) => {
+                // Greyed only while the hotel is open (a closed hotel keeps its normal tabs + banner).
+                const later = hotelOpen && !availableNow;
+                return (
+                  <button
+                    key={c.id}
+                    role="tab"
+                    aria-selected={categoryId === c.id}
+                    className={`hotel-cat${categoryId === c.id ? ' selected' : ''}${later ? ' later' : ''}`}
+                    onClick={() => pickTab(c.id)}
+                  >
+                    <span className="hotel-cat-img">
+                      {c.image_url ? <img src={c.image_url} alt="" loading="lazy" /> : <Utensils size={24} />}
+                    </span>
+                    <span className="hotel-cat-name">{c.name}</span>
+                    {later && fromLabel && (
+                      <span className="hotel-cat-from">
+                        <Clock size={10} /> {fromLabel}
+                      </span>
+                    )}
+                  </button>
+                );
+              })}
             </div>
           )}
-          <div className="content-pad">
+          <div className="content-pad hotel-items" ref={itemsTop}>
             {displayed.length === 0 ? (
               <div className="empty-state">
                 <UtensilsCrossed size={48} className="muted" />

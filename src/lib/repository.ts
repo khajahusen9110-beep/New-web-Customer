@@ -271,7 +271,7 @@ export function getGroceryCategories(forceRefresh = false): Promise<Category[]> 
 }
 
 const VENDOR_COLS =
-  'id,name,banner_url,is_active,is_featured,is_open,address,latitude,longitude,opening_time,closing_time';
+  'id,name,banner_url,is_active,is_featured,is_open,address,latitude,longitude,opening_time,closing_time,default_category_id';
 
 export function getHotels(
   cityId: string,
@@ -831,6 +831,34 @@ export function getHotelProducts(p: {
       return products
         .map((prod) => ({ ...resolveProduct(prod, cityStockOf(prod), cityId), variants: [] }))
         .sort((a, b) => tier(a) - tier(b) || a.name.toLowerCase().localeCompare(b.name.toLowerCase()));
+    },
+    forceRefresh,
+  );
+}
+
+// Only what the menu tabs need to know which categories have something orderable right now.
+const HOTEL_AVAILABILITY_COLS =
+  'id,category_id,vendor_id,name,price,is_available,is_active,available_from,available_until,' + CITY_STOCK_EMBED;
+
+/**
+ * Every active item of a hotel (no descriptions/images), with this city's availability, so the menu
+ * can order and grey out its category tabs. One request, cached for 5 minutes.
+ */
+export function getHotelMenuAvailability(vendorId: string, cityId: string, forceRefresh = false): Promise<ResolvedProduct[]> {
+  return cached(
+    `hotelAvail:${vendorId}:${cityId}`,
+    CACHE_TTL_MS,
+    async () => {
+      const { data, error } = await withCityStock(
+        supabase.from('products').select(HOTEL_AVAILABILITY_COLS).eq('is_active', true).eq('vendor_id', vendorId),
+        cityId,
+        false,
+      ).limit(1000);
+      if (error) fail(error, 'Could not load menu availability');
+      return ((data ?? []) as unknown as Product[]).map((prod) => ({
+        ...resolveProduct(prod, cityStockOf(prod), cityId),
+        variants: [],
+      }));
     },
     forceRefresh,
   );

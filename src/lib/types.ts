@@ -40,6 +40,8 @@ export interface Vendor {
   city_id?: string | null;
   opening_time?: string | null;
   closing_time?: string | null;
+  /** Menu tab selected first when it has items available (set by the City Admin). */
+  default_category_id?: string | null;
   is_featured?: boolean | null;
 }
 

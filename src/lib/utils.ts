@@ -1,5 +1,6 @@
 import type {
   CartItemUi,
+  Category,
   CustomerNotification,
   DeliverySlot,
   ExpressDeliverySettings,
@@ -195,6 +196,51 @@ export function cartLineForError<T extends CartItemUi>(msg: string, lines: T[]):
 /** Checkout errors caused by an item that changed (show as-is and send the customer back to the cart). */
 export const isItemAvailabilityError = (msg: string) =>
   /no longer available|not available in your city|only .* in stock/i.test(msg);
+
+// ---------- Hotel menu category tabs ----------
+
+export interface MenuTab {
+  category: Category;
+  /** At least one item can be ordered right now (always false while the hotel is closed). */
+  availableNow: boolean;
+  /** "From 7:00 AM": earliest start time among its timed items, for greyed tabs. */
+  fromLabel: string | null;
+}
+
+const byMenuOrder = (a: Category, b: Category) =>
+  (a.sort_order ?? Number.MAX_SAFE_INTEGER) - (b.sort_order ?? Number.MAX_SAFE_INTEGER) ||
+  a.name.toLowerCase().localeCompare(b.name.toLowerCase());
+
+/**
+ * Category tabs in display order. Hotel open: categories with something orderable now first, the
+ * rest at the end (greyed); each group in normal order (sort_order, then name). Hotel closed: normal
+ * order. Uses isHotelItemAvailable, the same check as the item cards.
+ */
+export function menuTabs(categories: Category[], items: ResolvedProduct[], hotelOpen: boolean, slots: OperatingSlot[]): MenuTab[] {
+  const tabs = [...categories].sort(byMenuOrder).map((category): MenuTab => {
+    const own = items.filter((p) => p.base.category_id === category.id);
+    const availableNow = hotelOpen && own.some((p) => isHotelItemAvailable(p, slots));
+    let from: string | null = null;
+    let fromMin = Infinity;
+    for (const p of own) {
+      if (!p.isActive || !p.effectiveIsAvailable || !p.base.available_from || !p.base.available_until) continue;
+      const m = parseTimeString(p.base.available_from);
+      if (m !== null && m < fromMin) {
+        fromMin = m;
+        from = p.base.available_from;
+      }
+    }
+    return { category, availableNow, fromLabel: from ? `From ${clockLabel(from)}` : null };
+  });
+  if (!hotelOpen) return tabs;
+  return [...tabs.filter((t) => t.availableNow), ...tabs.filter((t) => !t.availableNow)];
+}
+
+/** Tab selected when the menu opens: the hotel's default if available now, else the first available, else the first. */
+export function defaultMenuTab(tabs: MenuTab[], defaultCategoryId?: string | null): string | null {
+  const preferred = defaultCategoryId ? tabs.find((t) => t.category.id === defaultCategoryId && t.availableNow) : undefined;
+  return (preferred ?? tabs.find((t) => t.availableNow) ?? tabs[0])?.category.id ?? null;
+}
 
 // ---------- Featured / open-now ordering ----------
 
