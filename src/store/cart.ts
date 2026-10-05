@@ -18,6 +18,8 @@ interface CartState {
   ownerId: string | null;
   /** True while a local change has not yet been written to cart_items. */
   pendingSync: boolean;
+  /** This visit's cart has been reconciled with the server (cart/checkout wait for it). */
+  hydrated: boolean;
   addToCart: (p: {
     productId: string;
     vendorId?: string | null;
@@ -111,6 +113,7 @@ export const useCart = create<CartState>()(
       hotelCart: [],
       ownerId: null,
       pendingSync: false,
+      hydrated: false,
 
       addToCart: ({ productId, vendorId = null, cityId = null, quantityDelta = 1, isHotel, variantId = null }) => {
         const userId = useSession.getState().userId ?? 'guest';
@@ -206,9 +209,11 @@ export const useCart = create<CartState>()(
         } else if (pendingSync) {
           // Local edits never reached the server (e.g. page reloaded mid-debounce): push them.
           await flushCart(userId);
+          set({ hydrated: true });
           return;
         }
         await get().syncFromBackend();
+        set({ hydrated: true });
       },
     }),
     {

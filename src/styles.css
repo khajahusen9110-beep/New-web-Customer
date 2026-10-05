@@ -503,3 +503,9 @@ a.install-ok { display: flex; align-items: center; justify-content: center; text
 .st-orange { background: #fff3e0; color: var(--orange); }
 .stack-xs { display: flex; flex-direction: column; gap: 4px; }
 .stack-xs.align-end { align-items: flex-end; }
+
+/* Long lists: cards far off screen are not laid out or painted until scrolled near (smooth
+   scrolling on low-end phones with hundreds of items). */
+.product-grid > .product-card { content-visibility: auto; contain-intrinsic-size: auto 250px; }
+.hotel-grid > .hotel-card { content-visibility: auto; contain-intrinsic-size: auto 260px; }
+.menu-grid > .menu-item { content-visibility: auto; contain-intrinsic-size: auto 120px; }

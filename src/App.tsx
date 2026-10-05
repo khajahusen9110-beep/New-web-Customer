@@ -214,7 +214,12 @@ export default function App() {
   }, []);
 
   if (!isSupabaseConfigured) return <ConfigMissing />;
-  if (maintenance === undefined || !authReady || (isLoggedIn && !verified && !initialDone)) return <CenterSpinner />;
+  // Returning customers (city and address remembered on this device) see the app at once; the
+  // profile/cart/address refresh and the maintenance check finish in the background. Only a
+  // first visit waits, because routing needs to know the city and address.
+  const knownCustomer = useSession.getState().selectedCity != null && useSession.getState().hasSavedAddress;
+  const waitForBootstrap = isLoggedIn && !verified && !initialDone && !knownCustomer;
+  if (!authReady || waitForBootstrap || (maintenance === undefined && !knownCustomer)) return <CenterSpinner />;
   if (maintenance) return <MaintenancePage message={maintenance} isChecking={checking} onRetry={runStartupChecks} />;
 
   return (

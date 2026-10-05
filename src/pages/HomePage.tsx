@@ -23,6 +23,7 @@ import {
   FloatingCartButton,
   GridSkeleton,
   ListSkeleton,
+  ResizedImg,
   Modal,
   PriceDisplay,
   ProductImage,
@@ -44,6 +45,13 @@ import {
   getResolvedGroceryProducts,
   getFeaturedGroceryProducts,
   getHotelExtras,
+  prefetchHotelMenu,
+  peekFeaturedGroceryProducts,
+  peekGroceryCategories,
+  peekGroceryProducts,
+  peekHotelDishCategories,
+  peekHotelExtras,
+  peekHotels,
 } from '../lib/repository';
 import type { CartItem, Category, Coupon, OperatingSlot, ResolvedProduct, Vendor } from '../lib/types';
 import { useDebounced, useFreshCart, useInfiniteSentinel } from '../lib/hooks';
@@ -202,7 +210,7 @@ function DishRow({
               onClick={() => onSelect(selected ? null : d.key)}
             >
               <span className="dish-img">
-                <img src={d.imageUrl ?? ''} alt="" loading="lazy" decoding="async" />
+                {d.imageUrl && <ResizedImg url={d.imageUrl} width={76} />}
               </span>
               <span className="dish-name">{d.name}</span>
             </button>
@@ -288,7 +296,7 @@ function CategoryRow({
         {categories.map((c) => (
           <button key={c.id} className={`category-card${selectedId === c.id ? ' selected' : ''}`} onClick={() => onSelect(c.id)}>
             <span className="category-img">
-              {c.image_url ? <img src={c.image_url} alt="" loading="lazy" /> : <Store size={26} />}
+              {c.image_url ? <ResizedImg url={c.image_url} width={72} /> : <Store size={26} />}
             </span>
             <span className="category-name">{c.name}</span>
           </button>
@@ -304,19 +312,22 @@ function GroceryProductCard({
   onIncrease,
   onDecrease,
   onSelectSize,
+  priority = false,
 }: {
   product: ResolvedProduct;
   quantity: number;
   onIncrease: () => void;
   onDecrease: () => void;
   onSelectSize: () => void;
+  /** First cards on screen: image loads immediately. */
+  priority?: boolean;
 }) {
   const inStock = isInStockAndActive(product);
   const hasVariants = product.variants.length > 0;
   return (
     <div className={`card product-card${inStock ? '' : ' dimmed'}`}>
       <div className="product-img">
-        <ProductImage url={product.imageUrl} alt={product.name} />
+        <ProductImage url={product.imageUrl} alt={product.name} width={200} priority={priority} />
         {inStock && product.isFeatured && <span className="tag tag-blue">FEATURED</span>}
         {!inStock && (
           <div className="img-overlay">
@@ -410,9 +421,14 @@ function HotelCard({
   slots,
   rating,
   onClick,
+  onIntent,
   matches,
+  priority = false,
 }: {
   vendor: Vendor;
+  /** Finger down / mouse over: start loading the menu before the tap completes. */
+  onIntent?: () => void;
+  priority?: boolean;
   /** Hours loaded for the whole list in one request; undefined = use opening/closing time. */
   slots?: OperatingSlot[];
   rating: number;
@@ -427,9 +443,15 @@ function HotelCard({
       ? `Hours: ${vendor.opening_time} - ${vendor.closing_time}`
       : null;
   return (
-    <button className={`card hotel-card${isOpen ? '' : ' dimmed'}`} onClick={onClick}>
+    <button
+      className={`card hotel-card${isOpen ? '' : ' dimmed'}`}
+      onClick={onClick}
+      onPointerDown={onIntent}
+      onMouseEnter={onIntent}
+      onFocus={onIntent}
+    >
       <div className="hotel-banner">
-        <ProductImage url={vendor.banner_url} alt={vendor.name} grayscale={!isOpen} />
+        <ProductImage url={vendor.banner_url} alt={vendor.name} grayscale={!isOpen} width={480} priority={priority} />
         <div className="hotel-tags">
           {vendor.is_featured ? <span className="tag tag-blue">FEATURED</span> : <span />}
           <span className={`tag ${!isActive ? 'tag-red' : isOpen ? 'tag-green' : 'tag-grey'}`}>
@@ -465,6 +487,20 @@ function HotelCard({
 
 const NO_ITEMS: CartItem[] = [];
 
+/** Vegetables and fruits only (vegetables first), like the app. */
+function shownGroceryCategories(list: Category[]): Category[] {
+  const filtered = list.filter((c) => /veg|fruit/i.test(c.name));
+  return [...(filtered.length ? filtered : list)].sort((a, b) => (/veg/i.test(a.name) ? 0 : 1) - (/veg/i.test(b.name) ? 0 : 1));
+}
+const firstGroceryCategory = (shown: Category[]) => (shown.find((c) => /veg/i.test(c.name)) ?? shown[0])?.id ?? null;
+
+/** Runs low-priority work (prefetching) when the browser is idle. */
+function whenIdle(fn: () => void) {
+  const idle = (window as Window & { requestIdleCallback?: (cb: () => void, o?: { timeout: number }) => number }).requestIdleCallback;
+  if (idle) idle(fn, { timeout: 2000 });
+  else setTimeout(fn, 300);
+}
+
 export default function HomePage() {
   const navigate = useNavigate();
   const [params, setParams] = useSearchParams();
@@ -483,8 +519,9 @@ export default function HomePage() {
   const query = useDebounced(search.trim(), 350);
 
   // Grocery state
-  const [categories, setCategories] = useState<Category[]>([]);
-  const [categoryId, setCategoryId] = useState<string | null>(null);
+  // Last visit's categories (if any) let the product request start immediately.
+  const [categories, setCategories] = useState<Category[]>(() => shownGroceryCategories(peekGroceryCategories() ?? []));
+  const [categoryId, setCategoryId] = useState<string | null>(() => firstGroceryCategory(categories));
   const [products, setProducts] = useState<ResolvedProduct[]>([]);
   const [groceryLoading, setGroceryLoading] = useState(true);
   const [groceryMore, setGroceryMore] = useState(false);
@@ -528,14 +565,9 @@ export default function HomePage() {
   const loadCategories = useCallback(async (force = false) => {
     try {
       const list = await getGroceryCategories(force);
-      const filtered = list.filter((c) => /veg|fruit/i.test(c.name));
-      const shown = (filtered.length ? filtered : list).sort(
-        (a, b) => (/veg/i.test(a.name) ? 0 : 1) - (/veg/i.test(b.name) ? 0 : 1),
-      );
+      const shown = shownGroceryCategories(list);
       setCategories(shown);
-      setCategoryId((cur) =>
-        cur && shown.some((c) => c.id === cur) ? cur : (shown.find((c) => /veg/i.test(c.name)) ?? shown[0])?.id ?? null,
-      );
+      setCategoryId((cur) => (cur && shown.some((c) => c.id === cur) ? cur : firstGroceryCategory(shown)));
       if (!shown.length) setGroceryLoading(false);
     } catch (e) {
       setGroceryError(errorMessage(e));
@@ -550,6 +582,12 @@ export default function HomePage() {
       if (reset) {
         setGroceryLoading(true);
         setGroceryError(null);
+        // Show last visit's first page at once; the fresh page below replaces it.
+        const seen = !query && !force ? peekGroceryProducts(cityId, categoryId, GROCERY_PAGE) : null;
+        if (seen) {
+          setProducts(sortGrocery(seen));
+          setGroceryHasMore(seen.length >= GROCERY_PAGE);
+        }
       } else setGroceryMore(true);
       try {
         const offset = reset ? 0 : products.length;
@@ -584,6 +622,13 @@ export default function HomePage() {
       if (reset) {
         setHotelsLoading(true);
         setHotelsError(null);
+        const seen = !query && !dishServing && !force ? peekHotels(cityId, HOTEL_PAGE) : null;
+        if (seen) {
+          setHotels(seen);
+          setHotelsHasMore(seen.length >= HOTEL_PAGE);
+          const extras = peekHotelExtras(seen.map((h) => h.id));
+          setHotelExtras((cur) => ({ slots: { ...extras.slots, ...cur.slots }, ratings: { ...extras.ratings, ...cur.ratings } }));
+        }
       } else setHotelsMore(true);
       try {
         const offset = reset ? 0 : hotels.length;
@@ -643,6 +688,8 @@ export default function HomePage() {
   useEffect(() => {
     if (mode !== 'hotels' || !cityId) return;
     let cancelled = false;
+    const seenDishes = peekHotelDishCategories(cityId);
+    if (seenDishes) setDishes(seenDishes);
     getHotelDishCategories(cityId)
       .then((d) => !cancelled && setDishes(d))
       .catch(() => !cancelled && setDishes([]));
@@ -652,9 +699,11 @@ export default function HomePage() {
     };
   }, [mode, cityId]);
 
-  // Hours/ratings for hotels that do not have them yet (one request each for the whole list).
+  // Hours/ratings for hotels that do not have fresh ones yet (one request each for the whole list).
+  const extrasFetched = useRef(new Set<string>());
   useEffect(() => {
-    const missing = hotels.map((h) => h.id).filter((id) => !(id in hotelExtras.slots) || !(id in hotelExtras.ratings));
+    const missing = hotels.map((h) => h.id).filter((id) => !extrasFetched.current.has(id));
+    missing.forEach((id) => extrasFetched.current.add(id));
     if (!missing.length) return;
     let cancelled = false;
     getHotelExtras(missing)
@@ -695,6 +744,8 @@ export default function HomePage() {
   useEffect(() => {
     if (mode !== 'grocery' || !cityId) return;
     let cancelled = false;
+    const seenFeatured = peekFeaturedGroceryProducts(cityId);
+    if (seenFeatured) setFeaturedProducts(seenFeatured);
     getFeaturedGroceryProducts(cityId)
       .then((list) => !cancelled && setFeaturedProducts(list))
       .catch(() => !cancelled && setFeaturedProducts([]));
@@ -754,6 +805,33 @@ export default function HomePage() {
   const activeCount = isHotels ? cartCount(hotelCart) : cartCount(groceryCart);
   const activeTotal = isHotels ? hotelTotal : groceryTotal;
 
+  // Smart pagination: once a page is on screen, the next one is fetched in the background (idle
+  // time), so scrolling down shows it instantly instead of waiting at the bottom.
+  useEffect(() => {
+    if (mode !== 'grocery' || groceryLoading || groceryMore || !groceryHasMore || !cityId || !categoryId || !products.length) return;
+    const offset = products.length;
+    whenIdle(() =>
+      void getResolvedGroceryProducts({ cityId, categoryId, searchQuery: query, limit: GROCERY_PAGE, offset }).catch(() => undefined),
+    );
+  }, [mode, groceryLoading, groceryMore, groceryHasMore, cityId, categoryId, query, products.length]);
+  useEffect(() => {
+    if (mode !== 'hotels' || hotelsLoading || hotelsMore || !hotelsHasMore || !cityId || !hotels.length || dishPending) return;
+    const offset = hotels.length;
+    const ids = dishServing?.vendorIds ?? null;
+    whenIdle(() => void getHotels(cityId, query, HOTEL_PAGE, offset, false, ids).catch(() => undefined));
+  }, [mode, hotelsLoading, hotelsMore, hotelsHasMore, cityId, query, hotels.length, dishServing, dishPending]);
+  // The other grocery category (vegetables <-> fruits) is ready before it is tapped.
+  useEffect(() => {
+    if (mode !== 'grocery' || groceryLoading || !cityId || query) return;
+    const others = categories.filter((c) => c.id !== categoryId).slice(0, 3);
+    if (!others.length) return;
+    whenIdle(() => {
+      for (const c of others) {
+        void getResolvedGroceryProducts({ cityId, categoryId: c.id, limit: GROCERY_PAGE, offset: 0 }).catch(() => undefined);
+      }
+    });
+  }, [mode, groceryLoading, cityId, query, categories, categoryId]);
+
   const grocerySentinel = useInfiniteSentinel(
     () => groceryHasMore && !groceryMore && !groceryLoading && void loadProducts(false),
     mode === 'grocery' && groceryHasMore && products.length > 0,
@@ -770,6 +848,7 @@ export default function HomePage() {
       if (cityId) getFeaturedGroceryProducts(cityId, true).then(setFeaturedProducts).catch(() => undefined);
     } else {
       setHotelExtras({ slots: {}, ratings: {} });
+      extrasFetched.current.clear();
       void loadHotels(true, true);
     }
   };
@@ -860,9 +939,10 @@ export default function HomePage() {
                 </button>
               )}
               <div className="product-grid">
-                {products.map((p) => (
+                {products.map((p, i) => (
                   <GroceryProductCard
                     key={p.id}
+                    priority={i < 4}
                     product={p}
                     quantity={groceryCart.filter((i) => i.product_id === p.id).reduce((s, i) => s + i.quantity, 0)}
                     onIncrease={() => addToCart({ productId: p.id, cityId, quantityDelta: 1, isHotel: false })}
@@ -927,9 +1007,11 @@ export default function HomePage() {
           ) : (
             <>
               <div className="hotel-grid">
-                {orderedHotels.map((h) => (
+                {orderedHotels.map((h, i) => (
                   <HotelCard
                     key={h.id}
+                    priority={i < 2}
+                    onIntent={() => cityId && prefetchHotelMenu(h.id, cityId)}
                     vendor={h}
                     slots={hotelExtras.slots[h.id]}
                     rating={hotelExtras.ratings[h.id] ?? 0}

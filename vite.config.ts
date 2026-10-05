@@ -31,13 +31,19 @@ const PRIVATE_PATHS = [
   '/hotel/',
 ];
 
-function seo(siteUrl: string): Plugin {
+function seo(siteUrl: string, supabaseUrl: string): Plugin {
   return {
     name: 'sndmart-seo',
     // 'pre': replace the placeholder before Vite parses the HTML's URLs.
     transformIndexHtml: {
       order: 'pre',
-      handler: (html) => {
+      handler: (rawHtml) => {
+        const html = supabaseUrl
+          ? rawHtml.split('%SUPABASE_URL%').join(supabaseUrl)
+          : rawHtml
+              .split('\n')
+              .filter((line) => !line.includes('%SUPABASE_URL%'))
+              .join('\n');
         if (siteUrl) return html.split('%SITE_URL%').join(siteUrl);
         // No known address: drop tags that need an absolute URL rather than publish broken ones.
         return html
@@ -79,7 +85,7 @@ export default defineConfig(({ mode }) => {
   // Empty prefix: also reads host variables such as VERCEL_PROJECT_PRODUCTION_URL and URL.
   const env = loadEnv(mode, '.', '');
   return {
-    plugins: [react(), seo(resolveSiteUrl(env))],
+    plugins: [react(), seo(resolveSiteUrl(env), (env.VITE_SUPABASE_URL ?? '').trim().replace(/\/+$/, ''))],
     server: { port: 5173, host: true },
     build: {
       rollupOptions: {

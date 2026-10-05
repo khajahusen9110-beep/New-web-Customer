@@ -33,7 +33,20 @@ import type {
   VendorReview,
   WalletTransaction,
 } from './types';
-import { errorMessage, haversineKm, isHotelItemAvailable, isInStockAndActive, KNOWN_HUBS, sortGroceryProducts, toE164 } from './utils';
+import {
+  defaultMenuTab,
+  errorMessage,
+  haversineKm,
+  isHotelItemAvailable,
+  isInStockAndActive,
+  isVendorOpenNow,
+  isWithinAnySlot,
+  KNOWN_HUBS,
+  menuTabs,
+  sortGroceryProducts,
+  toE164,
+  vendorHours,
+} from './utils';
 
 const CACHE_TTL_MS = 5 * 60 * 1000;
 const SESSION_EXPIRED = 'Your session expired, please log in again';
@@ -59,7 +72,73 @@ function cacheGet<T>(key: string): T | null {
   if (!hit || Date.now() - hit.at > hit.ttl) return null;
   return hit.data as T;
 }
-const cacheSet = (key: string, data: unknown, ttl = CACHE_TTL_MS) => cache.set(key, { at: Date.now(), ttl, data });
+const cacheSet = (key: string, data: unknown, ttl = CACHE_TTL_MS) => {
+  cache.set(key, { at: Date.now(), ttl, data });
+  persistSet(key, data);
+};
+
+// ---------- Instant start: last-seen lists kept on the device ----------
+// What the home screen and menus show first (categories, first page of products and hotels,
+// featured rows, hotel hours) is also saved in localStorage. On the next visit the page shows
+// it immediately (stale-while-revalidate) while the same request runs and replaces it with fresh
+// data within a moment. Prices and stock are always re-checked live in the cart and at checkout.
+const PERSIST_PREFIX = 'sndmart-swr:';
+const PERSIST_INDEX = 'sndmart-swr-index';
+const PERSIST_MAX_KEYS = 80;
+const PERSIST_RULES: [RegExp, number][] = [
+  [/^groceryCategories$/, 7 * 24 * 3600e3],
+  [/^grocery:[^:]+:[^:]+::0:\d+$/, 12 * 3600e3], // first page, no search
+  [/^featuredGrocery:/, 12 * 3600e3],
+  [/^hotels:[^:]+::0:\d+:\*$/, 12 * 3600e3], // first page, no search / dish filter
+  [/^dishCats:/, 24 * 3600e3],
+  [/^(slots|rating|vendor):/, 24 * 3600e3],
+  [/^hotelCats:/, 24 * 3600e3],
+  [/^hotelAvail:/, 12 * 3600e3],
+  [/^hotelProducts:[^:]+:[^:]+:[^:]*:0:\d+$/, 12 * 3600e3],
+];
+const persistMaxAge = (key: string) => PERSIST_RULES.find(([re]) => re.test(key))?.[1] ?? 0;
+
+function persistSet(key: string, data: unknown) {
+  if (!persistMaxAge(key)) return;
+  try {
+    localStorage.setItem(PERSIST_PREFIX + key, JSON.stringify({ at: Date.now(), data }));
+    const index = (JSON.parse(localStorage.getItem(PERSIST_INDEX) ?? '[]') as string[]).filter((k) => k !== key);
+    index.push(key);
+    for (const old of index.splice(0, Math.max(0, index.length - PERSIST_MAX_KEYS))) {
+      localStorage.removeItem(PERSIST_PREFIX + old);
+    }
+    localStorage.setItem(PERSIST_INDEX, JSON.stringify(index));
+  } catch {
+    /* storage full or blocked: the in-memory cache still works */
+  }
+}
+
+/** Last known value for a cache key, fresh or not (memory first, then this device's storage). */
+function peek<T>(key: string): T | null {
+  const hit = cache.get(key);
+  if (hit) return hit.data as T;
+  const maxAge = persistMaxAge(key);
+  if (!maxAge) return null;
+  try {
+    const raw = localStorage.getItem(PERSIST_PREFIX + key);
+    if (!raw) return null;
+    const { at, data } = JSON.parse(raw) as { at: number; data: T };
+    return Date.now() - at <= maxAge ? data : null;
+  } catch {
+    return null;
+  }
+}
+
+/** Removes everything saved on this device (logout). */
+export function clearPersistedLists() {
+  try {
+    const index = JSON.parse(localStorage.getItem(PERSIST_INDEX) ?? '[]') as string[];
+    for (const k of index) localStorage.removeItem(PERSIST_PREFIX + k);
+    localStorage.removeItem(PERSIST_INDEX);
+  } catch {
+    /* ignore */
+  }
+}
 export const clearCaches = () => {
   cache.clear();
   inflight.clear();
@@ -233,6 +312,7 @@ export async function checkStillActiveDevice(): Promise<boolean> {
 export async function signOut(scope: 'global' | 'local' | 'others' = 'local') {
   useCart.getState().clearLocal();
   clearCaches();
+  clearPersistedLists();
   const { error } = await supabase.auth.signOut({ scope });
   if (error) console.warn('signOut failed', error);
 }
@@ -250,6 +330,8 @@ export async function resolveUserCity(userId: string): Promise<City | null> {
 }
 
 // ---------- CATEGORIES / VENDORS ----------
+
+export const peekGroceryCategories = () => peek<Category[]>('groceryCategories');
 
 export function getGroceryCategories(forceRefresh = false): Promise<Category[]> {
   return cached(
@@ -272,6 +354,9 @@ export function getGroceryCategories(forceRefresh = false): Promise<Category[]> 
 
 const VENDOR_COLS =
   'id,name,banner_url,is_active,is_featured,is_open,address,latitude,longitude,opening_time,closing_time,default_category_id';
+
+/** Last-seen first page of hotels (no search/dish filter), shown while the fresh one loads. */
+export const peekHotels = (cityId: string, limit: number) => peek<Vendor[]>(`hotels:${cityId}::0:${limit}:*`);
 
 export function getHotels(
   cityId: string,
@@ -415,6 +500,19 @@ export async function getHotelExtras(vendorIds: string[]) {
   return { slots, ratings };
 }
 
+/** Last-known hours/ratings for these hotels, without a request (fresh ones follow via getHotelExtras). */
+export function peekHotelExtras(vendorIds: string[]) {
+  const slots: Record<string, OperatingSlot[]> = {};
+  const ratings: Record<string, number> = {};
+  for (const id of vendorIds) {
+    const sl = peek<OperatingSlot[]>(`slots:${id}`);
+    if (sl) slots[id] = sl;
+    const r = peek<number>(`rating:${id}`);
+    if (r !== null) ratings[id] = r;
+  }
+  return { slots, ratings };
+}
+
 /** Already-fetched hours/rating for a vendor (filled by getHotels), without a request. */
 export const peekVendorExtras = (vendorId: string) => ({
   slots: cacheGet<OperatingSlot[]>(`slots:${vendorId}`),
@@ -486,6 +584,8 @@ const titleCase = (s: string) => s.replace(/\b[a-z]/g, (c) => c.toUpperCase());
  * Dish categories across this city's approved hotels, with an image each, most common first.
  * One request (hotel menu sections joined to their hotel); cached like other stable data.
  */
+export const peekHotelDishCategories = (cityId: string) => peek<DishCategory[]>(`dishCats:${cityId}`);
+
 export function getHotelDishCategories(cityId: string, forceRefresh = false): Promise<DishCategory[]> {
   return cached(
     `dishCats:${cityId}`,
@@ -683,6 +783,19 @@ function resolveProduct(
   };
 }
 
+/** Last-seen first page of a grocery category (no search), shown while the fresh one loads. */
+export const peekGroceryProducts = (cityId: string, categoryId: string, limit: number) =>
+  peek<ResolvedProduct[]>(`grocery:${cityId}:${categoryId}::0:${limit}`);
+export const peekFeaturedGroceryProducts = (cityId: string) => peek<ResolvedProduct[]>(`featuredGrocery:${cityId}`);
+/** Last-seen menu pieces for a hotel (instant open; the page refreshes them). */
+export const peekHotelMenu = (vendorId: string, cityId: string, categoryId: string | null, limit: number) => ({
+  vendor: peek<Vendor>(`vendor:${vendorId}`),
+  slots: peek<OperatingSlot[]>(`slots:${vendorId}`),
+  categories: peek<Category[]>(`hotelCats:${vendorId}`),
+  products: categoryId ? peek<ResolvedProduct[]>(`hotelProducts:${vendorId}:${cityId}:${categoryId}:0:${limit}`) : null,
+  availability: peek<ResolvedProduct[]>(`hotelAvail:${vendorId}:${cityId}`),
+});
+
 export function getResolvedGroceryProducts(p: {
   cityId: string;
   categoryId: string;
@@ -862,6 +975,34 @@ export function getHotelMenuAvailability(vendorId: string, cityId: string, force
     },
     forceRefresh,
   );
+}
+
+/** Items per page in a hotel menu category (the menu page uses the same, so prefetches are reused). */
+export const HOTEL_MENU_PAGE = 25;
+
+const menuPrefetchedAt = new Map<string, number>();
+/**
+ * Starts loading a hotel's menu (hours, categories, availability, featured items and the first
+ * page of the tab it will open on) when the customer is about to open it (finger down / hover),
+ * so the menu usually appears instantly. Each piece goes into the normal cache; at most once a minute.
+ */
+export function prefetchHotelMenu(vendorId: string, cityId: string) {
+  const key = `${vendorId}:${cityId}`;
+  if (Date.now() - (menuPrefetchedAt.get(key) ?? 0) < 60_000) return;
+  menuPrefetchedAt.set(key, Date.now());
+  void (async () => {
+    const [vendor, slots, categories, items] = await Promise.all([
+      getVendor(vendorId),
+      getVendorOperatingSlots(vendorId),
+      getHotelCategories(vendorId),
+      getHotelMenuAvailability(vendorId, cityId),
+      getHotelFeaturedItems(vendorId, cityId),
+    ]);
+    const open = vendor ? isVendorOpenNow(vendor, slots) : isWithinAnySlot(slots);
+    const hours = vendor ? vendorHours(vendor, slots) : slots;
+    const first = defaultMenuTab(menuTabs(categories, items, open, hours), vendor?.default_category_id);
+    if (first) await getHotelProducts({ vendorId, cityId, categoryId: first, limit: HOTEL_MENU_PAGE, offset: 0 });
+  })().catch(() => menuPrefetchedAt.delete(key));
 }
 
 // ---------- FRESH CART PRICING ----------

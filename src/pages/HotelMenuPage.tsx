@@ -9,6 +9,7 @@ import {
   PageHeader,
   PriceDisplay,
   ProductImage,
+  ResizedImg,
   QuantityStepper,
   Spinner,
   toast,
@@ -20,6 +21,8 @@ import {
   getHotelProducts,
   getVendor,
   getVendorOperatingSlots,
+  HOTEL_MENU_PAGE,
+  peekHotelMenu,
 } from '../lib/repository';
 import type { Category, CartItem, OperatingSlot, ResolvedProduct, Vendor } from '../lib/types';
 import { useFreshCart, useInfiniteSentinel } from '../lib/hooks';
@@ -38,7 +41,7 @@ import {
 import { useSession } from '../store/session';
 import { cartCount, useCart } from '../store/cart';
 
-const PAGE = 25;
+const PAGE = HOTEL_MENU_PAGE;
 
 function MenuItemCard({
   product,
@@ -59,7 +62,7 @@ function MenuItemCard({
   return (
     <div className={`card menu-item${available ? '' : ' dimmed'}`}>
       <div className="menu-img">
-        <ProductImage url={product.imageUrl} alt={product.name} />
+        <ProductImage url={product.imageUrl} alt={product.name} width={96} />
         {available && product.isFeatured && <span className="tag tag-blue">FEATURED</span>}
         {!available && (
           <div className="img-overlay">
@@ -95,12 +98,14 @@ export default function HotelMenuPage() {
   const addToCart = useCart((s) => s.addToCart);
   const forceClearHotelCartAndAdd = useCart((s) => s.forceClearHotelCartAndAdd);
 
-  const [vendor, setVendor] = useState<Vendor | null>(null);
-  const [slots, setSlots] = useState<OperatingSlot[]>([]);
-  const [categories, setCategories] = useState<Category[]>([]);
+  // Last-seen menu (this visit's prefetch or an earlier visit) shows at once; fresh data follows.
+  const [seen] = useState(() => peekHotelMenu(vendorId, cityId, null, PAGE));
+  const [vendor, setVendor] = useState<Vendor | null>(seen.vendor);
+  const [slots, setSlots] = useState<OperatingSlot[]>(seen.slots ?? []);
+  const [categories, setCategories] = useState<Category[]>(seen.categories ?? []);
   const [categoryId, setCategoryId] = useState<string | null>(null);
   const [products, setProducts] = useState<ResolvedProduct[]>([]);
-  const [loadingInitial, setLoadingInitial] = useState(true);
+  const [loadingInitial, setLoadingInitial] = useState(!seen.categories);
   const [loadingProducts, setLoadingProducts] = useState(false);
   const [loadingMore, setLoadingMore] = useState(false);
   const [hasMore, setHasMore] = useState(true);
@@ -113,7 +118,7 @@ export default function HotelMenuPage() {
   const loadInitial = useCallback(
     async (force = false) => {
       setError(null);
-      setLoadingInitial(true);
+      if (force || !categories.length) setLoadingInitial(true);
       const [v, s, c] = await Promise.allSettled([
         getVendor(vendorId, force),
         getVendorOperatingSlots(vendorId, force),
@@ -136,6 +141,8 @@ export default function HotelMenuPage() {
       if (reset) {
         setLoadingProducts(true);
         setError(null);
+        const cachedPage = force ? null : peekHotelMenu(vendorId, cityId, categoryId, PAGE).products;
+        if (cachedPage) setProducts(cachedPage);
       } else setLoadingMore(true);
       try {
         const list = await getHotelProducts({
@@ -198,8 +205,8 @@ export default function HotelMenuPage() {
 
   // Which categories have something orderable right now (one light request for the whole menu).
   // null = not loaded or failed; then the tabs keep their normal order and nothing is greyed.
-  const [availItems, setAvailItems] = useState<ResolvedProduct[] | null>(null);
-  const [availDone, setAvailDone] = useState(false);
+  const [availItems, setAvailItems] = useState<ResolvedProduct[] | null>(seen.availability);
+  const [availDone, setAvailDone] = useState(!!seen.availability);
   const loadAvailability = useCallback(
     (force = false) => {
       if (!cityId) return setAvailDone(true);
@@ -211,8 +218,6 @@ export default function HotelMenuPage() {
     [vendorId, cityId],
   );
   useEffect(() => {
-    setAvailDone(false);
-    setAvailItems(null);
     loadAvailability();
   }, [loadAvailability]);
 
@@ -403,7 +408,7 @@ export default function HotelMenuPage() {
                     onClick={() => pickTab(c.id)}
                   >
                     <span className="hotel-cat-img">
-                      {c.image_url ? <img src={c.image_url} alt="" loading="lazy" /> : <Utensils size={24} />}
+                      {c.image_url ? <ResizedImg url={c.image_url} width={64} /> : <Utensils size={24} />}
                     </span>
                     <span className="hotel-cat-name">{c.name}</span>
                     {later && fromLabel && (
@@ -428,7 +433,7 @@ export default function HotelMenuPage() {
               <div className="stack">
                 {vendor?.banner_url && (
                   <div className="hotel-hero">
-                    <ProductImage url={vendor.banner_url} alt={vendorName} />
+                    <ProductImage url={vendor.banner_url} alt={vendorName} width={800} priority />
                   </div>
                 )}
                 <div className="menu-grid">

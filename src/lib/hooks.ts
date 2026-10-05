@@ -23,7 +23,7 @@ export function useInfiniteSentinel(onVisible: () => void, enabled: boolean) {
     if (!el || !enabled) return;
     const io = new IntersectionObserver((entries) => {
       if (entries.some((e) => e.isIntersecting)) cb.current();
-    }, { rootMargin: '300px' });
+    }, { rootMargin: '1200px' }); // start well before the end (next page is usually prefetched already)
     io.observe(el);
     return () => io.disconnect();
   }, [enabled]);
@@ -70,6 +70,8 @@ export function useFreshCart(items: CartItem[], cityId: string | null | undefine
   return { fresh, loading, error, reload };
 }
 
+const NO_CART: CartItem[] = [];
+
 export type CheckedCartLine = CartItemUi & CartLineCheck & { key: string; reducedTo: number | null };
 
 export const cartLineKey = (i: CartItem) => `${i.product_id}_${i.variant_id ?? 'base'}`;
@@ -79,8 +81,13 @@ export const cartLineKey = (i: CartItem) => `${i.product_id}_${i.variant_id ?? '
  * return to the tab and every minute), each line marked ok / unavailable / out of stock, grocery
  * quantities above stock lowered automatically, and totals that count only orderable lines.
  */
-export function useCartCheck(items: CartItem[], cityId: string | null | undefined, isHotel: boolean) {
-  const { fresh, loading, error, reload: reloadLines } = useFreshCart(items, cityId, true);
+export function useCartCheck(rawItems: CartItem[], cityId: string | null | undefined, isHotel: boolean) {
+  // The site opens before the saved cart is reconciled with the server; never check, lower or
+  // order a cart that may still change.
+  const hydrated = useCart((s) => s.hydrated);
+  const items = hydrated ? rawItems : NO_CART;
+  const { fresh, loading: loadingLines, error, reload: reloadLines } = useFreshCart(items, cityId, true);
+  const loading = loadingLines || !hydrated;
   const updateQuantity = useCart((s) => s.updateQuantity);
   const removeItems = useCart((s) => s.removeItems);
 
@@ -152,7 +159,7 @@ export function useCartCheck(items: CartItem[], cityId: string | null | undefine
   const available = checked.filter((l) => l.state === 'ok');
   const unavailable = checked.filter((l) => l.state !== 'ok');
   // Lines not in `fresh` yet (still loading) are neither; never order before every line is checked.
-  const allChecked = !loading && checked.length === items.length;
+  const allChecked = hydrated && !loading && checked.length === items.length;
 
   const removeUnavailable = useCallback(() => {
     removeItems(isHotel, unavailable.map((l) => l.cartItem));

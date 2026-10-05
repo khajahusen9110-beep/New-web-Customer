@@ -61,6 +61,20 @@ live, add the site in Google Search Console and submit `/sitemap.xml`.
    functions from the browser; they already send `Access-Control-Allow-Origin: *`, so no change
    is needed (keep it that way if you edit them).
 
+## Speed
+
+- **Instant start:** returning customers see the app at once; profile, cart and maintenance checks
+  finish in the background. The last-seen home lists (categories, first page of products and
+  hotels, featured rows, hotel hours, menus) are kept on the device and shown immediately, then
+  replaced by fresh data (stale-while-revalidate). Cart and checkout always re-check live prices.
+- **Smart pagination:** the next page is fetched while the browser is idle, and the list asks for
+  more 1200 px before the end, so scrolling does not wait. The other grocery category is
+  prefetched; a hotel's menu starts loading when the finger touches its card.
+- **Images:** Supabase Storage images are served resized as WebP through Supabase image
+  transformation (Pro plan; billed per distinct source image after the included quota). Set
+  `VITE_IMAGE_TRANSFORM=false` to serve originals; a resized image that fails falls back to the original.
+- **Database:** customer RLS checks run once per query (`20261005120000_faster_customer_rls.sql`).
+
 ## Screens (mobile → web)
 
 | Android screen                 | Web route            |

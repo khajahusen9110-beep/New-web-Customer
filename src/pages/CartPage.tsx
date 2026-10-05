@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { useLocation, useNavigate } from 'react-router-dom';
 import { AlertTriangle, ArrowRight, CheckCircle2, Info, RefreshCw, ShoppingCart, Trash2 } from 'lucide-react';
 import { BillRow, CenterSpinner, EmptyState, ErrorCard, PageHeader, ProductImage, QuantityStepper, toast } from '../components/ui';
@@ -23,6 +23,14 @@ export default function CartPage() {
     navState.isHotel != null ? navState.isHotel : cartCount(groceryCart) === 0 && cartCount(hotelCart) > 0,
   );
   const [checkoutError, setCheckoutError] = useState<string | null>(navState.checkoutError ?? null);
+  // The tab is chosen again once the saved cart is synced (it may differ from this device's copy).
+  const hydrated = useCart((s) => s.hydrated);
+  const tabTouched = useRef(navState.isHotel != null);
+  useEffect(() => {
+    if (!hydrated || tabTouched.current) return;
+    const { groceryCart: g, hotelCart: h } = useCart.getState();
+    setIsHotel(cartCount(g) === 0 && cartCount(h) > 0);
+  }, [hydrated]);
   const items = isHotel ? hotelCart : groceryCart;
   const { lines, unavailable, subtotal, hotelClosed, allChecked, loading, error, reload, removeUnavailable } = useCartCheck(
     items,
@@ -92,6 +100,7 @@ export default function CartPage() {
           <button
             className={!isHotel ? 'active' : ''}
             onClick={() => {
+              tabTouched.current = true;
               setIsHotel(false);
               setCheckoutError(null);
             }}
@@ -101,6 +110,7 @@ export default function CartPage() {
           <button
             className={isHotel ? 'active' : ''}
             onClick={() => {
+              tabTouched.current = true;
               setIsHotel(true);
               setCheckoutError(null);
             }}
@@ -165,7 +175,7 @@ export default function CartPage() {
               return (
                 <div key={it.key} className={`card cart-row${off ? ' unavailable' : ''}${isFlagged ? ' flagged' : ''}`}>
                   <div className="thumb">
-                    <ProductImage url={it.product.imageUrl} alt={it.product.name} />
+                    <ProductImage url={it.product.imageUrl} alt={it.product.name} width={64} />
                   </div>
                   <div className="grow min-w-0">
                     <strong className="ellipsis block">{it.displayName}</strong>

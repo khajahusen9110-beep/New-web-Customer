@@ -1,3 +1,4 @@
+import { fallbackToOriginal, imageSrcSet, resizedImage } from '../lib/images';
 import { useEffect, type ReactNode } from 'react';
 import { create } from 'zustand';
 import { useNavigate } from 'react-router-dom';
@@ -244,7 +245,21 @@ export function PriceDisplay({ price, mrp, unit }: { price: number; mrp?: number
   );
 }
 
-export function ProductImage({ url, alt, grayscale = false }: { url?: string | null; alt: string; grayscale?: boolean }) {
+export function ProductImage({
+  url,
+  alt,
+  grayscale = false,
+  width = 160,
+  priority = false,
+}: {
+  url?: string | null;
+  alt: string;
+  grayscale?: boolean;
+  /** About how wide it is shown, in CSS pixels (picks the resized image). */
+  width?: number;
+  /** Above the fold: load right away instead of lazily. */
+  priority?: boolean;
+}) {
   if (!url) {
     return (
       <div className="img-fallback">
@@ -254,7 +269,32 @@ export function ProductImage({ url, alt, grayscale = false }: { url?: string | n
   }
   // Lazy + async decode: off-screen images are not downloaded until scrolled near, and decoding
   // never blocks scrolling.
-  return <img className={`cover-img${grayscale ? ' grayscale' : ''}`} src={url} alt={alt} loading="lazy" decoding="async" />;
+  return (
+    <img
+      className={`cover-img${grayscale ? ' grayscale' : ''}`}
+      src={resizedImage(url, width)}
+      srcSet={imageSrcSet(url, width)}
+      alt={alt}
+      loading={priority ? 'eager' : 'lazy'}
+      {...(priority ? { fetchpriority: 'high' } : {})}
+      decoding="async"
+      onError={fallbackToOriginal(url)}
+    />
+  );
+}
+
+/** Plain image from Supabase Storage, resized for about `width` CSS pixels (category/dish icons). */
+export function ResizedImg({ url, width, alt = '' }: { url: string; width: number; alt?: string }) {
+  return (
+    <img
+      src={resizedImage(url, width)}
+      srcSet={imageSrcSet(url, width)}
+      alt={alt}
+      loading="lazy"
+      decoding="async"
+      onError={fallbackToOriginal(url)}
+    />
+  );
 }
 
 export function BillRow({ label, value, bold, accent }: { label: ReactNode; value: ReactNode; bold?: boolean; accent?: boolean }) {
