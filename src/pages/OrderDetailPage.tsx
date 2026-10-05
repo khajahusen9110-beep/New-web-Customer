@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
-import { useNavigate, useParams } from 'react-router-dom';
+import { useParams } from 'react-router-dom';
 import {
   Bike,
   Check,
@@ -12,7 +12,6 @@ import {
   MessageCircle,
   Phone,
   RefreshCw,
-  Repeat,
   ShieldCheck,
   Star,
   XCircle,
@@ -29,7 +28,6 @@ import {
   getOrderStatusHistory,
   getReviewedOrderIds,
   isAssignmentAccepted,
-  reorder,
   submitDeliveryPartnerReview,
   submitVendorReview,
   verifyRazorpayPayment,
@@ -200,8 +198,6 @@ function Stars({ value, onChange }: { value: number; onChange: (v: number) => vo
 
 export default function OrderDetailPage() {
   const { orderId = '' } = useParams();
-  const navigate = useNavigate();
-  const cityId = useSession((s) => s.selectedCity?.id);
   const [order, setOrder] = useState<Order | null>(null);
   const [items, setItems] = useState<OrderItem[]>([]);
   const [history, setHistory] = useState<OrderStatusHistory[]>([]);
@@ -218,7 +214,6 @@ export default function OrderDetailPage() {
   const [partnerRating, setPartnerRating] = useState(5);
   const [partnerComment, setPartnerComment] = useState('');
   const [submitting, setSubmitting] = useState(false);
-  const [reordering, setReordering] = useState(false);
   const [paying, setPaying] = useState(false);
   const [checkingPayment, setCheckingPayment] = useState(false);
   const [cancelReason, setCancelReason] = useState<string | null>(null);
@@ -341,19 +336,6 @@ export default function OrderDetailPage() {
     }, POLL_MS);
     return () => clearInterval(t);
   }, [liveTracking, partner?.id]);
-
-  async function doReorder() {
-    const city = cityId ?? order?.city_id ?? '';
-    setReordering(true);
-    try {
-      toast(await reorder(items, city));
-      navigate('/cart');
-    } catch (e) {
-      toast(`Failed to reorder: ${errorMessage(e)}`);
-    } finally {
-      setReordering(false);
-    }
-  }
 
   async function payNow() {
     if (!order) return;
@@ -659,16 +641,13 @@ export default function OrderDetailPage() {
             </div>
           </section>
 
-          <div className="sticky-bottom">
-            <button className="btn btn-primary btn-lg grow" disabled={reordering} onClick={() => void doReorder()}>
-              {reordering ? <Spinner size={20} light /> : <Repeat size={18} />} Reorder Items
-            </button>
-            {order.status.toLowerCase() === 'delivered' && !hasReviewed && (
-              <button className="btn btn-outline btn-lg" onClick={() => setShowReview(true)}>
+          {order.status.toLowerCase() === 'delivered' && !hasReviewed && (
+            <div className="sticky-bottom">
+              <button className="btn btn-outline btn-lg grow" onClick={() => setShowReview(true)}>
                 <Star size={18} className="text-warning" /> Rate Order
               </button>
-            )}
-          </div>
+            </div>
+          )}
         </div>
       )}
 
