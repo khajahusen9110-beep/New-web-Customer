@@ -7,6 +7,7 @@ import {
   CreditCard,
   LocateFixed,
   Mail,
+  Hourglass,
   Map as MapIcon,
   MessageCircle,
   Phone,
@@ -32,6 +33,11 @@ import {
   submitDeliveryPartnerReview,
   submitVendorReview,
   verifyRazorpayPayment,
+  getOrderCancellationReason,
+  isAwaitingUpiPayment,
+  syncRazorpayPayment,
+  UPI_PAYMENT_WINDOW_MIN,
+  UPI_TIMEOUT_REASON,
 } from '../lib/repository';
 import { openUpiCheckout } from '../lib/razorpay';
 import type { CustomerAddress, DeliveryAssignment, DeliveryPartner, Order, OrderItem, OrderStatusHistory } from '../lib/types';
@@ -40,6 +46,7 @@ import { useSession } from '../store/session';
 
 const ACTIVE = ['pending', 'confirmed', 'preparing', 'ready', 'out_for_delivery'];
 const POLL_MS = 18_000;
+const PAYMENT_POLL_MS = 20_000;
 const SUPPORT_PHONE = '+919353461742';
 const SUPPORT_WHATSAPP = '919110604033';
 const SUPPORT_EMAIL = 'sndmartt@gmail.com';
@@ -128,6 +135,57 @@ function EtaBanner({ at, minutes, delivered }: { at?: string | null; minutes?: n
   );
 }
 
+/** "Payment pending" banner with the time left before the backend cancels the unpaid UPI order. */
+function PaymentPendingBanner({
+  createdAt,
+  busy,
+  busyLabel,
+  onPay,
+  onCheck,
+}: {
+  createdAt?: string | null;
+  busy: 'pay' | 'check' | null;
+  busyLabel: string;
+  onPay: () => void;
+  onCheck: () => void;
+}) {
+  const [now, setNow] = useState(Date.now());
+  useEffect(() => {
+    const t = setInterval(() => setNow(Date.now()), 1000);
+    return () => clearInterval(t);
+  }, []);
+  const start = createdAt ? Date.parse(createdAt) : NaN;
+  const left = Number.isNaN(start) ? 0 : Math.max(0, start + UPI_PAYMENT_WINDOW_MIN * 60_000 - now);
+  const mmss = `${String(Math.floor(left / 60_000)).padStart(2, '0')}:${String(Math.floor((left % 60_000) / 1000)).padStart(2, '0')}`;
+  return (
+    <section className="payment-pending" role="status">
+      <div className="row gap-8 align-start">
+        <Hourglass size={20} />
+        <span>
+          <strong>Payment pending</strong> - complete payment within <strong className="countdown">{mmss}</strong> or the order
+          will be cancelled automatically.
+        </span>
+      </div>
+      <div className="row gap-8 wrap">
+        <button className="btn btn-primary btn-sm" disabled={!!busy} onClick={onPay}>
+          {busy === 'pay' ? (
+            <>
+              <Spinner size={16} light /> {busyLabel}
+            </>
+          ) : (
+            <>
+              <CreditCard size={16} /> Pay now
+            </>
+          )}
+        </button>
+        <button className="btn btn-outline btn-sm" disabled={!!busy} onClick={onCheck}>
+          {busy === 'check' ? <Spinner size={16} /> : <RefreshCw size={16} />} I've paid - check status
+        </button>
+      </div>
+    </section>
+  );
+}
+
 function Stars({ value, onChange }: { value: number; onChange: (v: number) => void }) {
   return (
     <div className="row gap-4">
@@ -162,6 +220,8 @@ export default function OrderDetailPage() {
   const [submitting, setSubmitting] = useState(false);
   const [reordering, setReordering] = useState(false);
   const [paying, setPaying] = useState(false);
+  const [checkingPayment, setCheckingPayment] = useState(false);
+  const [cancelReason, setCancelReason] = useState<string | null>(null);
   const [payMsg, setPayMsg] = useState('Starting payment...');
   const orderRef = useRef<Order | null>(null);
 
@@ -222,6 +282,51 @@ export default function OrderDetailPage() {
     return () => clearInterval(t);
   }, [load]);
 
+  const awaitingPayment = !!order && isAwaitingUpiPayment(order);
+
+  // Unpaid UPI order: ask Razorpay right away and then every 20 s while the banner shows
+  // (stops once paid or cancelled, or when the page closes).
+  useEffect(() => {
+    if (!awaitingPayment) return;
+    let stopped = false;
+    const check = async () => {
+      await syncRazorpayPayment(orderId);
+      if (!stopped) await load(true);
+    };
+    void check();
+    const t = setInterval(() => {
+      if (document.visibilityState === 'visible') void check();
+    }, PAYMENT_POLL_MS);
+    return () => {
+      stopped = true;
+      clearInterval(t);
+    };
+  }, [awaitingPayment, orderId, load]);
+
+  // Why a cancelled order was cancelled (shown for the UPI timeout).
+  const cancelled = order?.status?.toLowerCase() === 'cancelled';
+  useEffect(() => {
+    if (!cancelled) return setCancelReason(null);
+    let stop = false;
+    getOrderCancellationReason(orderId).then((r) => !stop && setCancelReason(r));
+    return () => {
+      stop = true;
+    };
+  }, [cancelled, orderId]);
+
+  async function checkPayment() {
+    setCheckingPayment(true);
+    try {
+      const st = await syncRazorpayPayment(orderId);
+      await load(true);
+      if (st === 'paid') toast('Payment received!');
+      else if (st === null) toast('Could not check payment right now. Please try again.');
+      else toast('Payment not received yet. If you just paid, please wait a few seconds.');
+    } finally {
+      setCheckingPayment(false);
+    }
+  }
+
   const accepted = isAssignmentAccepted(assignment);
   const isActive = !!order && ACTIVE.includes(order.status.toLowerCase());
   const liveTracking = isActive && accepted && !!partner;
@@ -258,9 +363,14 @@ export default function OrderDetailPage() {
       const rp = await createRazorpayOrder(order.id);
       const s = useSession.getState();
       const r = await openUpiCheckout({ order: rp, orderNumber: order.order_number || order.id, phone: s.userPhone, email: s.userEmail });
-      if (r.kind === 'cancelled') toast('Payment cancelled.');
-      else if (r.kind === 'error') toast(r.message);
-      else {
+      if (r.kind !== 'success') {
+        // The UPI app may have taken the money even if this screen did not hear back.
+        setPayMsg('Checking payment...');
+        const st = await syncRazorpayPayment(order.id);
+        await load(true);
+        if (st === 'paid') toast('Payment received!');
+        else toast(r.kind === 'cancelled' ? 'Payment cancelled.' : r.message);
+      } else {
         setPayMsg('Verifying payment...');
         const ok = await verifyRazorpayPayment({
           orderId: order.id,
@@ -268,9 +378,10 @@ export default function OrderDetailPage() {
           razorpayPaymentId: r.paymentId,
           razorpaySignature: r.signature,
         });
-        if (ok) {
+        const st = await syncRazorpayPayment(order.id);
+        await load(true);
+        if (ok || st === 'paid') {
           toast('Payment successful and verified!');
-          await load();
         } else {
           toast('Payment could not be verified. If money was deducted, it will be refunded shortly - contact support if this persists.');
         }
@@ -355,6 +466,24 @@ export default function OrderDetailPage() {
         <p className="center-pad muted">Order details not found</p>
       ) : (
         <div className="content-pad narrow stack">
+          {awaitingPayment && (
+            <PaymentPendingBanner
+              createdAt={order.created_at ?? order.placed_at}
+              busy={paying ? 'pay' : checkingPayment ? 'check' : null}
+              busyLabel={payMsg}
+              onPay={() => void payNow()}
+              onCheck={() => void checkPayment()}
+            />
+          )}
+          {cancelled && cancelReason?.trim().toLowerCase() === UPI_TIMEOUT_REASON.toLowerCase() && (
+            <div className="alert alert-danger" role="alert">
+              <XCircle size={20} />
+              <span>
+                Order cancelled because the payment was not completed. If money was deducted, it will be refunded by your
+                bank/UPI app automatically.
+              </span>
+            </div>
+          )}
           {liveTracking && order.status.toLowerCase() === 'out_for_delivery' && assignment?.delivery_otp && (
             <div className="otp-card">
               <span className="row gap-6 label-caps text-primary">
@@ -489,7 +618,8 @@ export default function OrderDetailPage() {
             <BillRow label="Handling Fee" value={rupees(order.handling_fee, 2)} />
             <hr />
             <BillRow label="Total Paid / Due" value={rupees(order.total_amount, 2)} bold accent />
-            {order.payment_method.toLowerCase() === 'upi' &&
+            {!awaitingPayment &&
+              order.payment_method.toLowerCase() === 'upi' &&
               order.payment_status.toLowerCase() !== 'paid' &&
               !['cancelled', 'rejected'].includes(order.status.toLowerCase()) && (
                 <button className="btn btn-primary w-full mt-12" disabled={paying} onClick={() => void payNow()}>

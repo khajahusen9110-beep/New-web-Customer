@@ -13,6 +13,7 @@ import {
   getDeliverySlots,
   getExpressDeliverySettings,
   placeOrder,
+  syncRazorpayPayment,
   resolveDeliveryDistanceKm,
   validateAndApplyCoupon,
   verifyRazorpayPayment,
@@ -230,6 +231,15 @@ export default function CheckoutPage() {
     setPlacingMsg('Initiating UPI payment...');
     const rp = await createRazorpayOrder(orderId);
     const result = await openUpiCheckout({ order: rp, orderNumber, phone: userPhone, email: userEmail });
+    if (result.kind !== 'success') {
+      // The payment may still have gone through in the UPI app: ask Razorpay before saying it failed.
+      setPlacingMsg('Checking payment status...');
+      if ((await syncRazorpayPayment(orderId)) === 'paid') {
+        toast('Payment received!');
+        navigate(`/orders/${orderId}`, { replace: true });
+        return;
+      }
+    }
     if (result.kind === 'cancelled') {
       toast('Payment cancelled. You can retry from your Orders page.');
       navigate(`/orders/${orderId}`, { replace: true });
@@ -247,7 +257,9 @@ export default function CheckoutPage() {
       razorpayPaymentId: result.paymentId,
       razorpaySignature: result.signature,
     });
-    if (!ok) {
+    // Also confirms with Razorpay directly, in case the verification request did not get through.
+    const synced = await syncRazorpayPayment(orderId);
+    if (!ok && synced !== 'paid') {
       setPlacementError(PAYMENT_VERIFY_FAILED);
       toast(PAYMENT_VERIFY_FAILED);
     }

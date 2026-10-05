@@ -10,6 +10,7 @@ import {
   getAddresses,
   refreshUnreadNotificationCount,
   resolveUserCity,
+  syncPendingUpiOrders,
 } from './lib/repository';
 import { useSession } from './store/session';
 import { useCart } from './store/cart';
@@ -117,6 +118,8 @@ function useLoggedInEffects() {
       }
       await useCart.getState().hydrateForUser(userId);
       void refreshUnreadNotificationCount(userId);
+      // A UPI payment whose success callback was lost (tab closed in the UPI app switch).
+      void syncPendingUpiOrders(userId);
       if (!cancelled) setVerified(true);
     })();
 
@@ -126,6 +129,7 @@ function useLoggedInEffects() {
       if (document.visibilityState === 'visible') {
         void checkStillActiveDevice();
         void refreshUnreadNotificationCount(userId);
+        void syncPendingUpiOrders(userId);
       }
     };
     document.addEventListener('visibilitychange', onVisible);

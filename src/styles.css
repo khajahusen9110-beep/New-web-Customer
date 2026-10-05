@@ -497,3 +497,9 @@ a.install-ok { display: flex; align-items: center; justify-content: center; text
 .hotel-cat.later .hotel-cat-img { filter: grayscale(1); opacity: 0.5; }
 .hotel-cat.later .hotel-cat-name { color: var(--muted); }
 .hotel-cat-from { display: inline-flex; align-items: center; gap: 2px; font-size: 10px; font-weight: 600; color: var(--muted); white-space: nowrap; }
+.payment-pending { display: flex; flex-direction: column; gap: 10px; padding: 12px 14px; border-radius: 12px; background: #fff3e0; color: #8a3d00; border: 1px solid color-mix(in srgb, var(--orange) 35%, white); font-size: 14px; }
+.payment-pending .countdown { font-variant-numeric: tabular-nums; }
+.payment-pending .wrap { flex-wrap: wrap; }
+.st-orange { background: #fff3e0; color: var(--orange); }
+.stack-xs { display: flex; flex-direction: column; gap: 4px; }
+.stack-xs.align-end { align-items: flex-end; }

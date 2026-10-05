@@ -2,7 +2,7 @@ import { useCallback, useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { ChevronRight, RefreshCw, ShoppingBag, Store } from 'lucide-react';
 import { EmptyState, ErrorCard, ListSkeleton, PageHeader, Spinner } from '../components/ui';
-import { getOrders, getVendorNames } from '../lib/repository';
+import { getOrders, getVendorNames, isAwaitingUpiPayment } from '../lib/repository';
 import type { Order } from '../lib/types';
 import { capitalize, errorMessage, rupees, shortDateTime } from '../lib/utils';
 import { useSession } from '../store/session';
@@ -102,7 +102,10 @@ export default function OrdersPage() {
                     )}
                     <span className="muted small">{shortDateTime(o.placed_at ?? o.created_at)}</span>
                   </div>
-                  <OrderStatusBadge status={o.status} />
+                  <span className="stack-xs align-end">
+                    <OrderStatusBadge status={o.status} />
+                    {isAwaitingUpiPayment(o) && <span className="status-badge st-orange">Payment pending</span>}
+                  </span>
                 </div>
                 <hr />
                 <div className="row between">

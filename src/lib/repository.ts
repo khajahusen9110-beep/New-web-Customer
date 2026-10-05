@@ -1328,6 +1328,66 @@ export async function verifyRazorpayPayment(p: {
   return json?.success === true;
 }
 
+/** Minutes an unpaid UPI order is kept before the backend cancels it (cancel_unpaid_upi_orders). */
+export const UPI_PAYMENT_WINDOW_MIN = 15;
+export const UPI_TIMEOUT_REASON = 'UPI payment not received within 15 minutes';
+
+/** UPI order still waiting for its payment (the order page shows the countdown banner). */
+export const isAwaitingUpiPayment = (o: Pick<Order, 'payment_method' | 'payment_status' | 'status'>) =>
+  o.payment_method?.toLowerCase() === 'upi' &&
+  ['pending', 'failed'].includes(o.payment_status?.toLowerCase() ?? '') &&
+  ['pending', 'confirmed'].includes(o.status?.toLowerCase() ?? '');
+
+/**
+ * Asks Razorpay (through the sync-razorpay-payment function) whether this order was paid and marks
+ * it paid if so. Covers payments whose success callback never arrived (tab closed while switching
+ * to the UPI app). Returns the payment status, or null if it could not be checked.
+ */
+export async function syncRazorpayPayment(orderId: string): Promise<string | null> {
+  try {
+    const { data, error } = await supabase.functions.invoke('sync-razorpay-payment', { body: { order_id: orderId } });
+    if (error) return null;
+    const json = (typeof data === 'string' ? JSON.parse(data) : data) as { payment_status?: string } | null;
+    return json?.payment_status ?? null;
+  } catch {
+    return null;
+  }
+}
+
+let lastPendingSync = 0;
+/**
+ * On opening the site / coming back to it: checks this customer's recent UPI orders that are still
+ * unpaid with Razorpay (at most once a minute, at most 3 orders).
+ */
+export async function syncPendingUpiOrders(userId: string) {
+  if (Date.now() - lastPendingSync < 60_000) return;
+  lastPendingSync = Date.now();
+  const since = new Date(Date.now() - (UPI_PAYMENT_WINDOW_MIN + 5) * 60_000).toISOString();
+  const { data, error } = await supabase
+    .from('orders')
+    .select('id')
+    .eq('customer_id', userId)
+    .eq('payment_method', 'upi')
+    .in('payment_status', ['pending', 'failed'])
+    .in('status', ['pending', 'confirmed'])
+    .gte('created_at', since)
+    .order('created_at', { ascending: false })
+    .limit(3);
+  if (error || !data) return;
+  for (const o of data as { id: string }[]) await syncRazorpayPayment(o.id);
+}
+
+/** Why an order was cancelled (order_cancellations.reason), if recorded. */
+export async function getOrderCancellationReason(orderId: string): Promise<string | null> {
+  const { data } = await supabase
+    .from('order_cancellations')
+    .select('reason,created_at')
+    .eq('order_id', orderId)
+    .order('created_at', { ascending: false })
+    .limit(1);
+  return ((data ?? [])[0] as { reason?: string | null } | undefined)?.reason ?? null;
+}
+
 // ---------- ORDERS ----------
 
 // List rows only need what the order card shows.
