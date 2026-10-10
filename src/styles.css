@@ -509,3 +509,15 @@ a.install-ok { display: flex; align-items: center; justify-content: center; text
 .product-grid > .product-card { content-visibility: auto; contain-intrinsic-size: auto 250px; }
 .hotel-grid > .hotel-card { content-visibility: auto; contain-intrinsic-size: auto 260px; }
 .menu-grid > .menu-item { content-visibility: auto; contain-intrinsic-size: auto 120px; }
+
+/* Sndmart Wallet */
+.wallet-chip { display: inline-flex; align-items: center; gap: 4px; height: 34px; padding: 0 10px; border-radius: 17px; background: var(--pastel-sage); color: var(--dark-green); font-weight: 800; font-size: 13px; white-space: nowrap; }
+.cashback-text { color: #00796b; }
+.wallet-use label { cursor: pointer; }
+.wallet-use label.disabled { cursor: default; }
+.wallet-use input[type='checkbox'] { width: 18px; height: 18px; margin-top: 2px; accent-color: var(--primary); flex-shrink: 0; }
+.wallet-row { display: flex; align-items: center; gap: 12px; width: 100%; text-align: left; padding-top: 10px; padding-bottom: 10px; }
+.wallet-row:disabled { cursor: default; opacity: 1; }
+.how-list { margin: 10px 0 0; padding-left: 18px; display: grid; gap: 4px; color: var(--text-2); }
+.muted-strip { background: var(--surface-variant); color: var(--muted); }
+.wallet-row > strong { white-space: nowrap; }

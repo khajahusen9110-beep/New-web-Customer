@@ -125,7 +125,9 @@ export default function NotificationsPage() {
                       void markNotificationAsRead(n.id);
                       setItems((cur) => cur.map((x) => (x.id === n.id ? { ...x, is_read: true } : x)));
                     }
-                    if (orderId) navigate(`/orders/${orderId}`);
+                    // Wallet cashback credited: open the wallet.
+                    if ((n.data as { type?: string } | null)?.type === 'wallet_cashback') navigate('/wallet');
+                    else if (orderId) navigate(`/orders/${orderId}`);
                   }}
                 >
                   <span className={`icon-circle ${cls}`}>

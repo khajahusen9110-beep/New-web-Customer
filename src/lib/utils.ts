@@ -1,6 +1,7 @@
 import type {
   CartItemUi,
   Category,
+  Coupon,
   CustomerNotification,
   DeliverySlot,
   ExpressDeliverySettings,
@@ -196,6 +197,42 @@ export function cartLineForError<T extends CartItemUi>(msg: string, lines: T[]):
 /** Checkout errors caused by an item that changed (show as-is and send the customer back to the cart). */
 export const isItemAvailabilityError = (msg: string) =>
   /no longer available|not available in your city|only .* in stock/i.test(msg);
+
+// ---------- Coupons (instant discount or wallet cashback) ----------
+
+export const isCashbackCoupon = (c: Pick<Coupon, 'reward_type'>) => c.reward_type === 'cashback';
+
+/** "50% OFF up to ₹100", "Flat ₹50 OFF", "50% cashback up to ₹500", "Flat ₹100 cashback". */
+export function couponHeadline(c: Coupon): string {
+  const isPercent = c.discount_type === 'percent' || c.discount_type === 'percentage';
+  const value = Math.trunc(Number(c.discount_value));
+  const cap = c.max_discount_amount != null && isPercent ? ` up to ₹${Math.trunc(Number(c.max_discount_amount))}` : '';
+  if (isCashbackCoupon(c)) return isPercent ? `${value}% cashback${cap}` : `Flat ₹${value} cashback`;
+  return isPercent ? `${value}% OFF${cap}` : `Flat ₹${value} OFF`;
+}
+
+const couponDate = (iso: string) =>
+  new Date(iso).toLocaleString('en-IN', { day: 'numeric', month: 'short', hour: 'numeric', minute: '2-digit' });
+
+/**
+ * Full terms shown before the customer applies a coupon, e.g. "50% cashback up to ₹500 · On orders
+ * above ₹199 · Valid till 12 Oct, 11:59 pm · Once per customer · Cashback valid 45 days · Use max 20%
+ * of wallet per order".
+ */
+export function couponTerms(c: Coupon, walletUsePercent?: number | null): string {
+  const parts = [couponHeadline(c)];
+  const min = Number(c.min_order_amount ?? 0);
+  if (min > 0) parts.push(`On orders above ₹${Math.trunc(min)}`);
+  if (c.expires_at) parts.push(`Valid till ${couponDate(c.expires_at)}`);
+  if (c.per_user_limit === 1) parts.push('Once per customer');
+  else if (c.per_user_limit && c.per_user_limit > 1) parts.push(`${c.per_user_limit} times per customer`);
+  if (isCashbackCoupon(c)) {
+    parts.push('Credited to your wallet after delivery');
+    if (c.cashback_valid_days) parts.push(`Cashback valid ${c.cashback_valid_days} days`);
+    if (walletUsePercent && walletUsePercent > 0) parts.push(`Use max ${Math.trunc(walletUsePercent)}% of wallet per order`);
+  }
+  return parts.join(' · ');
+}
 
 // ---------- Hotel menu category tabs ----------
 

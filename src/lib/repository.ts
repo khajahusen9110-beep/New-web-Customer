@@ -32,6 +32,10 @@ import type {
   Vendor,
   VendorReview,
   WalletTransaction,
+  MyWallet,
+  RewardsPreview,
+  WalletLedgerEntry,
+  WalletUsable,
 } from './types';
 import {
   defaultMenuTab,
@@ -1195,7 +1199,8 @@ export async function resolveDeliveryDistanceKm(
 // ---------- COUPONS ----------
 
 const COUPON_COLS =
-  'id,code,description,discount_type,discount_value,min_order_amount,max_discount_amount,usage_limit,used_count,starts_at,expires_at,is_active,city_id';
+  'id,code,description,discount_type,discount_value,min_order_amount,max_discount_amount,usage_limit,used_count,starts_at,expires_at,is_active,city_id,' +
+  'reward_type,per_user_limit,cashback_valid_days';
 
 /** The one coupon the home screen advertises: a single active, already-started, unexpired row. */
 export function getPromoCoupon(cityId: string): Promise<Coupon | null> {
@@ -1207,14 +1212,14 @@ async function fetchPromoCoupon(cityId: string): Promise<Coupon | null> {
   const now = new Date().toISOString();
   const { data, error } = await supabase
     .from('coupons')
-    .select('id,code,description,discount_type,discount_value,max_discount_amount,min_order_amount,is_active')
+    .select(COUPON_COLS)
     .eq('city_id', cityId)
     .eq('is_active', true)
     .lte('starts_at', now)
     .or(`expires_at.is.null,expires_at.gt."${now}"`)
     .limit(1);
   if (error) return null;
-  return ((data ?? [])[0] as Coupon) ?? null;
+  return ((data ?? [])[0] as unknown as Coupon) ?? null;
 }
 
 export async function validateAndApplyCoupon(
@@ -1232,7 +1237,7 @@ export async function validateAndApplyCoupon(
     .eq('code', trimmed)
     .limit(1);
   if (error) fail(error, 'Coupon validation failed');
-  const coupon = ((data ?? [])[0] as Coupon) ?? null;
+  const coupon = ((data ?? [])[0] as unknown as Coupon) ?? null;
   const bad = (msg: string): CouponValidationResult => ({ isValid: false, coupon, discountAmount: 0, errorMessage: msg });
   if (!coupon) return bad('Invalid or inactive coupon for this city');
   if (!coupon.is_active) return bad('This coupon is no longer active');
@@ -1371,9 +1376,12 @@ export async function placeOrder(p: {
   vendorId: string | null;
   addressId: string;
   paymentMethod: 'cod' | 'upi';
-  coupon: Coupon | null;
+  /** Coupon code the server validates and applies (instant discount or wallet cashback). */
+  couponCode: string | null;
   /** Lines to order (checkout passes only the available ones); defaults to the whole cart. */
   items?: CartItem[];
+  /** Pay part of the order from the Sndmart Wallet (the server decides how much). */
+  useWallet?: boolean;
 }): Promise<Order> {
   const { groceryCart, hotelCart } = useCart.getState();
   const raw = (p.items ?? (p.isHotel ? hotelCart : groceryCart)).filter((i) => i.quantity > 0);
@@ -1400,13 +1408,15 @@ export async function placeOrder(p: {
   // The checkout RPC validates the coupon, applies the discount to the order total and
   // records the usage itself, so the customer is charged exactly what checkout showed.
   // Do not send p_slot_id / p_delivery_type: the RPCs do not accept them yet.
-  args.p_coupon_code = p.coupon?.code?.trim().toUpperCase() || null;
+  args.p_coupon_code = p.couponCode?.trim().toUpperCase() || null;
+  args.p_use_wallet = p.useWallet === true;
   if (p.isHotel) {
     const vendorId = p.vendorId || raw.find((i) => i.vendor_id)?.vendor_id;
     if (!vendorId) throw new Error('Hotel / Vendor ID is missing for this order');
     args.p_vendor_id = vendorId;
   }
-  const fn = p.isHotel ? 'checkout_food_order' : 'checkout_grocery_order';
+  // v2 = the same checkout plus coupons with wallet cashback and paying part from the wallet.
+  const fn = p.isHotel ? 'checkout_food_order_v2' : 'checkout_grocery_order_v2';
 
   // One retry for transient network errors only; DB/validation errors are final.
   let lastErr: unknown = null;
@@ -1424,6 +1434,7 @@ export async function placeOrder(p: {
       } catch {
         // Cart cleanup failing must not hide a placed order.
       }
+      invalidateCache('myWallet'); // wallet used / cashback pending changed
       return order;
     } catch (e) {
       if ((e as { final?: boolean }).final) throw e;
@@ -1532,10 +1543,11 @@ export async function getOrderCancellationReason(orderId: string): Promise<strin
 // ---------- ORDERS ----------
 
 // List rows only need what the order card shows.
-const ORDER_LIST_COLS = 'id,order_number,customer_id,vendor_id,status,payment_method,payment_status,total_amount,placed_at,created_at';
+const ORDER_LIST_COLS =
+  'id,order_number,customer_id,vendor_id,status,payment_method,payment_status,total_amount,wallet_used_amount,cashback_amount,placed_at,created_at';
 const ORDER_DETAIL_COLS =
   'id,order_number,customer_id,vendor_id,delivery_partner_id,address_id,slot_id,status,payment_method,payment_status,' +
-  'subtotal,discount_amount,delivery_fee,handling_fee,total_amount,city_id,delivery_type,placed_at,created_at';
+  'subtotal,discount_amount,delivery_fee,handling_fee,total_amount,wallet_used_amount,cashback_amount,city_id,delivery_type,placed_at,created_at';
 
 export async function getOrders(userId: string, limit = 20, offset = 0): Promise<Order[]> {
   const { data, error } = await supabase
@@ -1698,6 +1710,77 @@ export async function getReviewedOrderIds(customerId: string, orderIds: string[]
 
 // ---------- WALLET ----------
 
+// ---------- SNDMART WALLET (cashback) ----------
+// Everything is calculated by the server; the app never writes wallet tables.
+
+/** Coupon + wallet preview for the checkout bill (debounced by the caller). */
+export async function previewCheckoutRewards(p: {
+  subtotal: number;
+  couponCode: string | null;
+  payableBeforeWallet: number;
+}): Promise<RewardsPreview> {
+  const { data, error } = await supabase.rpc('preview_checkout_rewards', {
+    p_subtotal: Math.max(0, Math.round(p.subtotal * 100) / 100),
+    p_coupon_code: p.couponCode?.trim() ? p.couponCode.trim().toUpperCase() : null,
+    p_payable_before_wallet: Math.max(0, Math.round(p.payableBeforeWallet * 100) / 100),
+  });
+  if (error) fail(error, 'Could not check coupon and wallet');
+  const r = (data ?? {}) as Partial<RewardsPreview>;
+  const w = (r.wallet ?? {}) as Partial<WalletUsable>;
+  return {
+    coupon: r.coupon
+      ? {
+          ...r.coupon,
+          discount: num(r.coupon.discount),
+          cashback: num(r.coupon.cashback),
+        }
+      : null,
+    wallet: {
+      enabled: w.enabled === true,
+      balance: num(w.balance),
+      usable: num(w.usable),
+      max_use_percent: num(w.max_use_percent),
+      min_order: num(w.min_order),
+      reason: w.reason ?? null,
+    },
+  };
+}
+
+/** The customer's wallet summary (cached briefly; refreshed after orders and on the wallet page). */
+export function getMyWallet(forceRefresh = false): Promise<MyWallet> {
+  return cached(
+    'myWallet',
+    60 * 1000,
+    async () => {
+      const { data, error } = await supabase.rpc('get_my_wallet');
+      if (error) fail(error, 'Failed to load wallet');
+      const w = (data ?? {}) as Partial<MyWallet>;
+      return {
+        city_id: w.city_id ?? null,
+        enabled: w.enabled === true,
+        balance: num(w.balance),
+        pending_cashback: num(w.pending_cashback),
+        total_cashback_earned: num(w.total_cashback_earned),
+        total_used: num(w.total_used),
+        max_use_percent: num(w.max_use_percent),
+        min_order: num(w.min_order),
+        expiring_soon: w.expiring_soon ? { amount: num(w.expiring_soon.amount), first_expiry: w.expiring_soon.first_expiry ?? null } : null,
+        lots: (w.lots ?? []).map((l) => ({ amount: num(l.amount), expires_at: l.expires_at })),
+        pending: (w.pending ?? []).map((x) => ({ ...x, amount: num(x.amount) })),
+      };
+    },
+    forceRefresh,
+  );
+}
+
+/** Wallet history, newest first; pass the last row's created_at for the next page. */
+export async function getMyWalletHistory(limit = 30, before: string | null = null): Promise<WalletLedgerEntry[]> {
+  const { data, error } = await supabase.rpc('get_my_wallet_history', { p_limit: limit, p_before: before });
+  if (error) fail(error, 'Failed to load wallet history');
+  return ((data ?? []) as WalletLedgerEntry[]).map((e) => ({ ...e, amount: num(e.amount) }));
+}
+
+/** Older refund records from before the cashback wallet (shown read-only under the history). */
 export async function getWalletTransactions(customerId: string, limit = 20, offset = 0): Promise<WalletTransaction[]> {
   const { data, error } = await supabase
     .from('customer_wallet_transactions')

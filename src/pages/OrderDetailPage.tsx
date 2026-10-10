@@ -18,6 +18,7 @@ import {
 } from 'lucide-react';
 import { BillRow, CenterSpinner, ErrorCard, Modal, PageHeader, Spinner, toast } from '../components/ui';
 import { TrackingMap } from '../components/MapView';
+import { CashbackNote } from '../components/CashbackNote';
 import {
   createRazorpayOrder,
   getAddressById,
@@ -598,8 +599,12 @@ export default function OrderDetailPage() {
             {order.discount_amount > 0 && <BillRow label="Discount" value={`-${rupees(order.discount_amount, 2)}`} accent />}
             <BillRow label="Delivery Fee" value={rupees(order.delivery_fee, 2)} />
             <BillRow label="Handling Fee" value={rupees(order.handling_fee, 2)} />
+            {Number(order.wallet_used_amount ?? 0) > 0 && (
+              <BillRow label="Wallet used" value={`−${rupees(order.wallet_used_amount, 2)}`} accent />
+            )}
             <hr />
             <BillRow label="Total Paid / Due" value={rupees(order.total_amount, 2)} bold accent />
+            <CashbackNote order={order} />
             {!awaitingPayment &&
               order.payment_method.toLowerCase() === 'upi' &&
               order.payment_status.toLowerCase() !== 'paid' &&

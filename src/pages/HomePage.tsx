@@ -54,10 +54,14 @@ import {
   peekHotels,
 } from '../lib/repository';
 import type { CartItem, Category, Coupon, OperatingSlot, ResolvedProduct, Vendor } from '../lib/types';
-import { useDebounced, useFreshCart, useInfiniteSentinel } from '../lib/hooks';
+import { useDebounced, useFreshCart, useInfiniteSentinel, useMyWallet } from '../lib/hooks';
+import { WalletChip } from '../components/WalletChip';
 import {
   cartTotal,
+  couponHeadline,
+  couponTerms,
   errorMessage,
+  isCashbackCoupon,
   isInStockAndActive,
   isVendorOpenNow,
   rupees,
@@ -75,11 +79,6 @@ let couponShownThisSession = false;
 // In stock + featured, in stock, unavailable + featured, unavailable; then by name.
 const sortGrocery = sortGroceryProducts;
 
-function discountSummary(c: Coupon) {
-  const part = c.discount_type === 'flat' ? `Flat Rs ${Math.trunc(c.discount_value)} OFF` : `${Math.trunc(c.discount_value)}% OFF`;
-  const min = c.min_order_amount && c.min_order_amount > 0 ? ` on orders above Rs ${Math.trunc(c.min_order_amount)}` : '';
-  return part + min;
-}
 
 function HomeTopBar({ onRefresh, showBack, onBack }: { onRefresh: () => void; showBack: boolean; onBack: () => void }) {
   const navigate = useNavigate();
@@ -107,6 +106,7 @@ function HomeTopBar({ onRefresh, showBack, onBack }: { onRefresh: () => void; sh
         </span>
       </button>
       <div className="row gap-6">
+        <WalletChip />
         <button className="icon-circle-btn" aria-label="Refresh" onClick={onRefresh}>
           <RefreshCw size={19} />
         </button>
@@ -221,12 +221,6 @@ function DishRow({
   );
 }
 
-function offerHeadline(c: Coupon) {
-  const isPercent = c.discount_type === 'percent' || c.discount_type === 'percentage';
-  const value = Math.trunc(Number(c.discount_value));
-  const cap = c.max_discount_amount != null && isPercent ? ` up to ₹${Math.trunc(Number(c.max_discount_amount))}` : '';
-  return isPercent ? `${value}% OFF${cap}` : `Flat ₹${value} OFF`;
-}
 
 /**
  * Always-visible food promotion banner. Shows only real offers: the city's active coupon, else
@@ -249,10 +243,11 @@ function FoodPromoBanner({
     return (
       <div className="food-promo" style={style}>
         <div className="food-promo-kicker">TODAY'S OFFER</div>
-        <div className="food-promo-title">{offerHeadline(coupon)}</div>
+        <div className="food-promo-title">{couponHeadline(coupon)}</div>
         <div className="food-promo-sub">
           Use code <strong>{coupon.code}</strong>
           {min}
+          {isCashbackCoupon(coupon) && ' · cashback to your wallet after delivery'}
         </div>
         <button
           className="food-promo-cta"
@@ -558,6 +553,8 @@ export default function HomePage() {
 
   const [threshold, setThreshold] = useState<number | null>(null);
   const [coupon, setCoupon] = useState<Coupon | null>(null);
+  // Wallet limits for the coupon terms ("Use max 20% of wallet per order").
+  const walletPercent = useMyWallet()?.max_use_percent ?? null;
   const [showRating, setShowRating] = useState(false);
   const completedRef = useRef(0);
   const reqId = useRef(0);
@@ -1059,7 +1056,7 @@ export default function HomePage() {
           <div className="center-col">
             <Tag size={48} className="text-orange" />
             <h2>Special Offer For You!</h2>
-            <p className="muted center">{discountSummary(coupon)}</p>
+            <p className="muted center">{couponTerms(coupon, walletPercent)}</p>
             <button
               className="coupon-code"
               onClick={() => {

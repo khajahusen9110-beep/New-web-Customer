@@ -3,6 +3,7 @@ import { useNavigate } from 'react-router-dom';
 import { ChevronRight, RefreshCw, ShoppingBag, Store } from 'lucide-react';
 import { EmptyState, ErrorCard, ListSkeleton, PageHeader, Spinner } from '../components/ui';
 import { getOrders, getVendorNames, isAwaitingUpiPayment } from '../lib/repository';
+import { CashbackNote } from '../components/CashbackNote';
 import type { Order } from '../lib/types';
 import { capitalize, errorMessage, rupees, shortDateTime } from '../lib/utils';
 import { useSession } from '../store/session';
@@ -112,6 +113,10 @@ export default function OrdersPage() {
                   <span>
                     <span className="muted small block">Total Amount</span>
                     <strong className="total-big">{rupees(o.total_amount, 2)}</strong>
+                    {Number(o.wallet_used_amount ?? 0) > 0 && (
+                      <span className="muted small block">Wallet used −{rupees(o.wallet_used_amount, 2)}</span>
+                    )}
+                    <CashbackNote order={o} />
                   </span>
                   <span className="row gap-4 text-primary small bold">
                     View Details <ChevronRight size={16} />

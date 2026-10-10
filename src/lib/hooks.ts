@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import type { CartItem, CartItemUi, OperatingSlot, ResolvedProduct, Vendor } from './types';
-import { buildCartLines, getLiveCartProducts, getVendor, getVendorOperatingSlots } from './repository';
+import type { CartItem, CartItemUi, MyWallet, OperatingSlot, ResolvedProduct, Vendor } from './types';
+import { buildCartLines, getLiveCartProducts, getMyWallet, getVendor, getVendorOperatingSlots } from './repository';
 import { cartTotal, checkCartLine, hotelClosedMessage, isVendorOpenNow, type CartLineCheck } from './utils';
 import { useCart } from '../store/cart';
 
@@ -178,4 +178,20 @@ export function useCartCheck(rawItems: CartItem[], cityId: string | null | undef
     reload,
     removeUnavailable,
   };
+}
+
+/** The customer's wallet summary (shared, cached for a minute); null until loaded or if it fails. */
+export function useMyWallet(enabled = true): MyWallet | null {
+  const [wallet, setWallet] = useState<MyWallet | null>(null);
+  useEffect(() => {
+    if (!enabled) return;
+    let cancelled = false;
+    getMyWallet()
+      .then((w) => !cancelled && setWallet(w))
+      .catch(() => undefined);
+    return () => {
+      cancelled = true;
+    };
+  }, [enabled]);
+  return wallet;
 }

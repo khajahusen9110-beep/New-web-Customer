@@ -1,8 +1,8 @@
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Navigate, useNavigate, useParams } from 'react-router-dom';
-import { AlertTriangle, CalendarDays, CheckCircle2, Info, LocateFixed, MapPin, Navigation, Plus, Zap } from 'lucide-react';
+import { AlertTriangle, CalendarDays, CheckCircle2, Info, LocateFixed, MapPin, Navigation, Plus, Wallet as WalletIcon, Zap } from 'lucide-react';
 import { AddressPickerModal } from '../components/AddressPickerModal';
-import { BillRow, ErrorCard, PageHeader, Spinner, toast } from '../components/ui';
+import { BillRow, ErrorCard, Modal, PageHeader, Spinner, toast } from '../components/ui';
 import MaintenancePage from './MaintenancePage';
 import {
   checkMaintenanceMode,
@@ -15,11 +15,11 @@ import {
   placeOrder,
   syncRazorpayPayment,
   resolveDeliveryDistanceKm,
-  validateAndApplyCoupon,
+  previewCheckoutRewards,
   verifyRazorpayPayment,
 } from '../lib/repository';
 import { openUpiCheckout } from '../lib/razorpay';
-import type { Coupon, CustomerAddress, DeliverySlot, ExpressDeliverySettings } from '../lib/types';
+import type { CustomerAddress, DeliverySlot, ExpressDeliverySettings, Order, RewardsPreview } from '../lib/types';
 import { useCartCheck } from '../lib/hooks';
 import type { CartNavState } from './CartPage';
 import {
@@ -44,6 +44,8 @@ type PaymentKey = (typeof PAYMENT_METHODS)[number]['key'];
 type DeliveryType = 'scheduled' | 'express' | 'none';
 
 const DEFAULT_HANDLING_FEE = 5;
+// "Use wallet balance" is remembered for this visit only (default: unchecked).
+let walletChoice = false;
 const PAYMENT_VERIFY_FAILED =
   'Payment could not be verified. If money was deducted, it will be refunded shortly - contact support if this persists.';
 
@@ -54,6 +56,7 @@ export default function CheckoutPage() {
   const { userId, isLoggedIn, selectedCity, userPhone, userEmail } = useSession();
   const cart = useCart((s) => (isHotel ? s.hotelCart : s.groceryCart));
   const hotelCart = useCart((s) => s.hotelCart);
+  const cartHydrated = useCart((s) => s.hydrated);
 
   const [addresses, setAddresses] = useState<CustomerAddress[]>([]);
   const [addressId, setAddressId] = useState<string | null>(null);
@@ -82,10 +85,18 @@ export default function CheckoutPage() {
   const [distanceKm, setDistanceKm] = useState<number | null>(null);
 
   const [couponInput, setCouponInput] = useState('');
-  const [coupon, setCoupon] = useState<Coupon | null>(null);
-  const [discount, setDiscount] = useState(0);
+  // Code the customer applied; the server preview says whether it is valid and what it gives.
+  const [appliedCode, setAppliedCode] = useState<string | null>(null);
+  const [preview, setPreview] = useState<RewardsPreview | null>(null);
   const [validatingCoupon, setValidatingCoupon] = useState(false);
   const [couponError, setCouponError] = useState<string | null>(null);
+  const [useWallet, setUseWalletState] = useState(walletChoice);
+  const setUseWallet = (v: boolean) => {
+    walletChoice = v;
+    setUseWalletState(v);
+  };
+  // Server amount differed from the estimate: shown before Razorpay opens.
+  const [confirmPay, setConfirmPay] = useState<Order | null>(null);
 
   const [payment, setPayment] = useState<PaymentKey>('cod');
   const [placing, setPlacing] = useState(false);
@@ -157,27 +168,45 @@ export default function CheckoutPage() {
     };
   }, [cityId]);
 
+  // Coupon + wallet as the server sees them for this cart (the server calculates everything).
+  const previewCoupon = preview?.coupon?.valid && appliedCode && preview.coupon.code === appliedCode ? preview.coupon : null;
+  const isCashback = previewCoupon?.reward_type === 'cashback';
+  const discount = previewCoupon && !isCashback ? Number(previewCoupon.discount ?? 0) : 0;
+  const cashback = previewCoupon && isCashback ? Number(previewCoupon.cashback ?? 0) : 0;
+  const lastPreviewKey = useRef('');
+
+  const runPreview = useCallback(
+    async (code: string | null, payableBeforeWallet: number, force = false) => {
+      if (subtotal <= 0) return null;
+      const key = `${subtotal}|${code ?? ''}|${payableBeforeWallet.toFixed(2)}`;
+      if (!force && key === lastPreviewKey.current) return null;
+      lastPreviewKey.current = key;
+      try {
+        const r = await previewCheckoutRewards({ subtotal, couponCode: code, payableBeforeWallet });
+        if (key !== lastPreviewKey.current) return null; // a newer preview started
+        setPreview(r);
+        if (code && r.coupon && !r.coupon.valid) {
+          // Invalid for this cart: show why and stop sending it.
+          setCouponError(r.coupon.error || 'This coupon cannot be used on this order');
+          setAppliedCode(null);
+        }
+        return r;
+      } catch (e) {
+        if (code) setCouponError(errorMessage(e, 'Could not check the coupon'));
+        return null;
+      }
+    },
+    [subtotal],
+  );
+
   const applyCoupon = async (code: string) => {
-    if (!cityId || !code.trim()) return;
+    const c = code.trim().toUpperCase();
+    if (!cityId || !c) return;
     setValidatingCoupon(true);
     setCouponError(null);
-    try {
-      const r = await validateAndApplyCoupon(code, cityId, subtotal);
-      if (r.isValid) {
-        setCoupon(r.coupon ?? null);
-        setDiscount(r.discountAmount);
-      } else {
-        setCoupon(null);
-        setDiscount(0);
-        setCouponError(r.errorMessage ?? 'Coupon is not valid for this order');
-      }
-    } catch (e) {
-      setCoupon(null);
-      setDiscount(0);
-      setCouponError(errorMessage(e, 'Coupon validation failed'));
-    } finally {
-      setValidatingCoupon(false);
-    }
+    setAppliedCode(c);
+    await runPreview(c, payableEstimateRef.current, true);
+    setValidatingCoupon(false);
   };
 
   const distance = distanceKm ?? 1;
@@ -198,7 +227,22 @@ export default function CheckoutPage() {
   const expressMinNotMet =
     deliveryType === 'express' && express?.min_order_amount != null && subtotal < Number(express.min_order_amount);
 
-  const total = deliveryFee != null ? Math.max(subtotal - discount + deliveryFee + handlingFee, 0) : null;
+  // Items - instant discount + delivery + handling, before the wallet.
+  const payableBeforeWallet = Math.max(subtotal - discount + (deliveryFee ?? 0) + handlingFee, 0);
+  const payableEstimateRef = useRef(payableBeforeWallet);
+  payableEstimateRef.current = payableBeforeWallet;
+  const wallet = preview?.wallet ?? null;
+  const showWallet = !!wallet && wallet.enabled && wallet.balance > 0;
+  const walletApplied = showWallet && useWallet ? Math.min(wallet.usable, payableBeforeWallet) : 0;
+  // Estimate only: after placing, the server's order.total_amount is what is charged.
+  const total = deliveryFee != null ? Math.max(payableBeforeWallet - walletApplied, 0) : null;
+
+  // Refresh the coupon/wallet preview when the cart, coupon or bill changes (debounced 400 ms).
+  useEffect(() => {
+    if (subtotal <= 0 || loadingDelivery) return;
+    const t = setTimeout(() => void runPreview(appliedCode, payableBeforeWallet), 400);
+    return () => clearTimeout(t);
+  }, [subtotal, appliedCode, payableBeforeWallet, loadingDelivery, runPreview]);
 
   // Removing unavailable items is always possible; placing the order needs everything below.
   const removeMode = unavailable.length > 0 && !hotelClosed;
@@ -294,9 +338,19 @@ export default function CheckoutPage() {
         vendorId: hotelVendorId,
         addressId,
         paymentMethod: payment,
-        coupon,
+        couponCode: previewCoupon ? appliedCode : null,
         items: available.map((l) => l.cartItem),
+        useWallet: walletApplied > 0,
       });
+      // The server's total is the truth; if it differs from the estimate, show it before paying.
+      const serverTotal = Number(order.total_amount ?? 0);
+      const differs = total != null && serverTotal > 0 && Math.abs(serverTotal - total) > 1;
+      if (differs) void runPreview(previewCoupon ? appliedCode : null, payableBeforeWallet, true);
+      if (payment === 'upi' && differs) {
+        setConfirmPay(order);
+        return;
+      }
+      if (differs) toast(`Order placed. Amount to pay: ${rupees(serverTotal, 2)}`);
       if (payment === 'upi') {
         try {
           await runUpiPayment(order.id, order.order_number || order.id);
@@ -321,10 +375,12 @@ export default function CheckoutPage() {
         return;
       }
       // Server rejected the coupon (no order created): drop it so the order can be placed without it.
-      if (coupon && /coupon|minimum order amount/i.test(msg)) {
-        setCoupon(null);
+      if (appliedCode && /coupon|minimum order amount/i.test(msg)) {
+        setAppliedCode(null);
         setCouponError(msg);
       }
+      // Wallet balance changed (used elsewhere / expired): refresh what can be used.
+      if (/wallet/i.test(msg)) void runPreview(previewCoupon ? appliedCode : null, payableBeforeWallet, true);
       setPlacementError(msg);
       toast(msg);
     } finally {
@@ -349,7 +405,8 @@ export default function CheckoutPage() {
   }
 
   if (type !== 'hotel' && type !== 'grocery') return <Navigate to="/cart" replace />;
-  if (cart.length === 0 && !placing) return <Navigate to="/cart" replace />;
+  // Only once the saved cart is synced (a reloaded checkout starts with this device's copy).
+  if (cartHydrated && cart.length === 0 && !placing) return <Navigate to="/cart" replace />;
 
   return (
     <div className="page">
@@ -523,21 +580,28 @@ export default function CheckoutPage() {
           {/* Coupon */}
           <section className="card pad">
             <h3>Have a Coupon?</h3>
-            {coupon ? (
+            {previewCoupon ? (
               <div className="coupon-applied">
                 <span className="row gap-8">
                   <CheckCircle2 size={20} className="text-primary" />
                   <span>
-                    <strong className="block">Coupon {coupon.code} Applied!</strong>
-                    <span className="small text-primary">You save {rupees(discount)}</span>
+                    <strong className="block">Coupon {previewCoupon.code} Applied!</strong>
+                    {isCashback ? (
+                      <span className="small cashback-text">
+                        🎁 {rupees(cashback, 2)} cashback after delivery
+                        {previewCoupon.cashback_valid_days ? ` (valid ${previewCoupon.cashback_valid_days} days)` : ''}
+                      </span>
+                    ) : (
+                      <span className="small text-primary">You save {rupees(discount, 2)}</span>
+                    )}
                   </span>
                 </span>
                 <button
                   className="btn btn-text text-danger"
                   onClick={() => {
-                    setCoupon(null);
-                    setDiscount(0);
+                    setAppliedCode(null);
                     setCouponInput('');
+                    setCouponError(null);
                   }}
                 >
                   Remove
@@ -550,7 +614,10 @@ export default function CheckoutPage() {
                     className="input grow"
                     placeholder="Enter Coupon Code"
                     value={couponInput}
-                    onChange={(e) => setCouponInput(e.target.value.toUpperCase())}
+                    onChange={(e) => {
+                      setCouponInput(e.target.value.toUpperCase());
+                      setCouponError(null);
+                    }}
                   />
                   <button
                     className="btn btn-primary"
@@ -581,6 +648,30 @@ export default function CheckoutPage() {
 
         {/* Bill */}
         <aside className="stack checkout-aside">
+          {showWallet && wallet && (
+            <section className="card pad wallet-use">
+              <label className={`row gap-8 align-start${wallet.usable > 0 ? '' : ' disabled'}`}>
+                <input
+                  type="checkbox"
+                  checked={useWallet && wallet.usable > 0}
+                  disabled={wallet.usable <= 0}
+                  onChange={(e) => setUseWallet(e.target.checked)}
+                />
+                <span>
+                  <strong className="row gap-4">
+                    <WalletIcon size={16} /> Use Wallet Balance
+                  </strong>
+                  <span className="small block">
+                    {wallet.usable > 0
+                      ? `Use ${rupees(wallet.usable, 2)} from wallet (Balance ${rupees(wallet.balance, 2)})`
+                      : `Balance ${rupees(wallet.balance, 2)}`}
+                  </span>
+                  {wallet.usable <= 0 && wallet.reason && <span className="muted small block">{wallet.reason}</span>}
+                  <span className="muted small block">Up to {Math.trunc(wallet.max_use_percent)}% of item total per order</span>
+                </span>
+              </label>
+            </section>
+          )}
           <section className="card pad">
             <h3>Bill Details</h3>
             {loadingCart && fresh.length === 0 ? (
@@ -601,8 +692,8 @@ export default function CheckoutPage() {
                   ),
                 )}
                 <hr />
-                <BillRow label="Items Subtotal" value={rupees(subtotal)} />
-                {discount > 0 && <BillRow label="Coupon Discount" value={`-${rupees(discount)}`} accent />}
+                <BillRow label="Item total" value={rupees(subtotal, 2)} />
+                {discount > 0 && <BillRow label={`Coupon discount (${previewCoupon?.code})`} value={`−${rupees(discount, 2)}`} accent />}
                 <BillRow
                   label="Delivery Fee"
                   value={
@@ -620,8 +711,10 @@ export default function CheckoutPage() {
                   }
                 />
                 <BillRow label="Handling Fee" value={rupees(handlingFee)} />
+                {walletApplied > 0 && <BillRow label="Wallet" value={`−${rupees(walletApplied, 2)}`} accent />}
                 <hr />
-                <BillRow label="To Pay" value={total != null && deliveryAvailable ? rupees(total) : '--'} bold accent />
+                <BillRow label="To Pay" value={total != null && deliveryAvailable ? rupees(total, 2) : '--'} bold accent />
+                {cashback > 0 && <p className="small cashback-text bold">🎁 {rupees(cashback, 2)} cashback after delivery</p>}
               </>
             )}
           </section>
@@ -643,6 +736,43 @@ export default function CheckoutPage() {
           </div>
         </aside>
       </div>
+
+      <Modal
+        open={!!confirmPay}
+        onClose={() => {
+          const o = confirmPay;
+          setConfirmPay(null);
+          if (o) navigate(`/orders/${o.id}`, { replace: true });
+        }}
+        title="Amount to pay"
+      >
+        {confirmPay && (
+          <div className="stack-sm center-col">
+            <p className="center">
+              Your order {confirmPay.order_number} is placed. The final amount to pay is{' '}
+              <strong>{rupees(confirmPay.total_amount, 2)}</strong>.
+            </p>
+            <button
+              className="btn btn-primary btn-lg w-full"
+              onClick={async () => {
+                const o = confirmPay;
+                setConfirmPay(null);
+                setPlacing(true);
+                try {
+                  await runUpiPayment(o.id, o.order_number || o.id);
+                } catch (e) {
+                  toast(errorMessage(e, 'Could not start payment. Please try again.'));
+                  navigate(`/orders/${o.id}`, { replace: true });
+                } finally {
+                  setPlacing(false);
+                }
+              }}
+            >
+              Pay {rupees(confirmPay.total_amount, 2)} via UPI
+            </button>
+          </div>
+        )}
+      </Modal>
 
       {showAddAddress && (
         <AddressPickerModal

@@ -206,6 +206,60 @@ export interface Coupon {
   expires_at?: string | null;
   is_active: boolean;
   city_id?: string | null;
+  /** 'instant' (bill reduced now) or 'cashback' (credited to the wallet after delivery). */
+  reward_type?: string | null;
+  per_user_limit?: number | null;
+  cashback_valid_days?: number | null;
+}
+
+/** preview_checkout_rewards(): what a coupon and the wallet would do for this cart (server-calculated). */
+export interface RewardsPreview {
+  coupon: {
+    valid: boolean;
+    code: string;
+    reward_type?: string | null;
+    discount?: number;
+    cashback?: number;
+    cashback_valid_days?: number | null;
+    message?: string | null;
+    error?: string | null;
+  } | null;
+  wallet: WalletUsable;
+}
+
+export interface WalletUsable {
+  enabled: boolean;
+  balance: number;
+  usable: number;
+  max_use_percent: number;
+  min_order: number;
+  reason?: string | null;
+}
+
+/** get_my_wallet() */
+export interface MyWallet {
+  city_id?: string | null;
+  enabled: boolean;
+  balance: number;
+  pending_cashback: number;
+  total_cashback_earned: number;
+  total_used: number;
+  max_use_percent: number;
+  min_order: number;
+  expiring_soon?: { amount: number; first_expiry?: string | null } | null;
+  lots: { amount: number; expires_at: string }[];
+  pending: { amount: number; order_id?: string | null; order_number?: string | null; created_at?: string | null }[];
+}
+
+/** get_my_wallet_history() row */
+export interface WalletLedgerEntry {
+  id: string;
+  entry_type: string;
+  amount: number;
+  note?: string | null;
+  order_id?: string | null;
+  order_number?: string | null;
+  created_at: string;
 }
 
 export interface CouponValidationResult {
@@ -241,6 +295,10 @@ export interface Order {
   delivery_fee: number;
   handling_fee: number;
   total_amount: number;
+  /** Paid from the Sndmart Wallet (already taken off total_amount). */
+  wallet_used_amount?: number | null;
+  /** Cashback credited to the wallet when the order is delivered. */
+  cashback_amount?: number | null;
   city_id?: string | null;
   delivery_type?: string | null;
   placed_at?: string | null;

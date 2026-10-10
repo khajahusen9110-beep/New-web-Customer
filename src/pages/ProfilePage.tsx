@@ -5,8 +5,12 @@ import { ConfirmDialog, PageHeader } from '../components/ui';
 import { openCityPicker } from '../components/CityPicker';
 import { signOut } from '../lib/repository';
 import { useSession } from '../store/session';
+import { rupees } from '../lib/utils';
+import { useMyWallet } from '../lib/hooks';
+import { WalletChip } from '../components/WalletChip';
 
 export default function ProfilePage() {
+  const wallet = useMyWallet();
   const navigate = useNavigate();
   const { userName, userEmail, userPhone, selectedCity, unreadNotificationCount, logout } = useSession();
   const [confirmLogout, setConfirmLogout] = useState(false);
@@ -26,7 +30,12 @@ export default function ProfilePage() {
       go: () => navigate('/notifications'),
     },
     { Icon: MapPin, title: 'Saved Addresses', sub: 'Manage delivery addresses', go: () => navigate('/addresses') },
-    { Icon: Wallet, title: 'Sndmart Wallet', sub: 'View balance & automatic order refunds', go: () => navigate('/wallet') },
+    {
+      Icon: Wallet,
+      title: 'Sndmart Wallet',
+      sub: wallet ? `Balance ${rupees(wallet.balance, 2)} · cashback & history` : 'Cashback balance & history',
+      go: () => navigate('/wallet'),
+    },
     { Icon: Star, title: 'My Reviews', sub: 'Reviews you have submitted', go: () => navigate('/reviews') },
     { Icon: CircleHelp, title: 'Help & Support', sub: 'Call, WhatsApp or email us', go: () => navigate('/help') },
   ];
@@ -44,6 +53,8 @@ export default function ProfilePage() {
             {userEmail && <span className="muted small block">{userEmail}</span>}
             {userPhone && <span className="muted small block">{userPhone}</span>}
           </span>
+          <span className="grow" />
+          <WalletChip always />
         </div>
         <div className="card menu-list">
           {items.map(({ Icon, title, sub, go }) => (
