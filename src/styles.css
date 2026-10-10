@@ -521,3 +521,4 @@ a.install-ok { display: flex; align-items: center; justify-content: center; text
 .how-list { margin: 10px 0 0; padding-left: 18px; display: grid; gap: 4px; color: var(--text-2); }
 .muted-strip { background: var(--surface-variant); color: var(--muted); }
 .wallet-row > strong { white-space: nowrap; }
+.cashback-kn { margin: 8px 0 0; color: var(--red); font-size: 14px; font-weight: 700; line-height: 1.5; }

@@ -607,7 +607,15 @@ export default function CheckoutPage() {
                   Remove
                 </button>
               </div>
-            ) : (
+            ) : null}
+            {previewCoupon && isCashback && (
+              // Kannada note so customers know the bill is not reduced now.
+              <p className="cashback-kn" lang="kn">
+                ಈ ಕೂಪನ್‌ನಿಂದ ಈಗ ಬಿಲ್‌ನಲ್ಲಿ ರಿಯಾಯಿತಿ ಇಲ್ಲ. ನಿಮ್ಮ ಆರ್ಡರ್ ಡೆಲಿವರಿ ಆದ ನಂತರ {rupees(cashback, 2)} ಕ್ಯಾಶ್‌ಬ್ಯಾಕ್ ನಿಮ್ಮ
+                Sndmart ವಾಲೆಟ್‌ಗೆ ಜಮೆಯಾಗುತ್ತದೆ.
+              </p>
+            )}
+            {previewCoupon ? null : (
               <>
                 <div className="row gap-8">
                   <input
