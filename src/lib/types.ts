@@ -395,3 +395,20 @@ export interface RazorpayOrderResponse {
   currency: string;
   razorpayOrderId: string;
 }
+
+/** Home-screen promo banner set by the Super Admin (table promo_banners). */
+export interface PromoBanner {
+  id: string;
+  city_id?: string | null;
+  placement: 'grocery' | 'food' | 'both';
+  image_url: string;
+  title?: string | null;
+  subtitle?: string | null;
+  cta_text?: string | null;
+  show_text: boolean;
+  link_type: 'none' | 'category' | 'hotel' | 'url';
+  link_value?: string | null;
+  sort_order: number;
+  starts_at?: string | null;
+  ends_at?: string | null;
+}

@@ -46,6 +46,8 @@ import {
   getFeaturedGroceryProducts,
   getHotelExtras,
   prefetchHotelMenu,
+  getPromoBanners,
+  peekPromoBanners,
   peekFeaturedGroceryProducts,
   peekGroceryCategories,
   peekGroceryProducts,
@@ -53,7 +55,8 @@ import {
   peekHotelExtras,
   peekHotels,
 } from '../lib/repository';
-import type { CartItem, Category, Coupon, OperatingSlot, ResolvedProduct, Vendor } from '../lib/types';
+import type { CartItem, Category, Coupon, OperatingSlot, PromoBanner, ResolvedProduct, Vendor } from '../lib/types';
+import { PromoCarousel } from '../components/PromoCarousel';
 import { useDebounced, useFreshCart, useInfiniteSentinel, useMyWallet } from '../lib/hooks';
 import { WalletChip } from '../components/WalletChip';
 import {
@@ -137,7 +140,7 @@ function DealsBanner() {
       <span className="deco deco-1">🥬</span>
       <span className="deco deco-2">🍅</span>
       <div>
-        <div className="deals-kicker">UP TO 40% OFF</div>
+        <div className="deals-kicker">FARM FRESH DAILY</div>
         <div className="deals-title">
           Organic Farm
           <br />
@@ -481,6 +484,7 @@ function HotelCard({
 }
 
 const NO_ITEMS: CartItem[] = [];
+const NO_BANNERS: PromoBanner[] = [];
 
 /** Vegetables and fruits only (vegetables first), like the app. */
 function shownGroceryCategories(list: Category[]): Category[] {
@@ -541,6 +545,13 @@ export default function HomePage() {
   const [dishes, setDishes] = useState<DishCategory[]>([]);
   const [dishKeySel, setDishKeySel] = useState<string | null>(null);
   const [promoCoupon, setPromoCoupon] = useState<Coupon | null>(null);
+  // Super-Admin banners for the tab being shown (last-seen ones appear at once).
+  const [bannerState, setBannerState] = useState<{ placement: 'grocery' | 'food'; list: PromoBanner[] }>({ placement: 'grocery', list: [] });
+  const placementNow = mode === 'hotels' ? 'food' : 'grocery';
+  // Never show the other tab's banners while this tab's load.
+  const banners = bannerState.placement === placementNow ? bannerState.list : NO_BANNERS;
+  const setBanners = (placement: 'grocery' | 'food', list: PromoBanner[]) => setBannerState({ placement, list });
+  const groceryTopRef = useRef<HTMLDivElement | null>(null);
   const hotelsListRef = useRef<HTMLDivElement | null>(null);
   const selectedDish = dishes.find((d) => d.key === dishKeySel) ?? null;
   // Hotels serving the chosen dish + their matching items (null while none chosen / loading).
@@ -751,6 +762,31 @@ export default function HomePage() {
     };
   }, [mode, cityId]);
 
+  useEffect(() => {
+    if (!cityId) return;
+    const placement = mode === 'hotels' ? 'food' : 'grocery';
+    let cancelled = false;
+    setBanners(placement, peekPromoBanners(cityId, placement) ?? []);
+    getPromoBanners(cityId, placement)
+      .then((b) => !cancelled && setBanners(placement, b))
+      .catch(() => undefined);
+    return () => {
+      cancelled = true;
+    };
+  }, [mode, cityId]);
+
+  const openBanner = (b: PromoBanner) => {
+    if (!b.link_value) return;
+    if (b.link_type === 'hotel') navigate(`/hotel/${b.link_value}`);
+    else if (b.link_type === 'url' && /^https:\/\//.test(b.link_value)) window.open(b.link_value, '_blank', 'noopener,noreferrer');
+    else if (b.link_type === 'category') {
+      setSearch('');
+      if (mode !== 'grocery') setMode('grocery');
+      setCategoryId(b.link_value);
+      setTimeout(() => groceryTopRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' }), 50);
+    }
+  };
+
   // A dish from another city does not apply.
   useEffect(() => setDishKeySel(null), [cityId]);
 
@@ -843,10 +879,12 @@ export default function HomePage() {
       void loadCategories(true);
       void loadProducts(true, true);
       if (cityId) getFeaturedGroceryProducts(cityId, true).then(setFeaturedProducts).catch(() => undefined);
+      if (cityId) getPromoBanners(cityId, 'grocery', true).then((b) => setBanners('grocery', b)).catch(() => undefined);
     } else {
       setHotelExtras({ slots: {}, ratings: {} });
       extrasFetched.current.clear();
       void loadHotels(true, true);
+      if (cityId) getPromoBanners(cityId, 'food', true).then((b) => setBanners('food', b)).catch(() => undefined);
     }
   };
 
@@ -894,7 +932,7 @@ export default function HomePage() {
           {threshold != null && <FreeDeliveryBanner threshold={threshold} />}
           {!search && (
             <>
-              <DealsBanner />
+              {banners.length ? <PromoCarousel banners={banners} onOpen={openBanner} /> : <DealsBanner />}
               {featuredProducts.length > 0 && (
                 <section className="featured-section">
                   <h3 className="section-title">Featured Products</h3>
@@ -913,6 +951,7 @@ export default function HomePage() {
                   </div>
                 </section>
               )}
+              <div ref={groceryTopRef} />
               <CategoryRow categories={categories} selectedId={categoryId} onSelect={setCategoryId} />
             </>
           )}
@@ -975,7 +1014,8 @@ export default function HomePage() {
               }}
             />
           )}
-          {!search && (
+          {!search && banners.length > 0 && <PromoCarousel banners={banners} onOpen={openBanner} />}
+          {!search && !banners.length && (
             <FoodPromoBanner
               coupon={promoCoupon}
               threshold={threshold}

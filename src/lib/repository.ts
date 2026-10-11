@@ -36,6 +36,7 @@ import type {
   RewardsPreview,
   WalletLedgerEntry,
   WalletUsable,
+  PromoBanner,
 } from './types';
 import {
   defaultMenuTab,
@@ -95,6 +96,7 @@ const PERSIST_RULES: [RegExp, number][] = [
   [/^featuredGrocery:/, 12 * 3600e3],
   [/^hotels:[^:]+::0:\d+:\*$/, 12 * 3600e3], // first page, no search / dish filter
   [/^dishCats:/, 24 * 3600e3],
+  [/^banners:/, 6 * 3600e3],
   [/^(slots|rating|vendor):/, 24 * 3600e3],
   [/^hotelCats:/, 24 * 3600e3],
   [/^hotelAvail:/, 12 * 3600e3],
@@ -522,6 +524,51 @@ export const peekVendorExtras = (vendorId: string) => ({
   slots: cacheGet<OperatingSlot[]>(`slots:${vendorId}`),
   rating: cacheGet<number>(`rating:${vendorId}`),
 });
+
+// ---------- PROMO BANNERS (set by the Super Admin) ----------
+
+const BANNER_COLS =
+  'id,city_id,placement,image_url,title,subtitle,cta_text,show_text,link_type,link_value,sort_order,starts_at,ends_at';
+const MAX_BANNERS = 5;
+
+/** Drops banners whose time window has passed since they were cached. */
+const liveBanners = (list: PromoBanner[]) => {
+  const now = Date.now();
+  return list.filter((b) => (!b.starts_at || Date.parse(b.starts_at) <= now) && (!b.ends_at || Date.parse(b.ends_at) > now));
+};
+
+const bannerKey = (cityId: string, placement: 'grocery' | 'food') => `banners:${cityId}:${placement}`;
+
+/** Last-seen banners (instant first paint); fresh ones come from getPromoBanners. */
+export const peekPromoBanners = (cityId: string, placement: 'grocery' | 'food') => {
+  const seen = peek<PromoBanner[]>(bannerKey(cityId, placement));
+  return seen ? liveBanners(seen) : null;
+};
+
+/**
+ * Banners for this city (or all cities) on the grocery home or the food tab. The database only
+ * returns banners that are switched on and inside their start/end time. Cached for 5 minutes.
+ */
+export async function getPromoBanners(cityId: string, placement: 'grocery' | 'food', forceRefresh = false): Promise<PromoBanner[]> {
+  const list = await cached(
+    bannerKey(cityId, placement),
+    CACHE_TTL_MS,
+    async () => {
+      const { data, error } = await supabase
+        .from('promo_banners')
+        .select(BANNER_COLS)
+        .in('placement', [placement, 'both'])
+        .or(`city_id.is.null,city_id.eq.${cityId}`)
+        .order('sort_order', { ascending: true })
+        .limit(MAX_BANNERS);
+      // No banners table yet / offline: the page shows its default banner.
+      if (error) return { value: [] as PromoBanner[], cache: false as const };
+      return ((data ?? []) as PromoBanner[]).filter((b) => /^https:\/\//.test(b.image_url));
+    },
+    forceRefresh,
+  );
+  return liveBanners(list);
+}
 
 // ---------- HOTEL DISH CATEGORIES ("What's on your mind?") ----------
 
