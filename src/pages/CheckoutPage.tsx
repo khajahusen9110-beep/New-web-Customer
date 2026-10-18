@@ -21,6 +21,7 @@ import {
 import { openUpiCheckout } from '../lib/razorpay';
 import type { CustomerAddress, DeliverySlot, ExpressDeliverySettings, Order, RewardsPreview } from '../lib/types';
 import { useCartCheck } from '../lib/hooks';
+import { usePromoFor, cartPromoDiscount } from '../lib/promo';
 import type { CartNavState } from './CartPage';
 import {
   errorMessage,
@@ -227,8 +228,12 @@ export default function CheckoutPage() {
   const expressMinNotMet =
     deliveryType === 'express' && express?.min_order_amount != null && subtotal < Number(express.min_order_amount);
 
-  // Items - instant discount + delivery + handling, before the wallet.
-  const payableBeforeWallet = Math.max(subtotal - discount + (deliveryFee ?? 0) + handlingFee, 0);
+  // Promotional offer discount (Sndmart bears it; vendor is paid in full). 0 when no offer is live.
+  const promoInfo = usePromoFor(isHotel ? 'food' : 'grocery');
+  const promoDiscount = cartPromoDiscount(subtotal, promoInfo);
+
+  // Items - instant discount - offer + delivery + handling, before the wallet.
+  const payableBeforeWallet = Math.max(subtotal - discount - promoDiscount + (deliveryFee ?? 0) + handlingFee, 0);
   const payableEstimateRef = useRef(payableBeforeWallet);
   payableEstimateRef.current = payableBeforeWallet;
   const wallet = preview?.wallet ?? null;
@@ -704,6 +709,7 @@ export default function CheckoutPage() {
                 )}
                 <hr />
                 <BillRow label="Item total" value={rupees(subtotal, 2)} />
+                {promoDiscount > 0 && <BillRow label={`Offer ${Math.round(promoInfo?.percent ?? 0)}% OFF`} value={`−${rupees(promoDiscount, 2)}`} accent />}
                 {discount > 0 && <BillRow label={`Coupon discount (${previewCoupon?.code})`} value={`−${rupees(discount, 2)}`} accent />}
                 <BillRow
                   label="Delivery Fee"

@@ -4,6 +4,7 @@ import { create } from 'zustand';
 import { useNavigate } from 'react-router-dom';
 import { AlertCircle, ArrowLeft, ArrowRight, Minus, Plus, Utensils, X } from 'lucide-react';
 import { rupees } from '../lib/utils';
+import { usePromoFor, offerPrice, type PromoKind } from '../lib/promo';
 
 // ---------- Toast (Snackbar) ----------
 
@@ -233,7 +234,21 @@ export function QuantityStepper({
   );
 }
 
-export function PriceDisplay({ price, mrp, unit }: { price: number; mrp?: number | null; unit?: string | null }) {
+export function PriceDisplay({ price, mrp, unit, kind }: { price: number; mrp?: number | null; unit?: string | null; kind?: PromoKind }) {
+  const promo = usePromoFor(kind);
+  // Active offer: show the discounted price, with the original struck through and a % badge.
+  // The % comes from the backend (promo_campaigns) — change it once and it updates everywhere.
+  if (promo && promo.percent > 0) {
+    const np = offerPrice(price, promo.percent);
+    return (
+      <div className="price-row">
+        <span className="price">{rupees(np)}</span>
+        <span className="mrp">{rupees(price)}</span>
+        <span className="off-badge">{Math.round(promo.percent)}% OFF</span>
+        {unit && <span className="muted small">/ {unit}</span>}
+      </div>
+    );
+  }
   const off = mrp && mrp > price ? Math.floor(((mrp - price) / mrp) * 100) : 0;
   return (
     <div className="price-row">

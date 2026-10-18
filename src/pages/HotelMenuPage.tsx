@@ -14,6 +14,7 @@ import {
   Spinner,
   toast,
 } from '../components/ui';
+import { OfferBanner } from '../components/OfferBanner';
 import {
   getHotelCategories,
   getHotelFeaturedItems,
@@ -78,7 +79,7 @@ function MenuItemCard({
             Available {product.base.available_from} - {product.base.available_until}
           </div>
         )}
-        <PriceDisplay price={product.effectivePrice} mrp={product.effectiveMrp} unit={product.unit} />
+        <PriceDisplay price={product.effectivePrice} mrp={product.effectiveMrp} unit={product.unit} kind="food" />
       </div>
       {available ? (
         <QuantityStepper quantity={quantity} onIncrease={onIncrease} onDecrease={onDecrease} />
@@ -365,6 +366,7 @@ export default function HotelMenuPage() {
         </div>
       ) : (
         <>
+          <div className="content-pad"><OfferBanner kind="food" /></div>
           {!hotelOpen && (
             <div className="content-pad">
               <div className="alert alert-danger">

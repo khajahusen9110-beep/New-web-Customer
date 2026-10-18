@@ -52,6 +52,7 @@ function prefetchTabs() {
   else setTimeout(run, 2000);
 }
 import MaintenancePage from './pages/MaintenancePage';
+import { PromoProvider } from './lib/promo';
 
 /** Keeps the local session store in sync with the Supabase auth session. */
 function useAuthSync() {
@@ -226,6 +227,7 @@ export default function App() {
     <>
       <SessionExpiredRedirect />
       <Suspense fallback={<CenterSpinner />}>
+        <PromoProvider>
         <Routes>
           <Route path="/auth" element={<AuthPage />} />
           <Route
@@ -267,6 +269,7 @@ export default function App() {
           </Route>
           <Route path="*" element={<Navigate to="/" replace />} />
         </Routes>
+        </PromoProvider>
       </Suspense>
       {isLoggedIn && (
         <>

@@ -57,6 +57,7 @@ import {
 } from '../lib/repository';
 import type { CartItem, Category, Coupon, OperatingSlot, PromoBanner, ResolvedProduct, Vendor } from '../lib/types';
 import { PromoCarousel } from '../components/PromoCarousel';
+import { OfferBanner } from '../components/OfferBanner';
 import { useDebounced, useFreshCart, useInfiniteSentinel, useMyWallet } from '../lib/hooks';
 import { WalletChip } from '../components/WalletChip';
 import {
@@ -339,7 +340,7 @@ function GroceryProductCard({
       {hasVariants ? (
         <div className="price">Starting from {rupees(startingPrice(product))}</div>
       ) : (
-        <PriceDisplay price={product.effectivePrice} mrp={product.effectiveMrp} unit={product.unit} />
+        <PriceDisplay price={product.effectivePrice} mrp={product.effectiveMrp} unit={product.unit} kind="grocery" />
       )}
       <div className="product-action">
         {!inStock ? (
@@ -933,6 +934,7 @@ export default function HomePage() {
           {!search && (
             <>
               {banners.length ? <PromoCarousel banners={banners} onOpen={openBanner} /> : <DealsBanner />}
+              <OfferBanner kind="grocery" />
               {featuredProducts.length > 0 && (
                 <section className="featured-section">
                   <h3 className="section-title">Featured Products</h3>
@@ -1015,6 +1017,7 @@ export default function HomePage() {
             />
           )}
           {!search && banners.length > 0 && <PromoCarousel banners={banners} onOpen={openBanner} />}
+          {!search && <OfferBanner kind="food" />}
           {!search && !banners.length && (
             <FoodPromoBanner
               coupon={promoCoupon}

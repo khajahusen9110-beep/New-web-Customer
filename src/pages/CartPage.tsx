@@ -4,6 +4,7 @@ import { AlertTriangle, ArrowRight, CheckCircle2, Info, RefreshCw, ShoppingCart,
 import { BillRow, CenterSpinner, EmptyState, ErrorCard, PageHeader, ProductImage, QuantityStepper, toast } from '../components/ui';
 import { useCartCheck } from '../lib/hooks';
 import { cartLineForError, rupees } from '../lib/utils';
+import { usePromoFor, cartPromoDiscount } from '../lib/promo';
 import { useSession } from '../store/session';
 import { cartCount, useCart } from '../store/cart';
 
@@ -37,6 +38,11 @@ export default function CartPage() {
     city?.id,
     isHotel,
   );
+
+  // Promotional offer (backend-driven). Vendor is paid in full; Sndmart bears the discount.
+  const promoInfo = usePromoFor(isHotel ? 'food' : 'grocery');
+  const promoDiscount = cartPromoDiscount(subtotal, promoInfo);
+  const payable = Math.max(subtotal - promoDiscount, 0);
 
   // Clear the one-time error from history so a reload does not show it again.
   useEffect(() => {
@@ -218,15 +224,17 @@ export default function CartPage() {
             <div className="card pad">
               <h3>Bill Details</h3>
               <BillRow label="Item Subtotal" value={rupees(subtotal, 2)} />
+              {promoDiscount > 0 && <BillRow label={`Offer ${Math.round(promoInfo?.percent ?? 0)}% OFF`} value={`−${rupees(promoDiscount, 2)}`} accent />}
               <BillRow label="Delivery Fee" value={<span className="muted">Calculated at checkout</span>} />
               <hr />
-              <BillRow label="Total to Pay" value={rupees(subtotal, 2)} bold accent />
+              <BillRow label="Total to Pay" value={rupees(payable, 2)} bold accent />
+              {promoDiscount > 0 && <p className="small text-primary bold">You save {rupees(promoDiscount, 2)} 🎉</p>}
               {unavailableCount > 0 && !hotelClosed && <p className="muted small">Unavailable items are not included.</p>}
             </div>
             <div className="sticky-bottom">
               <div>
                 <div className="muted small">Total to Pay</div>
-                <div className="total-big">{rupees(subtotal)}</div>
+                <div className="total-big">{rupees(payable)}</div>
               </div>
               <button className="btn btn-primary btn-lg" disabled={!!hotelClosed || !allChecked} onClick={proceed}>
                 {hotelClosed ? (
