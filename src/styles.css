@@ -88,7 +88,7 @@ code { background: var(--surface-variant); padding: 1px 5px; border-radius: 4px;
 .label-caps { font-size: 11px; font-weight: 700; letter-spacing: 0.8px; text-transform: uppercase; color: var(--text-2); }
 
 /* ---------- cards ---------- */
-.card { background: var(--surface); border: 1px solid var(--outline-soft); border-radius: var(--radius); box-shadow: var(--shadow); }
+.card { background: var(--surface); border: 1px solid var(--outline-soft); border-radius: var(--radius); box-shadow: var(--shadow); transition: transform 0.18s ease, box-shadow 0.18s ease, border-color 0.18s ease; }
 .card.tinted { background: color-mix(in srgb, var(--pastel-sage) 55%, white); border-color: color-mix(in srgb, var(--primary) 35%, white); }
 .selected-border { border-color: var(--primary); }
 .dimmed { opacity: 0.7; }
@@ -286,9 +286,12 @@ code { background: var(--surface-variant); padding: 1px 5px; border-radius: 4px;
 .category-name { font-size: 12px; font-weight: 600; text-align: center; line-height: 1.2; }
 .product-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px; }
 @media (min-width: 640px) { .product-grid { grid-template-columns: repeat(auto-fill, minmax(190px, 1fr)); } }
-.product-card { padding: 10px; display: flex; flex-direction: column; gap: 4px; }
+.product-card { padding: 10px; display: flex; flex-direction: column; gap: 4px; border-radius: 22px; overflow: hidden; background: linear-gradient(180deg, #ffffff 0%, color-mix(in srgb, var(--primary-container) 22%, #ffffff) 100%); }
+.product-card:hover { transform: translateY(-4px); box-shadow: var(--shadow-lg); border-color: color-mix(in srgb, var(--primary) 35%, var(--outline-soft)); }
 .product-card.dimmed { background: color-mix(in srgb, var(--surface-variant) 50%, white); }
-.product-img { position: relative; height: 115px; border-radius: 12px; overflow: hidden; margin-bottom: 4px; }
+.product-img { position: relative; height: 118px; border-radius: 16px; overflow: hidden; margin-bottom: 4px; }
+.product-img .cover-img { transition: transform 0.3s ease; }
+.product-card:hover .product-img .cover-img { transform: scale(1.06); }
 .product-name { font-weight: 700; font-size: 14px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .product-action { margin-top: auto; padding-top: 6px; }
 .cover-img { width: 100%; height: 100%; object-fit: cover; }
@@ -305,7 +308,7 @@ code { background: var(--surface-variant); padding: 1px 5px; border-radius: 4px;
 .price-row { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; }
 .price { color: var(--primary); font-weight: 800; font-size: 16px; }
 .mrp { color: var(--muted); text-decoration: line-through; font-size: 12px; }
-.off-badge { background: color-mix(in srgb, var(--ocean) 15%, white); color: var(--ocean); font-size: 11px; font-weight: 700; padding: 2px 5px; border-radius: 4px; }
+.off-badge { background: linear-gradient(135deg, #f43f5e, #e11d48); color: white; font-size: 11px; font-weight: 800; padding: 3px 8px; border-radius: 999px; letter-spacing: 0.2px; box-shadow: 0 2px 6px -2px rgba(225, 29, 72, 0.5); }
 .oos-pill { display: flex; align-items: center; justify-content: center; height: 34px; padding: 0 10px; border-radius: 16px; background: var(--surface-variant); border: 1px solid var(--outline-soft); color: var(--muted); font-weight: 600; font-size: 13px; white-space: nowrap; }
 .oos-pill.small { height: 30px; font-size: 12px; }
 .stepper { display: inline-flex; align-items: center; justify-content: space-between; height: 36px; border-radius: 20px; background: var(--primary); color: white; padding: 0 4px; min-width: 104px; }
@@ -323,8 +326,10 @@ code { background: var(--surface-variant); padding: 1px 5px; border-radius: 4px;
 /* hotels */
 .hotel-grid { display: grid; grid-template-columns: 1fr; gap: 14px; }
 @media (min-width: 700px) { .hotel-grid { grid-template-columns: repeat(auto-fill, minmax(320px, 1fr)); } }
-.hotel-card { overflow: hidden; text-align: left; display: block; width: 100%; }
-.hotel-card:hover { box-shadow: var(--shadow-lg); }
+.hotel-card { overflow: hidden; text-align: left; display: block; width: 100%; border-radius: 22px; }
+.hotel-card:hover { box-shadow: var(--shadow-lg); transform: translateY(-4px); border-color: color-mix(in srgb, var(--primary) 30%, var(--outline-soft)); }
+.hotel-card .hotel-banner .cover-img { transition: transform 0.3s ease; }
+.hotel-card:hover .hotel-banner .cover-img { transform: scale(1.05); }
 .hotel-banner { position: relative; height: 140px; }
 .hotel-tags { position: absolute; top: 8px; left: 8px; right: 8px; display: flex; justify-content: space-between; }
 .hotel-info { padding: 12px 14px; display: flex; flex-direction: column; gap: 4px; }
@@ -340,8 +345,11 @@ code { background: var(--surface-variant); padding: 1px 5px; border-radius: 4px;
 .hotel-hero { height: 150px; border-radius: 16px; overflow: hidden; }
 .menu-grid { display: grid; grid-template-columns: 1fr; gap: 12px; }
 @media (min-width: 900px) { .menu-grid { grid-template-columns: 1fr 1fr; } }
-.menu-item { display: flex; align-items: center; gap: 12px; padding: 12px; }
-.menu-img { position: relative; width: 90px; height: 90px; border-radius: 12px; overflow: hidden; flex-shrink: 0; }
+.menu-item { display: flex; align-items: center; gap: 12px; padding: 12px; border-radius: 20px; }
+.menu-item:hover { transform: translateY(-3px); box-shadow: var(--shadow-lg); border-color: color-mix(in srgb, var(--primary) 30%, var(--outline-soft)); }
+.menu-img { position: relative; width: 92px; height: 92px; border-radius: 16px; overflow: hidden; flex-shrink: 0; }
+.menu-img .cover-img { transition: transform 0.3s ease; }
+.menu-item:hover .menu-img .cover-img { transform: scale(1.06); }
 
 /* cart & checkout */
 .info-strip { display: flex; gap: 8px; align-items: center; background: var(--pastel-sage); color: var(--dark-green); padding: 12px; border-radius: 12px; font-size: 13px; font-weight: 600; }
