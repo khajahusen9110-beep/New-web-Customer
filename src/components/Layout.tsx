@@ -3,6 +3,7 @@ import { NavLink, Outlet } from 'react-router-dom';
 import { CenterSpinner } from './ui';
 import { ReceiptText, ShoppingCart, Store, User } from 'lucide-react';
 import { useCart, cartCount } from '../store/cart';
+import { OfferRibbon } from './OfferBanner';
 
 const TABS = [
   { to: '/', label: 'Home', Icon: Store, end: true },
@@ -40,6 +41,7 @@ export function TabLayout() {
         </div>
       </nav>
       <main className="tab-content">
+        <OfferRibbon />
         <Suspense fallback={<CenterSpinner />}>
           <Outlet />
         </Suspense>
@@ -63,6 +65,7 @@ export function TabLayout() {
 export function PlainLayout() {
   return (
     <main className="plain-content">
+      <OfferRibbon />
       <Suspense fallback={<CenterSpinner />}>
           <Outlet />
         </Suspense>

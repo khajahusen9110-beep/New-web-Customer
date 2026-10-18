@@ -58,6 +58,7 @@ import {
 import type { CartItem, Category, Coupon, OperatingSlot, PromoBanner, ResolvedProduct, Vendor } from '../lib/types';
 import { PromoCarousel } from '../components/PromoCarousel';
 import { OfferBanner } from '../components/OfferBanner';
+import { OfferInline } from '../lib/promo';
 import { useDebounced, useFreshCart, useInfiniteSentinel, useMyWallet } from '../lib/hooks';
 import { WalletChip } from '../components/WalletChip';
 import {
@@ -338,7 +339,7 @@ function GroceryProductCard({
         {product.name}
       </div>
       {hasVariants ? (
-        <div className="price">Starting from {rupees(startingPrice(product))}</div>
+        <div className="price"><OfferInline prefix="Starting from " price={startingPrice(product)} kind="grocery" /></div>
       ) : (
         <PriceDisplay price={product.effectivePrice} mrp={product.effectiveMrp} unit={product.unit} kind="grocery" />
       )}
@@ -380,7 +381,7 @@ function VariantPicker({ product, cityId, onClose }: { product: ResolvedProduct;
             <div key={v.id} className={`variant-row${qty > 0 ? ' active' : ''}`}>
               <div>
                 <strong className={inStock ? '' : 'muted'}>{v.label}</strong>
-                <div className={inStock ? 'price' : 'muted'}>{rupees(v.price)}</div>
+                <div className={inStock ? 'price' : 'muted'}>{inStock ? <OfferInline price={v.price} kind="grocery" /> : rupees(v.price)}</div>
               </div>
               {inStock ? (
                 <QuantityStepper
@@ -407,7 +408,7 @@ function DishMatches({ items }: { items: DishMatch[] }) {
     <div className="dish-matches">
       {shown.map((m) => (
         <span key={m.id} className={`dish-match${m.available ? '' : ' unavailable'}`}>
-          {m.name} <strong>{rupees(m.price)}</strong>
+          {m.name} <strong><OfferInline price={m.price} kind="food" /></strong>
         </span>
       ))}
       {more > 0 && <span className="dish-match more">+{more} more</span>}

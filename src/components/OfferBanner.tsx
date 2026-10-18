@@ -74,3 +74,62 @@ export function OfferBanner({ kind }: { kind?: PromoKind }) {
 }
 
 export default OfferBanner;
+
+/**
+ * A thin, always-present strip that tells users an offer is running — shown on EVERY page
+ * (placed in the layout) when any offer is active. Driven entirely by the backend %.
+ */
+export function OfferRibbon() {
+  const food = usePromoFor('food');
+  const grocery = usePromoFor('grocery');
+  const promo = food || grocery;
+
+  const [now, setNow] = useState(() => Date.now());
+  useEffect(() => {
+    if (!promo?.endsAt) return;
+    const t = setInterval(() => setNow(Date.now()), 1000);
+    return () => clearInterval(t);
+  }, [promo?.endsAt]);
+
+  if (!promo || promo.percent <= 0) return null;
+
+  // Highest % across the active sections (so "up to X% OFF" is accurate when they differ).
+  const pct = Math.round(Math.max(food?.percent ?? 0, grocery?.percent ?? 0));
+  const both = !!food && !!grocery;
+  const what = both ? 'food & groceries' : food ? 'hotel food' : 'groceries';
+
+  const end = promo.endsAt ? Date.parse(promo.endsAt) : NaN;
+  let left = '';
+  if (!isNaN(end) && end > now) {
+    const p = parts(end - now);
+    left = p.d > 0 ? `${p.d}d ${pad(p.h)}h` : `${pad(p.h)}h ${pad(p.m)}m ${pad(p.s)}s`;
+  }
+
+  return (
+    <div
+      style={{
+        background: 'linear-gradient(90deg,#e11d48,#b91c3c)',
+        color: '#fff',
+        display: 'flex',
+        alignItems: 'center',
+        justifyContent: 'center',
+        gap: 8,
+        flexWrap: 'wrap',
+        padding: '7px 14px',
+        paddingLeft: 'max(14px, env(safe-area-inset-left, 0px))',
+        paddingRight: 'max(14px, env(safe-area-inset-right, 0px))',
+        fontSize: 12.5,
+        fontWeight: 800,
+        lineHeight: 1.25,
+        textAlign: 'center',
+      }}
+    >
+      <span>🎉 {pct}% OFF on {what} · ಇಂದೇ ಆರ್ಡರ್ ಮಾಡಿ</span>
+      {left && (
+        <span style={{ background: 'rgba(255,255,255,.22)', borderRadius: 999, padding: '2px 9px', fontVariantNumeric: 'tabular-nums', whiteSpace: 'nowrap' }}>
+          ⏳ {left}
+        </span>
+      )}
+    </div>
+  );
+}

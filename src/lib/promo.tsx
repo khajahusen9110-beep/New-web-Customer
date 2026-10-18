@@ -1,6 +1,7 @@
 import React, { createContext, useCallback, useContext, useEffect, useState } from 'react';
 import { supabase } from './supabase';
 import { useSession } from '../store/session';
+import { rupees } from './utils';
 
 // Promotional offer, fetched from the backend (public.get_active_promo). The discount % lives ONLY
 // in promo_campaigns — one change there updates the banner, every item's strikethrough price, the
@@ -84,4 +85,18 @@ export function cartPromoDiscount(subtotal: number, p: PromoInfo | null): number
   let d = Math.round(((subtotal * p.percent) / 100) * 100) / 100;
   if (p.maxCap != null) d = Math.min(d, p.maxCap);
   return Math.max(0, Math.min(d, subtotal));
+}
+
+/** Compact price for tight spots (grocery "Starting from", variant rows, dish matches):
+ *  offer price with the original struck through. Plain spans, so it is safe inside <strong>/<div>. */
+export function OfferInline({ price, kind, prefix }: { price: number; kind: PromoKind; prefix?: string }) {
+  const p = usePromoFor(kind);
+  if (!p || p.percent <= 0) return <>{prefix}{rupees(price)}</>;
+  return (
+    <>
+      {prefix}
+      <span>{rupees(offerPrice(price, p.percent))}</span>{' '}
+      <span style={{ textDecoration: 'line-through', opacity: 0.55, fontWeight: 400 }}>{rupees(price)}</span>
+    </>
+  );
 }
