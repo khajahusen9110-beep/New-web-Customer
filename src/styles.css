@@ -308,6 +308,8 @@ code { background: var(--surface-variant); padding: 1px 5px; border-radius: 4px;
 .tag-peach { background: var(--pastel-peach); color: var(--dark-green); }
 .price-row { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; }
 .price { color: var(--primary); font-weight: 800; font-size: 16px; }
+/* Discounted price when an offer is active — red so the deal pops (matches the app). */
+.offer-price { color: #e11d48; font-weight: 800; }
 .mrp { color: var(--muted); text-decoration: line-through; font-size: 12px; }
 .off-badge { background: linear-gradient(135deg, #f43f5e, #e11d48); color: white; font-size: 11px; font-weight: 800; padding: 3px 8px; border-radius: 999px; letter-spacing: 0.2px; box-shadow: 0 2px 6px -2px rgba(225, 29, 72, 0.5); }
 .oos-pill { display: flex; align-items: center; justify-content: center; height: 34px; padding: 0 10px; border-radius: 16px; background: var(--surface-variant); border: 1px solid var(--outline-soft); color: var(--muted); font-weight: 600; font-size: 13px; white-space: nowrap; }

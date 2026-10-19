@@ -242,7 +242,7 @@ export function PriceDisplay({ price, mrp, unit, kind }: { price: number; mrp?: 
     const np = offerPrice(price, promo.percent);
     return (
       <div className="price-row">
-        <span className="price">{rupees(np)}</span>
+        <span className="price offer-price">{rupees(np)}</span>
         <span className="mrp">{rupees(price)}</span>
         <span className="off-badge">{Math.round(promo.percent)}% OFF</span>
         {unit && <span className="muted small">/ {unit}</span>}

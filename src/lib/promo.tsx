@@ -95,7 +95,7 @@ export function OfferInline({ price, kind, prefix }: { price: number; kind: Prom
   return (
     <>
       {prefix}
-      <span>{rupees(offerPrice(price, p.percent))}</span>{' '}
+      <span className="offer-price">{rupees(offerPrice(price, p.percent))}</span>{' '}
       <span style={{ textDecoration: 'line-through', opacity: 0.55, fontWeight: 400 }}>{rupees(price)}</span>
     </>
   );
