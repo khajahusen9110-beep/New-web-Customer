@@ -946,16 +946,19 @@ export function getTopSellingFoodProducts(cityId: string, forceRefresh = false):
         ]),
       );
       const ids = Array.from(metaById.keys());
+      // HOTEL_PRODUCT_COLS has no product_variants embed, so variants must be off (false),
+      // otherwise the variant-stock filter errors and nothing comes back.
       const { data, error } = await withCityStock(
         supabase.from('products').select(HOTEL_PRODUCT_COLS).in('id', ids),
         cityId,
+        false,
       );
       if (error) return [];
       return ((data ?? []) as unknown as Product[])
         .map((prod) => {
           const r = resolveProduct(prod, cityStockOf(prod), cityId);
           const meta = metaById.get(prod.id);
-          return { ...r, soldCount: meta?.sold ?? 0, vendorName: meta?.vendorName };
+          return { ...r, variants: [], soldCount: meta?.sold ?? 0, vendorName: meta?.vendorName };
         })
         .filter((p) => p.isActive)
         .sort((a, b) => (b.soldCount ?? 0) - (a.soldCount ?? 0));
