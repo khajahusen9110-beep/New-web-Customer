@@ -127,6 +127,8 @@ export interface ResolvedProduct {
   stockLoadFailed?: boolean;
   /** Most-selling row only: total units sold in this city (for the "X sold" badge). */
   soldCount?: number;
+  /** Most-ordered food row only: the hotel this dish belongs to (for the card + tap target). */
+  vendorName?: string;
   /** Cart only: the product no longer exists or is hidden from customers. */
   missing?: boolean;
 }

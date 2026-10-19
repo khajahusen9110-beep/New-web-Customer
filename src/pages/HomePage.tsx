@@ -45,12 +45,14 @@ import {
   getResolvedGroceryProducts,
   getFeaturedGroceryProducts,
   getTopSellingGroceryProducts,
+  getTopSellingFoodProducts,
   getHotelExtras,
   prefetchHotelMenu,
   getPromoBanners,
   peekPromoBanners,
   peekFeaturedGroceryProducts,
   peekTopSellingGroceryProducts,
+  peekTopSellingFoodProducts,
   peekGroceryCategories,
   peekGroceryProducts,
   peekHotelDishCategories,
@@ -550,6 +552,7 @@ export default function HomePage() {
   const [clock, setClock] = useState(() => Date.now());
   const [featuredProducts, setFeaturedProducts] = useState<ResolvedProduct[]>([]);
   const [topSelling, setTopSelling] = useState<ResolvedProduct[]>([]);
+  const [topFood, setTopFood] = useState<ResolvedProduct[]>([]);
   const [dishes, setDishes] = useState<DishCategory[]>([]);
   const [dishKeySel, setDishKeySel] = useState<string | null>(null);
   const [promoCoupon, setPromoCoupon] = useState<Coupon | null>(null);
@@ -779,6 +782,20 @@ export default function HomePage() {
     getTopSellingGroceryProducts(cityId)
       .then((list) => !cancelled && setTopSelling(list))
       .catch(() => !cancelled && setTopSelling([]));
+    return () => {
+      cancelled = true;
+    };
+  }, [mode, cityId]);
+
+  // Food tab only: most-ordered hotel dishes in this city.
+  useEffect(() => {
+    if (mode !== 'hotels' || !cityId) return;
+    let cancelled = false;
+    const seenFood = peekTopSellingFoodProducts(cityId);
+    if (seenFood) setTopFood(seenFood);
+    getTopSellingFoodProducts(cityId)
+      .then((list) => !cancelled && setTopFood(list))
+      .catch(() => !cancelled && setTopFood([]));
     return () => {
       cancelled = true;
     };
@@ -1057,6 +1074,28 @@ export default function HomePage() {
           )}
           {!search && banners.length > 0 && <PromoCarousel banners={banners} onOpen={openBanner} />}
           {!search && <OfferBanner kind="food" />}
+          {!search && topFood.length > 0 && (
+            <section className="featured-section">
+              <h3 className="section-title">🔥 Most Ordered</h3>
+              <div className="featured-row">
+                {topFood.map((p) => (
+                  <button
+                    key={p.id}
+                    className="card product-card food-order-card"
+                    onClick={() => navigate(`/hotel/${p.vendorId}?name=${encodeURIComponent(p.vendorName ?? '')}`)}
+                  >
+                    <div className="product-img">
+                      <ProductImage url={p.imageUrl} alt={p.name} width={200} />
+                      {(p.soldCount ?? 0) > 0 && <span className="sold-badge">🔥 {p.soldCount} sold</span>}
+                    </div>
+                    <div className="product-name" title={p.name}>{p.name}</div>
+                    <div className="muted small ellipsis">{p.vendorName}</div>
+                    <div className="price"><OfferInline price={p.effectivePrice} kind="food" /></div>
+                  </button>
+                ))}
+              </div>
+            </section>
+          )}
           {!search && !banners.length && (
             <FoodPromoBanner
               coupon={promoCoupon}

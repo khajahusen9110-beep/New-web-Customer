@@ -839,6 +839,7 @@ export const peekGroceryProducts = (cityId: string, categoryId: string, limit: n
   peek<ResolvedProduct[]>(`grocery:${cityId}:${categoryId}::0:${limit}`);
 export const peekFeaturedGroceryProducts = (cityId: string) => peek<ResolvedProduct[]>(`featuredGrocery:${cityId}`);
 export const peekTopSellingGroceryProducts = (cityId: string) => peek<ResolvedProduct[]>(`topGrocery:${cityId}`);
+export const peekTopSellingFoodProducts = (cityId: string) => peek<ResolvedProduct[]>(`topFood:${cityId}`);
 /** Last-seen menu pieces for a hotel (instant open; the page refreshes them). */
 export const peekHotelMenu = (vendorId: string, cityId: string, categoryId: string | null, limit: number) => ({
   vendor: peek<Vendor>(`vendor:${vendorId}`),
@@ -919,6 +920,45 @@ export function getTopSellingGroceryProducts(cityId: string, forceRefresh = fals
       // Keep the RPC's best-selling order.
       resolved.sort((a, b) => (b.soldCount ?? 0) - (a.soldCount ?? 0));
       return resolved;
+    },
+    forceRefresh,
+  );
+}
+
+/**
+ * Up to 10 most-ordered hotel dishes in this city (by units sold), for the food "Most Ordered" row.
+ * The RPC ranks product ids + their hotel + units sold; one products request resolves price/stock.
+ */
+export function getTopSellingFoodProducts(cityId: string, forceRefresh = false): Promise<ResolvedProduct[]> {
+  return cached(
+    `topFood:${cityId}`,
+    CACHE_TTL_MS,
+    async () => {
+      const { data: ranked, error: rErr } = await supabase.rpc('get_top_food_products', {
+        p_city_id: cityId,
+        p_limit: 10,
+      });
+      if (rErr || !ranked || !ranked.length) return [];
+      const metaById = new Map<string, { sold: number; vendorName: string }>(
+        (ranked as { product_id: string; units_sold: number; vendor_name: string }[]).map((r) => [
+          r.product_id,
+          { sold: Number(r.units_sold) || 0, vendorName: r.vendor_name },
+        ]),
+      );
+      const ids = Array.from(metaById.keys());
+      const { data, error } = await withCityStock(
+        supabase.from('products').select(HOTEL_PRODUCT_COLS).in('id', ids),
+        cityId,
+      );
+      if (error) return [];
+      return ((data ?? []) as unknown as Product[])
+        .map((prod) => {
+          const r = resolveProduct(prod, cityStockOf(prod), cityId);
+          const meta = metaById.get(prod.id);
+          return { ...r, soldCount: meta?.sold ?? 0, vendorName: meta?.vendorName };
+        })
+        .filter((p) => p.isActive)
+        .sort((a, b) => (b.soldCount ?? 0) - (a.soldCount ?? 0));
     },
     forceRefresh,
   );
