@@ -838,6 +838,7 @@ function resolveProduct(
 export const peekGroceryProducts = (cityId: string, categoryId: string, limit: number) =>
   peek<ResolvedProduct[]>(`grocery:${cityId}:${categoryId}::0:${limit}`);
 export const peekFeaturedGroceryProducts = (cityId: string) => peek<ResolvedProduct[]>(`featuredGrocery:${cityId}`);
+export const peekTopSellingGroceryProducts = (cityId: string) => peek<ResolvedProduct[]>(`topGrocery:${cityId}`);
 /** Last-seen menu pieces for a hotel (instant open; the page refreshes them). */
 export const peekHotelMenu = (vendorId: string, cityId: string, categoryId: string | null, limit: number) => ({
   vendor: peek<Vendor>(`vendor:${vendorId}`),
@@ -888,6 +889,41 @@ export function getResolvedGroceryProducts(p: {
  * Up to 10 featured grocery products that are in stock and available in this city, for the
  * "Featured Products" row. One request (city stock embedded), cached for 5 minutes.
  */
+/**
+ * Up to 10 most-selling grocery products in this city (by units sold), for the "Most Selling" row.
+ * The RPC ranks product ids + units sold; one products request then loads their city stock/price.
+ */
+export function getTopSellingGroceryProducts(cityId: string, forceRefresh = false): Promise<ResolvedProduct[]> {
+  return cached(
+    `topGrocery:${cityId}`,
+    CACHE_TTL_MS,
+    async () => {
+      const { data: ranked, error: rErr } = await supabase.rpc('get_top_grocery_products', {
+        p_city_id: cityId,
+        p_limit: 10,
+      });
+      if (rErr || !ranked || !ranked.length) return [];
+      const soldById = new Map<string, number>(
+        (ranked as { product_id: string; units_sold: number }[]).map((r) => [r.product_id, Number(r.units_sold) || 0]),
+      );
+      const ids = Array.from(soldById.keys());
+      const { data, error } = await withCityStock(
+        supabase.from('products').select(GROCERY_PRODUCT_COLS).in('id', ids).is('vendor_id', null),
+        cityId,
+      );
+      if (error) return [];
+      const resolved = ((data ?? []) as unknown as Product[])
+        .map((prod) => resolveProduct(prod, cityStockOf(prod), cityId))
+        .filter(isInStockAndActive)
+        .map((p) => ({ ...p, soldCount: soldById.get(p.id) ?? 0 }));
+      // Keep the RPC's best-selling order.
+      resolved.sort((a, b) => (b.soldCount ?? 0) - (a.soldCount ?? 0));
+      return resolved;
+    },
+    forceRefresh,
+  );
+}
+
 export function getFeaturedGroceryProducts(cityId: string, forceRefresh = false): Promise<ResolvedProduct[]> {
   return cached(
     `featuredGrocery:${cityId}`,

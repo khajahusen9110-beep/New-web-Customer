@@ -44,11 +44,13 @@ import {
   type DishMatch,
   getResolvedGroceryProducts,
   getFeaturedGroceryProducts,
+  getTopSellingGroceryProducts,
   getHotelExtras,
   prefetchHotelMenu,
   getPromoBanners,
   peekPromoBanners,
   peekFeaturedGroceryProducts,
+  peekTopSellingGroceryProducts,
   peekGroceryCategories,
   peekGroceryProducts,
   peekHotelDishCategories,
@@ -329,6 +331,9 @@ function GroceryProductCard({
       <div className="product-img">
         <ProductImage url={product.imageUrl} alt={product.name} width={200} priority={priority} />
         {inStock && product.isFeatured && <span className="tag tag-blue">FEATURED</span>}
+        {inStock && (product.soldCount ?? 0) > 0 && (
+          <span className="sold-badge">🔥 {product.soldCount} sold</span>
+        )}
         {!inStock && (
           <div className="img-overlay">
             <span className="tag tag-red">OUT OF STOCK</span>
@@ -544,6 +549,7 @@ export default function HomePage() {
   // Re-evaluated every minute and when the tab comes back, since hotels open and close.
   const [clock, setClock] = useState(() => Date.now());
   const [featuredProducts, setFeaturedProducts] = useState<ResolvedProduct[]>([]);
+  const [topSelling, setTopSelling] = useState<ResolvedProduct[]>([]);
   const [dishes, setDishes] = useState<DishCategory[]>([]);
   const [dishKeySel, setDishKeySel] = useState<string | null>(null);
   const [promoCoupon, setPromoCoupon] = useState<Coupon | null>(null);
@@ -764,6 +770,20 @@ export default function HomePage() {
     };
   }, [mode, cityId]);
 
+  // Grocery tab only: most-selling products in this city (by units sold).
+  useEffect(() => {
+    if (mode !== 'grocery' || !cityId) return;
+    let cancelled = false;
+    const seenTop = peekTopSellingGroceryProducts(cityId);
+    if (seenTop) setTopSelling(seenTop);
+    getTopSellingGroceryProducts(cityId)
+      .then((list) => !cancelled && setTopSelling(list))
+      .catch(() => !cancelled && setTopSelling([]));
+    return () => {
+      cancelled = true;
+    };
+  }, [mode, cityId]);
+
   useEffect(() => {
     if (!cityId) return;
     const placement = mode === 'hotels' ? 'food' : 'grocery';
@@ -936,6 +956,24 @@ export default function HomePage() {
             <>
               {banners.length ? <PromoCarousel banners={banners} onOpen={openBanner} /> : <DealsBanner />}
               <OfferBanner kind="grocery" />
+              {topSelling.length > 0 && (
+                <section className="featured-section">
+                  <h3 className="section-title">🔥 Most Selling</h3>
+                  <div className="featured-row">
+                    {topSelling.map((p) => (
+                      <div key={p.id} className="featured-item">
+                        <GroceryProductCard
+                          product={p}
+                          quantity={groceryCart.filter((i) => i.product_id === p.id).reduce((s, i) => s + i.quantity, 0)}
+                          onIncrease={() => addToCart({ productId: p.id, cityId, quantityDelta: 1, isHotel: false })}
+                          onDecrease={() => addToCart({ productId: p.id, cityId, quantityDelta: -1, isHotel: false })}
+                          onSelectSize={() => setVariantProduct(p)}
+                        />
+                      </div>
+                    ))}
+                  </div>
+                </section>
+              )}
               {featuredProducts.length > 0 && (
                 <section className="featured-section">
                   <h3 className="section-title">Featured Products</h3>

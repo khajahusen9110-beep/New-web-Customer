@@ -125,6 +125,8 @@ export interface ResolvedProduct {
   variants: ResolvedVariant[];
   /** City stock request failed: availability is unknown, so the item is shown as unavailable. */
   stockLoadFailed?: boolean;
+  /** Most-selling row only: total units sold in this city (for the "X sold" badge). */
+  soldCount?: number;
   /** Cart only: the product no longer exists or is hidden from customers. */
   missing?: boolean;
 }
