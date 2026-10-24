@@ -745,6 +745,40 @@ export function getHotelsServingDish(
   });
 }
 
+/**
+ * Hotels to show for a free-text food search: those whose own name matches, PLUS those
+ * serving a menu item whose name matches (so "biryani" finds hotels that cook biryani,
+ * not only a hotel literally named "Biryani"). Returns the matching vendor ids.
+ */
+export async function searchHotelVendorIds(cityId: string, searchQuery: string): Promise<string[]> {
+  const q = searchQuery.trim();
+  if (!q) return [];
+  const ids = new Set<string>();
+  const [byName, byItem] = await Promise.all([
+    supabase
+      .from('vendors')
+      .select('id')
+      .eq('city_id', cityId)
+      .eq('vendor_type', 'hotel')
+      .eq('approval_status', 'approved')
+      .ilike('name', `%${q}%`)
+      .limit(200),
+    supabase
+      .from('products')
+      .select('vendor_id, vendors!inner(city_id,vendor_type,approval_status)')
+      .eq('is_active', true)
+      .not('vendor_id', 'is', null)
+      .ilike('name', `%${q}%`)
+      .eq('vendors.city_id', cityId)
+      .eq('vendors.vendor_type', 'hotel')
+      .eq('vendors.approval_status', 'approved')
+      .limit(500),
+  ]);
+  for (const v of (byName.data ?? []) as { id: string }[]) ids.add(v.id);
+  for (const p of (byItem.data ?? []) as { vendor_id: string | null }[]) if (p.vendor_id) ids.add(p.vendor_id);
+  return Array.from(ids);
+}
+
 // ---------- PRODUCTS & CITY STOCK RESOLUTION ----------
 
 // City price/stock is embedded in the product request (one round trip instead of two) and
@@ -851,28 +885,29 @@ export const peekHotelMenu = (vendorId: string, cityId: string, categoryId: stri
 
 export function getResolvedGroceryProducts(p: {
   cityId: string;
-  categoryId: string;
+  /** A category id browses that category; '' / null searches across ALL grocery products. */
+  categoryId: string | null;
   searchQuery?: string | null;
   limit?: number;
   offset?: number;
   forceRefresh?: boolean;
 }): Promise<ResolvedProduct[]> {
-  const { cityId, categoryId, limit = 30, offset = 0, forceRefresh = false } = p;
+  const { cityId, limit = 30, offset = 0, forceRefresh = false } = p;
+  const categoryId = p.categoryId || ''; // '' = every category (used while searching)
   const q = (p.searchQuery ?? '').trim().toLowerCase();
   return cached(
     `grocery:${cityId}:${categoryId}:${q}:${offset}:${limit}`,
     CACHE_TTL_MS,
     async () => {
-      // Only this category's page, with this city's stock embedded, filtered in the database.
-      let query = withCityStock(
-        supabase
-          .from('products')
-          .select(GROCERY_PRODUCT_COLS)
-          .eq('is_active', true)
-          .eq('category_id', categoryId)
-          .is('vendor_id', null),
-        cityId,
-      )
+      // One page of grocery products with this city's stock embedded, filtered in the database.
+      // When searching (no category), we match by name across every category instead.
+      let base = supabase
+        .from('products')
+        .select(GROCERY_PRODUCT_COLS)
+        .eq('is_active', true)
+        .is('vendor_id', null);
+      if (categoryId) base = base.eq('category_id', categoryId);
+      let query = withCityStock(base, cityId)
         .order('is_featured', { ascending: false })
         .order('name', { ascending: true })
         .range(offset, offset + limit - 1);

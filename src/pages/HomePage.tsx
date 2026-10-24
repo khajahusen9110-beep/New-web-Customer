@@ -40,6 +40,7 @@ import {
   getHotelDishCategories,
   getHotels,
   getHotelsServingDish,
+  searchHotelVendorIds,
   type DishCategory,
   type DishMatch,
   getResolvedGroceryProducts,
@@ -596,13 +597,14 @@ export default function HomePage() {
 
   const loadProducts = useCallback(
     async (reset: boolean, force = false) => {
-      if (!cityId || !categoryId) return;
+      // A category is only needed while browsing; a search spans every category.
+      if (!cityId || (!query && !categoryId)) return;
       const id = ++reqId.current;
       if (reset) {
         setGroceryLoading(true);
         setGroceryError(null);
         // Show last visit's first page at once; the fresh page below replaces it.
-        const seen = !query && !force ? peekGroceryProducts(cityId, categoryId, GROCERY_PAGE) : null;
+        const seen = !query && categoryId && !force ? peekGroceryProducts(cityId, categoryId, GROCERY_PAGE) : null;
         if (seen) {
           setProducts(sortGrocery(seen));
           setGroceryHasMore(seen.length >= GROCERY_PAGE);
@@ -610,7 +612,8 @@ export default function HomePage() {
       } else setGroceryMore(true);
       try {
         const offset = reset ? 0 : products.length;
-        const list = await getResolvedGroceryProducts({ cityId, categoryId, searchQuery: query, limit: GROCERY_PAGE, offset, forceRefresh: force });
+        // While searching, pass no category so the match spans all grocery products.
+        const list = await getResolvedGroceryProducts({ cityId, categoryId: query ? '' : categoryId, searchQuery: query, limit: GROCERY_PAGE, offset, forceRefresh: force });
         if (id !== reqId.current) return;
         setProducts((cur) => {
           if (reset) return sortGrocery(list);
@@ -651,7 +654,18 @@ export default function HomePage() {
       } else setHotelsMore(true);
       try {
         const offset = reset ? 0 : hotels.length;
-        const list = await getHotels(cityId, query, HOTEL_PAGE, offset, force, dishServing?.vendorIds ?? null);
+        // Free-text search: match hotels by their name OR by a menu item (dish) they serve.
+        // The matching vendor ids are resolved first, then paged like any hotel list.
+        let ids = dishServing?.vendorIds ?? null;
+        let nameFilter: string | null = query;
+        if (query) {
+          const matchIds = await searchHotelVendorIds(cityId, query);
+          if (id !== reqId.current) return;
+          ids = matchIds;
+          nameFilter = null; // ids already encode name + dish matches — don't AND a name filter
+        }
+        const list =
+          ids && !ids.length ? [] : await getHotels(cityId, nameFilter, HOTEL_PAGE, offset, force, ids);
         if (id !== reqId.current) return;
         setHotels((cur) => {
           if (reset) return list;
@@ -883,7 +897,7 @@ export default function HomePage() {
     if (mode !== 'grocery' || groceryLoading || groceryMore || !groceryHasMore || !cityId || !categoryId || !products.length) return;
     const offset = products.length;
     whenIdle(() =>
-      void getResolvedGroceryProducts({ cityId, categoryId, searchQuery: query, limit: GROCERY_PAGE, offset }).catch(() => undefined),
+      void getResolvedGroceryProducts({ cityId, categoryId: query ? '' : categoryId, searchQuery: query, limit: GROCERY_PAGE, offset }).catch(() => undefined),
     );
   }, [mode, groceryLoading, groceryMore, groceryHasMore, cityId, categoryId, query, products.length]);
   useEffect(() => {
