@@ -164,12 +164,14 @@ code { background: var(--surface-variant); padding: 1px 5px; border-radius: 4px;
 
 /* ---------- modal ---------- */
 .modal-backdrop { position: fixed; inset: 0; background: rgba(0, 0, 0, 0.45); z-index: 1500; display: flex; align-items: flex-end; justify-content: center; }
-.modal { background: var(--surface); width: 100%; max-height: 92vh; border-radius: 22px 22px 0 0; display: flex; flex-direction: column; animation: sheet 0.2s ease-out; }
+/* dvh tracks the *visible* viewport on mobile (vh does not), so the footer with the
+   action button is never pushed below the fold / behind the browser or gesture bar. */
+.modal { background: var(--surface); width: 100%; max-height: 92vh; max-height: 92dvh; border-radius: 22px 22px 0 0; display: flex; flex-direction: column; animation: sheet 0.2s ease-out; }
 @keyframes sheet { from { transform: translateY(40px); opacity: 0; } }
 .modal-head { display: flex; align-items: center; justify-content: space-between; padding: 16px 16px 4px 20px; }
 .modal-head h2 { font-size: 18px; }
 .modal-body { padding: 12px 20px 20px; overflow-y: auto; display: flex; flex-direction: column; gap: 12px; }
-.modal-foot { display: flex; justify-content: flex-end; gap: 8px; padding: 12px 20px 20px; border-top: 1px solid var(--outline-soft); }
+.modal-foot { display: flex; justify-content: flex-end; gap: 8px; padding: 12px 20px calc(20px + env(safe-area-inset-bottom)); border-top: 1px solid var(--outline-soft); }
 @media (min-width: 720px) {
   .modal-backdrop { align-items: center; }
   .modal { max-width: 480px; border-radius: 22px; }
