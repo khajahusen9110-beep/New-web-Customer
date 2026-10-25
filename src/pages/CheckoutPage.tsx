@@ -114,6 +114,9 @@ export default function CheckoutPage() {
     if (!codAllowed && payment === 'cod') setPayment('upi');
   }, [codAllowed, payment]);
   const paymentMethods = codAllowed ? PAYMENT_METHODS : PAYMENT_METHODS.filter((m) => m.key !== 'cod');
+  // Cooking (shown to the vendor) + delivery (shown to the delivery partner) instructions.
+  const [cookingInstructions, setCookingInstructions] = useState('');
+  const [deliveryInstructions, setDeliveryInstructions] = useState('');
   const [placing, setPlacing] = useState(false);
   const [placingMsg, setPlacingMsg] = useState('Placing Order...');
   const [placementError, setPlacementError] = useState<string | null>(null);
@@ -360,6 +363,8 @@ export default function CheckoutPage() {
         couponCode: previewCoupon ? appliedCode : null,
         items: available.map((l) => l.cartItem),
         useWallet: walletApplied > 0,
+        cookingInstructions,
+        deliveryInstructions,
       });
       // The server's total is the truth; if it differs from the estimate, show it before paying.
       const serverTotal = Number(order.total_amount ?? 0);
@@ -660,6 +665,33 @@ export default function CheckoutPage() {
                 {couponError && <p className="text-danger small">{couponError}</p>}
               </>
             )}
+          </section>
+
+          {/* Instructions */}
+          <section className="card pad">
+            <h3>Instructions (optional)</h3>
+            <div className="stack-sm" style={{ marginTop: 8 }}>
+              <label className="field">
+                <span>Cooking instructions (for the shop)</span>
+                <textarea
+                  rows={2}
+                  maxLength={500}
+                  value={cookingInstructions}
+                  onChange={(e) => setCookingInstructions(e.target.value)}
+                  placeholder="e.g. kam teekha, pyaaz nahi"
+                />
+              </label>
+              <label className="field">
+                <span>Delivery instructions (for the delivery partner)</span>
+                <textarea
+                  rows={2}
+                  maxLength={500}
+                  value={deliveryInstructions}
+                  onChange={(e) => setDeliveryInstructions(e.target.value)}
+                  placeholder="e.g. gate pe call karein, 2nd floor"
+                />
+              </label>
+            </div>
           </section>
 
           {/* Payment */}

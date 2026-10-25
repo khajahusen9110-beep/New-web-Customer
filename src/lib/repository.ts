@@ -1557,6 +1557,10 @@ export async function placeOrder(p: {
   items?: CartItem[];
   /** Pay part of the order from the Sndmart Wallet (the server decides how much). */
   useWallet?: boolean;
+  /** Cooking instructions for the vendor (e.g. "kam teekha"). */
+  cookingInstructions?: string | null;
+  /** Delivery instructions for the delivery partner (e.g. "gate pe call karein"). */
+  deliveryInstructions?: string | null;
 }): Promise<Order> {
   const { groceryCart, hotelCart } = useCart.getState();
   const raw = (p.items ?? (p.isHotel ? hotelCart : groceryCart)).filter((i) => i.quantity > 0);
@@ -1603,6 +1607,16 @@ export async function placeOrder(p: {
       const order = parseOrderFromRpc(data);
       if (!order) {
         throw Object.assign(new Error('Order status unknown. Please check My Orders before trying again.'), { final: true });
+      }
+      // Cooking (vendor) + delivery (partner) instructions — best-effort, never fail the order.
+      const cooking = p.cookingInstructions?.trim() || null;
+      const delivery = p.deliveryInstructions?.trim() || null;
+      if (cooking || delivery) {
+        try {
+          await supabase.rpc('set_order_instructions', { p_order_id: order.id, p_cooking: cooking, p_delivery: delivery });
+        } catch {
+          /* instructions are best-effort; the order is already placed */
+        }
       }
       try {
         await clearCartDirectly(p.isHotel);
