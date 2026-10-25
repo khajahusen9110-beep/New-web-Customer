@@ -753,29 +753,26 @@ export function getHotelsServingDish(
 export async function searchHotelVendorIds(cityId: string, searchQuery: string): Promise<string[]> {
   const q = searchQuery.trim();
   if (!q) return [];
-  const ids = new Set<string>();
-  const [byName, byItem] = await Promise.all([
-    supabase
+  // Server RPC: exact (hotel name / dish name) match first, then typo-tolerant
+  // fuzzy fallback — so "Biriyani" still finds "Chicken Biryani".
+  const { data, error } = await supabase.rpc('search_hotel_vendor_ids', {
+    p_city_id: cityId,
+    p_query: q,
+  });
+  if (error) {
+    console.warn('Hotel search notice, falling back to name match:', error.message);
+    const { data: byName } = await supabase
       .from('vendors')
       .select('id')
       .eq('city_id', cityId)
       .eq('vendor_type', 'hotel')
       .eq('approval_status', 'approved')
       .ilike('name', `%${q}%`)
-      .limit(200),
-    supabase
-      .from('products')
-      .select('vendor_id, vendors!inner(city_id,vendor_type,approval_status)')
-      .eq('is_active', true)
-      .not('vendor_id', 'is', null)
-      .ilike('name', `%${q}%`)
-      .eq('vendors.city_id', cityId)
-      .eq('vendors.vendor_type', 'hotel')
-      .eq('vendors.approval_status', 'approved')
-      .limit(500),
-  ]);
-  for (const v of (byName.data ?? []) as { id: string }[]) ids.add(v.id);
-  for (const p of (byItem.data ?? []) as { vendor_id: string | null }[]) if (p.vendor_id) ids.add(p.vendor_id);
+      .limit(200);
+    return (byName ?? []).map((v: { id: string }) => v.id);
+  }
+  const ids = new Set<string>();
+  for (const r of (data ?? []) as { vendor_id: string | null }[]) if (r.vendor_id) ids.add(r.vendor_id);
   return Array.from(ids);
 }
 
