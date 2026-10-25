@@ -1111,6 +1111,46 @@ export function getHotelProducts(p: {
   );
 }
 
+/**
+ * Food search by dish: returns matching hotel ITEMS directly (so results show dishes,
+ * not just the hotels). Exact name match first, then a typo-tolerant fuzzy fallback.
+ * Each dish carries its hotel name (vendorName) and the current open/closed state.
+ */
+export async function searchHotelDishes(cityId: string, query: string, limit = 60): Promise<ResolvedProduct[]> {
+  const q = query.trim();
+  if (!q || !cityId) return [];
+  const { data: rows, error } = await supabase.rpc('search_hotel_dishes', { p_city_id: cityId, p_query: q });
+  if (error) {
+    console.warn('Dish search notice:', error.message);
+    return [];
+  }
+  const meta = new Map<string, { vendorName: string; open: boolean; order: number }>();
+  (rows ?? []).forEach((r: any, i: number) =>
+    meta.set(r.product_id, { vendorName: r.vendor_name, open: !!r.vendor_is_open, order: i }),
+  );
+  const ids = Array.from(meta.keys()).slice(0, limit);
+  if (!ids.length) return [];
+  const { data, error: pErr } = await withCityStock(
+    supabase.from('products').select(HOTEL_PRODUCT_COLS).eq('is_active', true).in('id', ids),
+    cityId,
+    false,
+  );
+  if (pErr) fail(pErr, 'Could not load dishes');
+  const products = (data ?? []) as unknown as Product[];
+  return products
+    .map((prod) => {
+      const m = meta.get(prod.id);
+      return {
+        ...resolveProduct(prod, cityStockOf(prod), cityId),
+        variants: [],
+        vendorName: m?.vendorName,
+        hotelOpen: m?.open ?? false,
+      } as ResolvedProduct;
+    })
+    // preserve the RPC's relevance order (open hotels + best matches first)
+    .sort((a, b) => (meta.get(a.id)?.order ?? 999) - (meta.get(b.id)?.order ?? 999));
+}
+
 // Only what the menu tabs need to know which categories have something orderable right now.
 const HOTEL_AVAILABILITY_COLS =
   'id,category_id,vendor_id,name,price,is_available,is_active,available_from,available_until,' + CITY_STOCK_EMBED;

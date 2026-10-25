@@ -129,6 +129,8 @@ export interface ResolvedProduct {
   soldCount?: number;
   /** Most-ordered food row only: the hotel this dish belongs to (for the card + tap target). */
   vendorName?: string;
+  /** Dish-search results only: whether the dish's hotel is currently open. */
+  hotelOpen?: boolean;
   /** Cart only: the product no longer exists or is hidden from customers. */
   missing?: boolean;
 }

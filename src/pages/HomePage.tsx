@@ -18,6 +18,7 @@ import {
   X,
 } from 'lucide-react';
 import {
+  ConfirmDialog,
   EmptyState,
   ErrorCard,
   FloatingCartButton,
@@ -41,6 +42,7 @@ import {
   getHotels,
   getHotelsServingDish,
   searchHotelVendorIds,
+  searchHotelDishes,
   type DishCategory,
   type DishMatch,
   getResolvedGroceryProducts,
@@ -72,6 +74,7 @@ import {
   couponTerms,
   errorMessage,
   isCashbackCoupon,
+  isHotelItemAvailable,
   isInStockAndActive,
   isVendorOpenNow,
   rupees,
@@ -366,6 +369,51 @@ function GroceryProductCard({
   );
 }
 
+// A food-search result: the dish itself (image, name, its hotel, price) with a direct Add.
+function SearchDishCard({
+  product,
+  quantity,
+  onIncrease,
+  onDecrease,
+  onOpenHotel,
+}: {
+  product: ResolvedProduct;
+  quantity: number;
+  onIncrease: () => void;
+  onDecrease: () => void;
+  onOpenHotel: () => void;
+}) {
+  const orderable = (product.hotelOpen ?? false) && isHotelItemAvailable(product);
+  return (
+    <div className={`card product-card${orderable ? '' : ' dimmed'}`}>
+      <button className="product-img dish-img-btn" onClick={onOpenHotel} aria-label={`Open ${product.vendorName ?? 'hotel'}`}>
+        <ProductImage url={product.imageUrl} alt={product.name} width={200} />
+        {!orderable && (
+          <div className="img-overlay">
+            <span className="tag tag-red">{product.hotelOpen ? 'Not available' : 'Hotel closed'}</span>
+          </div>
+        )}
+      </button>
+      <div className="product-name" title={product.name}>
+        {product.name}
+      </div>
+      <button className="dish-hotel-link muted small ellipsis" onClick={onOpenHotel} title={product.vendorName ?? ''}>
+        <Store size={12} /> {product.vendorName}
+      </button>
+      <div className="price"><OfferInline price={product.effectivePrice} kind="food" /></div>
+      <div className="product-action">
+        {orderable ? (
+          <QuantityStepper quantity={quantity} onIncrease={onIncrease} onDecrease={onDecrease} full />
+        ) : (
+          <button className="btn btn-sm btn-outline w-full" onClick={onOpenHotel}>
+            View Hotel
+          </button>
+        )}
+      </div>
+    </div>
+  );
+}
+
 function VariantPicker({ product, cityId, onClose }: { product: ResolvedProduct; cityId: string; onClose: () => void }) {
   const groceryCart = useCart((s) => s.groceryCart);
   const addToCart = useCart((s) => s.addToCart);
@@ -523,6 +571,11 @@ export default function HomePage() {
   const groceryCart = useCart((s) => s.groceryCart);
   const hotelCart = useCart((s) => s.hotelCart);
   const addToCart = useCart((s) => s.addToCart);
+  const forceClearHotelCartAndAdd = useCart((s) => s.forceClearHotelCartAndAdd);
+  // Food search shows matching DISHES directly (with their hotel + an Add button).
+  const [dishResults, setDishResults] = useState<ResolvedProduct[]>([]);
+  const [dishResultsLoading, setDishResultsLoading] = useState(false);
+  const [dishConflict, setDishConflict] = useState<{ item: CartItem; hotel: string } | null>(null);
 
   const [search, setSearch] = useState('');
   const query = useDebounced(search.trim(), 350);
@@ -695,6 +748,39 @@ export default function HomePage() {
     else void loadHotels(true);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [mode, cityId, categoryId, query, dishServing]);
+
+  // Food search: fetch matching dishes directly (shown above the hotels list).
+  useEffect(() => {
+    if (mode !== 'hotels' || !cityId || !query) {
+      setDishResults([]);
+      setDishResultsLoading(false);
+      return;
+    }
+    let cancelled = false;
+    setDishResultsLoading(true);
+    searchHotelDishes(cityId, query)
+      .then((list) => {
+        if (!cancelled) setDishResults(list);
+      })
+      .catch(() => {
+        if (!cancelled) setDishResults([]);
+      })
+      .finally(() => {
+        if (!cancelled) setDishResultsLoading(false);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [mode, cityId, query]);
+
+  const addDishToCart = useCallback(
+    (p: ResolvedProduct, delta: number) => {
+      if (!p.vendorId || !cityId) return;
+      const r = addToCart({ productId: p.id, vendorId: p.vendorId, cityId, quantityDelta: delta, isHotel: true });
+      if (r.kind === 'hotelConflict') setDishConflict({ item: r.pendingItem, hotel: p.vendorName ?? 'this hotel' });
+    },
+    [addToCart, cityId],
+  );
 
   // Choosing a dish: find every hotel whose items match it (not only hotels with a section named
   // after it), then the list above reloads with just those hotels.
@@ -1118,9 +1204,32 @@ export default function HomePage() {
               onOrder={() => hotelsListRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' })}
             />
           )}
+          {search && (
+            <section className="dish-results">
+              <h3 className="section-title">
+                {dishResultsLoading ? 'Finding dishes…' : dishResults.length > 0 ? `Dishes matching "${search.trim()}"` : ''}
+              </h3>
+              {dishResultsLoading && dishResults.length === 0 ? (
+                <GridSkeleton count={4} />
+              ) : dishResults.length > 0 ? (
+                <div className="product-grid">
+                  {dishResults.map((p) => (
+                    <SearchDishCard
+                      key={p.id}
+                      product={p}
+                      quantity={hotelCart.find((i) => i.product_id === p.id)?.quantity ?? 0}
+                      onIncrease={() => addDishToCart(p, 1)}
+                      onDecrease={() => addDishToCart(p, -1)}
+                      onOpenHotel={() => navigate(`/hotel/${p.vendorId}?name=${encodeURIComponent(p.vendorName ?? '')}`)}
+                    />
+                  ))}
+                </div>
+              ) : null}
+            </section>
+          )}
           <div ref={hotelsListRef} className="row between hotels-heading">
             <h3 className="section-title">
-              {selectedDish ? `Hotels serving ${selectedDish.name}` : search ? 'Search results' : 'All hotels & restaurants'}
+              {selectedDish ? `Hotels serving ${selectedDish.name}` : search ? 'Restaurants' : 'All hotels & restaurants'}
             </h3>
             {selectedDish && (
               <button className="chip-clear" onClick={() => setDishKeySel(null)} aria-label="Clear dish filter">
@@ -1179,6 +1288,19 @@ export default function HomePage() {
       {variantProduct && cityId && (
         <VariantPicker product={variantProduct} cityId={cityId} onClose={() => setVariantProduct(null)} />
       )}
+
+      <ConfirmDialog
+        open={!!dishConflict}
+        title="Replace Hotel Cart Items?"
+        text={`Your cart already contains items from another hotel. Clear existing items and add from ${dishConflict?.hotel ?? 'this hotel'}?`}
+        confirmLabel="Clear & Add"
+        onCancel={() => setDishConflict(null)}
+        onConfirm={() => {
+          if (dishConflict) forceClearHotelCartAndAdd(dishConflict.item);
+          setDishConflict(null);
+          toast('Cart cleared and item added');
+        }}
+      />
 
       <Modal
         open={!!coupon}
