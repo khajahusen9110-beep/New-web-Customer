@@ -551,3 +551,14 @@ a.install-ok { display: flex; align-items: center; justify-content: center; text
 .promo-dots { display: flex; justify-content: center; gap: 6px; margin-top: 8px; }
 .promo-dots button { width: 7px; height: 7px; border-radius: 4px; background: var(--outline); transition: width 0.2s, background 0.2s; }
 .promo-dots button.active { width: 18px; background: var(--primary); }
+
+/* Food recommendations strip ("Add more items") on the cart */
+.rec-strip { display: flex; gap: 10px; overflow-x: auto; padding-bottom: 4px; -webkit-overflow-scrolling: touch; }
+.rec-strip::-webkit-scrollbar { height: 0; }
+.rec-card { flex: 0 0 132px; width: 132px; border: 1px solid var(--outline-soft); border-radius: 12px; padding: 8px; display: flex; flex-direction: column; gap: 6px; }
+.rec-card img { width: 100%; height: 88px; object-fit: cover; border-radius: 8px; }
+.rec-name { font-size: 13px; font-weight: 600; line-height: 1.2; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; min-height: 32px; }
+.rec-row { display: flex; align-items: center; justify-content: space-between; margin-top: auto; }
+.rec-price { font-weight: 800; font-size: 13px; }
+.rec-add { display: inline-flex; align-items: center; gap: 3px; background: var(--primary); color: #fff; font-weight: 700; font-size: 12px; padding: 5px 10px; border-radius: 8px; }
+.rec-add:hover { background: var(--primary-dark); }

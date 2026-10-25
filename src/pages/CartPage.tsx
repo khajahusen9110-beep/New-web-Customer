@@ -1,12 +1,60 @@
 import { useEffect, useRef, useState } from 'react';
 import { useLocation, useNavigate } from 'react-router-dom';
-import { AlertTriangle, ArrowRight, CheckCircle2, Info, RefreshCw, ShoppingCart, Trash2 } from 'lucide-react';
+import { AlertTriangle, ArrowRight, CheckCircle2, Info, Plus, RefreshCw, ShoppingCart, Trash2 } from 'lucide-react';
 import { BillRow, CenterSpinner, EmptyState, ErrorCard, PageHeader, ProductImage, QuantityStepper, toast } from '../components/ui';
 import { useCartCheck } from '../lib/hooks';
 import { cartLineForError, rupees } from '../lib/utils';
 import { usePromoFor, cartPromoDiscount } from '../lib/promo';
+import { getHotelProducts } from '../lib/repository';
+import type { ResolvedProduct } from '../lib/types';
 import { useSession } from '../store/session';
 import { cartCount, useCart } from '../store/cart';
+
+/** "Add more items" strip: popular items from the same hotel that aren't in the cart yet. */
+function FoodRecommendations({ vendorId, cityId, inCartIds }: { vendorId: string; cityId: string; inCartIds: string[] }) {
+  const addToCart = useCart((s) => s.addToCart);
+  const [recs, setRecs] = useState<ResolvedProduct[]>([]);
+  const excludeKey = [...inCartIds].sort().join(',');
+  useEffect(() => {
+    let active = true;
+    const exclude = new Set(excludeKey ? excludeKey.split(',') : []);
+    getHotelProducts({ vendorId, cityId, limit: 20 })
+      .then((list) => {
+        if (!active) return;
+        setRecs(list.filter((p) => !exclude.has(p.id) && p.effectivePrice > 0).slice(0, 10));
+      })
+      .catch(() => undefined);
+    return () => {
+      active = false;
+    };
+  }, [vendorId, cityId, excludeKey]);
+  if (recs.length === 0) return null;
+  return (
+    <div className="card pad">
+      <h3 style={{ marginBottom: 8 }}>Add more items 🍽️</h3>
+      <div className="rec-strip">
+        {recs.map((p) => (
+          <div key={p.id} className="rec-card">
+            <ProductImage url={p.imageUrl} alt={p.name} width={130} />
+            <div className="rec-name">{p.name}</div>
+            <div className="rec-row">
+              <span className="rec-price">{rupees(p.effectivePrice)}</span>
+              <button
+                className="rec-add"
+                onClick={() => {
+                  addToCart({ productId: p.id, vendorId, cityId, isHotel: true, quantityDelta: 1 });
+                  toast(`${p.name} added`);
+                }}
+              >
+                <Plus size={14} /> Add
+              </button>
+            </div>
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}
 
 /** Sent by checkout when the order was rejected because an item changed. */
 export interface CartNavState {
@@ -221,6 +269,12 @@ export default function CartPage() {
                 </div>
               );
             })}
+            {isHotel && !hotelClosed && city?.id && (() => {
+              const vId = hotelCart.find((i) => i.vendor_id)?.vendor_id;
+              return vId ? (
+                <FoodRecommendations vendorId={vId} cityId={city.id} inCartIds={hotelCart.map((i) => i.product_id)} />
+              ) : null;
+            })()}
             <div className="card pad">
               <h3>Bill Details</h3>
               <BillRow label="Item Subtotal" value={rupees(subtotal, 2)} />
