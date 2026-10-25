@@ -12,6 +12,7 @@ import {
   getCityDeliverySettings,
   getDeliverySlots,
   getExpressDeliverySettings,
+  getMyCodAllowed,
   placeOrder,
   syncRazorpayPayment,
   resolveDeliveryDistanceKm,
@@ -100,6 +101,19 @@ export default function CheckoutPage() {
   const [confirmPay, setConfirmPay] = useState<Order | null>(null);
 
   const [payment, setPayment] = useState<PaymentKey>('cod');
+  // COD is hidden for customers blocked after repeated cancellations (server also enforces it).
+  const [codAllowed, setCodAllowed] = useState(true);
+  useEffect(() => {
+    let active = true;
+    void getMyCodAllowed().then((ok) => active && setCodAllowed(ok));
+    return () => {
+      active = false;
+    };
+  }, []);
+  useEffect(() => {
+    if (!codAllowed && payment === 'cod') setPayment('upi');
+  }, [codAllowed, payment]);
+  const paymentMethods = codAllowed ? PAYMENT_METHODS : PAYMENT_METHODS.filter((m) => m.key !== 'cod');
   const [placing, setPlacing] = useState(false);
   const [placingMsg, setPlacingMsg] = useState('Placing Order...');
   const [placementError, setPlacementError] = useState<string | null>(null);
@@ -652,13 +666,18 @@ export default function CheckoutPage() {
           <section className="card pad">
             <h3>Payment Method</h3>
             <div className="stack-sm">
-              {PAYMENT_METHODS.map((m) => (
+              {paymentMethods.map((m) => (
                 <label key={m.key} className={`radio-card${payment === m.key ? ' selected' : ''}`}>
                   <input type="radio" name="payment" checked={payment === m.key} onChange={() => setPayment(m.key)} />
                   <span>{m.label}</span>
                 </label>
               ))}
             </div>
+            {!codAllowed && (
+              <p className="text-danger small" style={{ marginTop: 8 }}>
+                Cash on Delivery aapke account par abhi uplabdh nahi hai (pichle cancelled orders ki wajah se). Kripya UPI se pay karein.
+              </p>
+            )}
           </section>
         </div>
 

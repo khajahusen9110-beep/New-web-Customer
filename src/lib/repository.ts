@@ -1312,6 +1312,20 @@ export async function getFreeDeliveryThreshold(cityId: string): Promise<number |
   return express?.free_delivery_min_order ?? null;
 }
 
+/**
+ * Whether this customer may pay Cash on Delivery. Blocked after repeated cancelled orders
+ * (or by an admin). Fails open — the server still enforces it when the order is placed.
+ */
+export async function getMyCodAllowed(): Promise<boolean> {
+  try {
+    const { data, error } = await supabase.rpc('my_cod_status');
+    if (error) return true;
+    return (data as { cod_allowed?: boolean } | null)?.cod_allowed !== false;
+  } catch {
+    return true;
+  }
+}
+
 async function getPickupPoint(vendorId: string | null, cityId: string | null) {
   if (vendorId) {
     const v = await getVendor(vendorId);
