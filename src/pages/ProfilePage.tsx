@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { Bell, Building2, ChevronRight, CircleHelp, LogOut, MapPin, Star, User, UserRound, Wallet } from 'lucide-react';
+import { Bell, Building2, ChevronRight, CircleHelp, Gift, LogOut, MapPin, Star, User, UserRound, Wallet } from 'lucide-react';
 import { ConfirmDialog, PageHeader } from '../components/ui';
 import { openCityPicker } from '../components/CityPicker';
 import { signOut } from '../lib/repository';
@@ -35,6 +35,12 @@ export default function ProfilePage() {
       title: 'Sndmart Wallet',
       sub: wallet ? `Balance ${rupees(wallet.balance, 2)} · cashback & history` : 'Cashback balance & history',
       go: () => navigate('/wallet'),
+    },
+    {
+      Icon: Gift,
+      title: 'Refer & Earn',
+      sub: 'Share your code, earn wallet cash',
+      go: () => navigate('/refer'),
     },
     { Icon: Star, title: 'My Reviews', sub: 'Reviews you have submitted', go: () => navigate('/reviews') },
     { Icon: CircleHelp, title: 'Help & Support', sub: 'Call, WhatsApp or email us', go: () => navigate('/help') },

@@ -79,6 +79,12 @@ code { background: var(--surface-variant); padding: 1px 5px; border-radius: 4px;
 .text-primary { color: var(--primary); }
 .text-success { color: var(--green); }
 .text-danger { color: var(--red); }
+.flex-1 { flex: 1 1 0%; }
+.refer-hero { text-align: center; display: flex; flex-direction: column; align-items: center; gap: 6px; }
+.refer-code-row { align-items: center; }
+.refer-code { flex: 1; font-size: 22px; font-weight: 800; letter-spacing: 0.12em; text-align: center; background: var(--surface-variant); border-radius: 10px; padding: 10px 0; }
+.refer-stat { flex: 1; display: flex; flex-direction: column; align-items: center; gap: 4px; text-align: center; }
+.refer-steps { margin: 0; padding-left: 18px; display: flex; flex-direction: column; gap: 6px; }
 .text-warning { color: var(--amber); }
 .text-orange { color: var(--orange); }
 .text-blue { color: var(--ocean); }

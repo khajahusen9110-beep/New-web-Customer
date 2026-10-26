@@ -31,6 +31,7 @@ const OrderDetailPage = lazy(() => import('./pages/OrderDetailPage'));
 const ProfilePage = lazy(() => import('./pages/ProfilePage'));
 const NotificationsPage = lazy(() => import('./pages/NotificationsPage'));
 const WalletPage = lazy(() => import('./pages/WalletPage'));
+const ReferEarnPage = lazy(() => import('./pages/ReferEarnPage'));
 const MyReviewsPage = lazy(() => import('./pages/MyReviewsPage'));
 const AddressBookPage = lazy(() => import('./pages/AddressBookPage'));
 const EditProfilePage = lazy(() => import('./pages/EditProfilePage'));
@@ -262,6 +263,7 @@ export default function App() {
             <Route path="/orders/:orderId" element={<OrderDetailPage />} />
             <Route path="/notifications" element={<NotificationsPage />} />
             <Route path="/wallet" element={<WalletPage />} />
+            <Route path="/refer" element={<ReferEarnPage />} />
             <Route path="/reviews" element={<MyReviewsPage />} />
             <Route path="/addresses" element={<AddressBookPage />} />
             <Route path="/profile/edit" element={<EditProfilePage />} />

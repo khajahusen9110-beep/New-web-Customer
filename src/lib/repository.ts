@@ -2076,6 +2076,41 @@ export async function getWalletTransactions(customerId: string, limit = 20, offs
   return (data ?? []) as WalletTransaction[];
 }
 
+// ---------- REFER & EARN ----------
+
+export interface ReferralStats {
+  referral_code: string | null;
+  total_referred: number;
+  total_rewarded: number;
+  total_earned: number;
+}
+
+/** The caller's referral code (created on first call) + how many friends they've earned from. */
+export async function getMyReferralStats(): Promise<ReferralStats> {
+  const { data, error } = await supabase.rpc('get_my_referral_stats');
+  if (error) fail(error, 'Failed to load referral info');
+  const row = (Array.isArray(data) ? data[0] : data) as ReferralStats | undefined;
+  return {
+    referral_code: row?.referral_code ?? null,
+    total_referred: num(row?.total_referred ?? 0),
+    total_rewarded: num(row?.total_rewarded ?? 0),
+    total_earned: num(row?.total_earned ?? 0),
+  };
+}
+
+/** Ensures the caller has a referral code, creating one if needed. */
+export async function getOrCreateReferralCode(): Promise<string> {
+  const { data, error } = await supabase.rpc('get_my_referral_code');
+  if (error) fail(error, 'Failed to create referral code');
+  return data as string;
+}
+
+/** Applies a friend's referral code to the caller's own account (one-time, before first order). */
+export async function applyReferralCode(code: string): Promise<void> {
+  const { error } = await supabase.rpc('apply_referral_code', { p_code: code });
+  if (error) fail(error, 'Could not apply referral code');
+}
+
 // ---------- NOTIFICATIONS ----------
 
 export async function getCustomerNotifications(userId: string, limit = 20, offset = 0): Promise<CustomerNotification[]> {
