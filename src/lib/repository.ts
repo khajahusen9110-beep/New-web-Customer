@@ -190,7 +190,7 @@ const num = (v: unknown, d = 0) => (v === null || v === undefined || v === '' ? 
 
 // ---------- CITIES ----------
 
-const CITY_COLS = 'id,name,state,status,center_lat,center_lng,service_radius_km';
+const CITY_COLS = 'id,name,state,status,center_lat,center_lng,service_radius_km,service_mode';
 
 export function getActiveCities(forceRefresh = false): Promise<City[]> {
   return cached(

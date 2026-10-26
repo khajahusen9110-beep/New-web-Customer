@@ -565,11 +565,17 @@ function whenIdle(fn: () => void) {
 export default function HomePage() {
   const navigate = useNavigate();
   const [params, setParams] = useSearchParams();
-  const mode = params.get('mode') === 'hotels' ? 'hotels' : 'grocery';
-  const setMode = (m: 'grocery' | 'hotels') =>
-    m === 'hotels' ? setParams({ mode: 'hotels' }) : setParams({}, { replace: false });
-
   const city = useSession((s) => s.selectedCity);
+  // Launch Mode (set by City Admin): a new city can go live Food-only or Grocery-only before
+  // its other catalog is ready. No explicit ?mode= in the URL defers to that; an explicit
+  // mode (from a link, a tab tap, or "Choose City") always wins.
+  const serviceMode = city?.service_mode ?? 'both';
+  const modeParam = params.get('mode');
+  const mode: 'grocery' | 'hotels' =
+    modeParam === 'hotels' ? 'hotels' : modeParam === 'grocery' ? 'grocery' : serviceMode === 'food_only' ? 'hotels' : 'grocery';
+  const setMode = (m: 'grocery' | 'hotels') =>
+    m === 'hotels' ? setParams({ mode: 'hotels' }) : setParams({ mode: 'grocery' }, { replace: false });
+
   const userId = useSession((s) => s.userId);
   const cityId = city?.id ?? null;
   const groceryCart = useCart((s) => s.groceryCart);
@@ -1068,7 +1074,7 @@ export default function HomePage() {
 
   return (
     <div className="page home-page">
-      <HomeTopBar onRefresh={refresh} showBack={isHotels} onBack={() => setMode('grocery')} />
+      <HomeTopBar onRefresh={refresh} showBack={isHotels && serviceMode !== 'food_only'} onBack={() => setMode('grocery')} />
 
       <div className="home-controls">
         <div className="search-bar">
@@ -1086,11 +1092,21 @@ export default function HomePage() {
           )}
         </div>
         <div className="mode-toggle">
-          <button className={!isHotels ? 'active' : ''} onClick={() => setMode('grocery')}>
+          <button
+            className={!isHotels ? 'active' : ''}
+            disabled={serviceMode === 'food_only'}
+            onClick={() => setMode('grocery')}
+          >
             Fresh Groceries &amp; Fruits
+            {serviceMode === 'food_only' && <span className="soon-badge">Coming Soon</span>}
           </button>
-          <button className={isHotels ? 'active' : ''} onClick={() => setMode('hotels')}>
+          <button
+            className={isHotels ? 'active' : ''}
+            disabled={serviceMode === 'grocery_only'}
+            onClick={() => setMode('hotels')}
+          >
             Hotel Food &amp; Dining
+            {serviceMode === 'grocery_only' && <span className="soon-badge">Coming Soon</span>}
           </button>
         </div>
       </div>

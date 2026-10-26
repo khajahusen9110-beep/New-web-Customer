@@ -8,6 +8,8 @@ export interface City {
   center_lat?: number | null;
   center_lng?: number | null;
   service_radius_km?: number | null;
+  /** 'food_only' | 'grocery_only' | 'both' — set by City Admin (Launch Mode). Defaults to 'both'. */
+  service_mode?: 'food_only' | 'grocery_only' | 'both';
 }
 
 export interface CityLocationResult {
