@@ -16,6 +16,8 @@ export interface PromoInfo {
   startsAt: string | null;
   endsAt: string | null;
   bannerNote: string | null;
+  showRibbon: boolean;
+  showCountdown: boolean;
 }
 
 interface PromoState {
@@ -40,6 +42,9 @@ async function fetchOne(cityId: string, type: PromoKind): Promise<PromoInfo | nu
       startsAt: r.starts_at ?? null,
       endsAt: r.ends_at ?? null,
       bannerNote: r.banner_note ?? null,
+      // Default true: covers the rollout window before the RPC returns these columns.
+      showRibbon: r.show_ribbon !== false,
+      showCountdown: r.show_countdown !== false,
     };
   } catch {
     return null;

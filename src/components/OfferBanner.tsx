@@ -32,7 +32,7 @@ export function OfferBanner({ kind }: { kind?: PromoKind }) {
   const title = promo.bannerNote || `${pct}% OFF`;
 
   const end = promo.endsAt ? Date.parse(promo.endsAt) : NaN;
-  const show = !isNaN(end) && end > now;
+  const show = promo.showCountdown && !isNaN(end) && end > now;
   const p = show ? parts(end - now) : null;
 
   const cell = (v: string, l: string) => (
@@ -91,7 +91,7 @@ export function OfferRibbon() {
     return () => clearInterval(t);
   }, [promo?.endsAt]);
 
-  if (!promo || promo.percent <= 0) return null;
+  if (!promo || promo.percent <= 0 || !promo.showRibbon) return null;
 
   // Highest % across the active sections (so "up to X% OFF" is accurate when they differ).
   const pct = Math.round(Math.max(food?.percent ?? 0, grocery?.percent ?? 0));
@@ -100,7 +100,7 @@ export function OfferRibbon() {
 
   const end = promo.endsAt ? Date.parse(promo.endsAt) : NaN;
   let left = '';
-  if (!isNaN(end) && end > now) {
+  if (promo.showCountdown && !isNaN(end) && end > now) {
     const p = parts(end - now);
     left = p.d > 0 ? `${p.d}d ${pad(p.h)}h` : `${pad(p.h)}h ${pad(p.m)}m ${pad(p.s)}s`;
   }
