@@ -2126,6 +2126,33 @@ export async function applyAgentCode(code: string): Promise<void> {
   if (error) fail(error, 'Could not apply agent code');
 }
 
+// ---------- SCRATCH CARD (post-order reward) ----------
+
+export interface ScratchCard {
+  id: string;
+  order_id: string;
+  amount: number;
+  is_scratched: boolean;
+  status: 'pending' | 'credited' | 'voided';
+}
+
+/** The scratch card for an order, or null if none was generated (e.g. order below the minimum). */
+export async function getMyScratchCard(orderId: string): Promise<ScratchCard | null> {
+  const { data, error } = await supabase.rpc('get_my_scratch_card', { p_order_id: orderId });
+  if (error) fail(error, 'Failed to load scratch card');
+  if (!data) return null;
+  const d: any = data;
+  return { id: d.id, order_id: d.order_id, amount: num(d.amount), is_scratched: !!d.is_scratched, status: d.status };
+}
+
+/** Marks the card scratched (idempotent — calling again just returns the already-revealed amount). */
+export async function scratchMyCard(orderId: string): Promise<ScratchCard> {
+  const { data, error } = await supabase.rpc('scratch_my_card', { p_order_id: orderId });
+  if (error) fail(error, 'Failed to reveal scratch card');
+  const d: any = data;
+  return { id: d.id, order_id: d.order_id, amount: num(d.amount), is_scratched: !!d.is_scratched, status: d.status };
+}
+
 // ---------- NOTIFICATIONS ----------
 
 export async function getCustomerNotifications(userId: string, limit = 20, offset = 0): Promise<CustomerNotification[]> {

@@ -37,8 +37,11 @@ import {
   syncRazorpayPayment,
   UPI_PAYMENT_WINDOW_MIN,
   UPI_TIMEOUT_REASON,
+  getMyScratchCard,
+  scratchMyCard,
 } from '../lib/repository';
 import { openUpiCheckout } from '../lib/razorpay';
+import { ScratchCard } from '../components/ScratchCard';
 import type { CustomerAddress, DeliveryAssignment, DeliveryPartner, Order, OrderItem, OrderStatusHistory } from '../lib/types';
 import { capitalize, errorMessage, rupees, shortDateTime } from '../lib/utils';
 import { useSession } from '../store/session';
@@ -219,6 +222,7 @@ export default function OrderDetailPage() {
   const [checkingPayment, setCheckingPayment] = useState(false);
   const [cancelReason, setCancelReason] = useState<string | null>(null);
   const [payMsg, setPayMsg] = useState('Starting payment...');
+  const [scratchCard, setScratchCard] = useState<{ amount: number; is_scratched: boolean } | null>(null);
   const orderRef = useRef<Order | null>(null);
 
   const partnerRef = useRef<DeliveryPartner | null>(null);
@@ -277,6 +281,20 @@ export default function OrderDetailPage() {
     }, POLL_MS);
     return () => clearInterval(t);
   }, [load]);
+
+  // One-time per order: show the scratch-card reward if one was generated at checkout and
+  // hasn't been scratched yet.
+  useEffect(() => {
+    let cancelled = false;
+    getMyScratchCard(orderId)
+      .then((c) => {
+        if (!cancelled && c && !c.is_scratched) setScratchCard({ amount: c.amount, is_scratched: false });
+      })
+      .catch(() => undefined);
+    return () => {
+      cancelled = true;
+    };
+  }, [orderId]);
 
   const awaitingPayment = !!order && isAwaitingUpiPayment(order);
 
@@ -686,6 +704,16 @@ export default function OrderDetailPage() {
           </label>
         </div>
       </Modal>
+
+      {scratchCard && (
+        <ScratchCard
+          amount={scratchCard.amount}
+          onReveal={() => {
+            void scratchMyCard(orderId).catch(() => undefined);
+          }}
+          onClose={() => setScratchCard(null)}
+        />
+      )}
     </div>
   );
 }

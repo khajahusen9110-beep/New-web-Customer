@@ -13,6 +13,7 @@ const PAGE = 30;
 const ENTRY: Record<string, { label: string; sign: '+' | '−'; cls: string; Icon: typeof Gift }> = {
   cashback_credit: { label: 'Cashback received', sign: '+', cls: 'text-success', Icon: Gift },
   referral_credit: { label: 'Refer & Earn bonus', sign: '+', cls: 'text-success', Icon: Gift },
+  scratch_card_credit: { label: 'Scratch card reward', sign: '+', cls: 'text-success', Icon: Gift },
   wallet_used: { label: 'Used on order', sign: '−', cls: 'text-danger', Icon: ShoppingBag },
   wallet_refund: { label: 'Refund (order cancelled)', sign: '+', cls: 'text-success', Icon: Undo2 },
   cashback_reversed: { label: 'Cashback reversed (order cancelled)', sign: '−', cls: 'text-danger', Icon: RotateCcw },
