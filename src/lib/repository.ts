@@ -2083,11 +2083,15 @@ export interface ReferralStats {
   total_referred: number;
   total_rewarded: number;
   total_earned: number;
+  /** This city's current reward amounts (set by City Admin — may change over time). */
+  referrer_reward: number;
+  friend_reward: number;
+  min_order_amount: number;
 }
 
 /** The caller's referral code (created on first call) + how many friends they've earned from. */
 export async function getMyReferralStats(): Promise<ReferralStats> {
-  const { data, error } = await supabase.rpc('get_my_referral_stats');
+  const { data, error } = await supabase.rpc('get_my_referral_stats_v2');
   if (error) fail(error, 'Failed to load referral info');
   const row = (Array.isArray(data) ? data[0] : data) as ReferralStats | undefined;
   return {
@@ -2095,6 +2099,9 @@ export async function getMyReferralStats(): Promise<ReferralStats> {
     total_referred: num(row?.total_referred ?? 0),
     total_rewarded: num(row?.total_rewarded ?? 0),
     total_earned: num(row?.total_earned ?? 0),
+    referrer_reward: num(row?.referrer_reward ?? 50),
+    friend_reward: num(row?.friend_reward ?? 30),
+    min_order_amount: num(row?.min_order_amount ?? 99),
   };
 }
 

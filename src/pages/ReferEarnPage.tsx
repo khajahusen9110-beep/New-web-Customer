@@ -5,8 +5,6 @@ import { applyReferralCode, getMyReferralStats, getOrCreateReferralCode, type Re
 import { errorMessage, rupees } from '../lib/utils';
 
 const SHARE_URL = 'https://sndmart.in';
-const REFERRER_REWARD = 50;
-const FRIEND_REWARD = 30;
 
 export default function ReferEarnPage() {
   const [stats, setStats] = useState<ReferralStats | null>(null);
@@ -36,7 +34,10 @@ export default function ReferEarnPage() {
   }, []);
 
   const code = stats?.referral_code ?? '';
-  const message = `Sndmart se order karo aur ${FRIEND_REWARD} rupaye paao! Mera referral code use karo: ${code}\n${SHARE_URL}`;
+  const friendReward = stats?.friend_reward ?? 30;
+  const referrerReward = stats?.referrer_reward ?? 50;
+  const minOrder = stats?.min_order_amount ?? 99;
+  const message = `Sndmart se order karo aur ${friendReward} rupaye paao! Mera referral code use karo: ${code}\n${SHARE_URL}`;
 
   const copyCode = () => {
     if (!code) return;
@@ -86,7 +87,7 @@ export default function ReferEarnPage() {
               <Gift size={36} className="text-primary" />
               <h2 className="big bold">Refer friends, earn wallet cash</h2>
               <p className="muted small">
-                Share your code — your friend gets ₹{FRIEND_REWARD} on their first order, and you get ₹{REFERRER_REWARD} in your
+                Share your code — your friend gets ₹{friendReward} on their first order, and you get ₹{referrerReward} in your
                 Sndmart wallet.
               </p>
             </div>
@@ -126,7 +127,7 @@ export default function ReferEarnPage() {
               <div className="card pad stack">
                 <span className="muted small">Got a friend's code?</span>
                 {applied ? (
-                  <p className="text-success small">Code applied — place your first order to unlock ₹{FRIEND_REWARD} bonus.</p>
+                  <p className="text-success small">Code applied — place your first order to unlock ₹{friendReward} bonus.</p>
                 ) : (
                   <>
                     <div className="row gap-8">
@@ -152,7 +153,7 @@ export default function ReferEarnPage() {
               <ol className="muted small refer-steps">
                 <li>Share your code with a friend who hasn't ordered on Sndmart yet.</li>
                 <li>They enter it on this page before placing their first order.</li>
-                <li>When their first order (₹99+) is delivered, you both get wallet cash.</li>
+                <li>When their first order (₹{minOrder}+) is delivered, you both get wallet cash.</li>
               </ol>
             </div>
           </>
