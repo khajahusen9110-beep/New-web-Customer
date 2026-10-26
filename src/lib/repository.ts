@@ -37,6 +37,7 @@ import type {
   WalletLedgerEntry,
   WalletUsable,
   PromoBanner,
+  LocalAd,
 } from './types';
 import {
   defaultMenuTab,
@@ -568,6 +569,63 @@ export async function getPromoBanners(cityId: string, placement: 'grocery' | 'fo
     forceRefresh,
   );
   return liveBanners(list);
+}
+
+// ---------- LOCAL ADS (paid banners from local businesses, set per-city by City Admin) ----------
+
+const LOCAL_AD_COLS =
+  'id,city_id,advertiser_name,image_url,placement,ad_type,link_type,link_value,sort_order,starts_at,ends_at';
+const MAX_LOCAL_ADS = 5;
+
+const localAdsKey = (cityId: string, placement: 'home' | 'food_bottom' | 'grocery_bottom') => `localAds:${cityId}:${placement}`;
+
+const liveLocalAds = (list: LocalAd[]) => {
+  const now = Date.now();
+  return list.filter((a) => (!a.starts_at || Date.parse(a.starts_at) <= now) && (!a.ends_at || Date.parse(a.ends_at) > now));
+};
+
+/** Last-seen local ads (instant first paint); fresh ones come from getLocalAds. */
+export const peekLocalAds = (cityId: string, placement: 'home' | 'food_bottom' | 'grocery_bottom') => {
+  const seen = peek<LocalAd[]>(localAdsKey(cityId, placement));
+  return seen ? liveLocalAds(seen) : null;
+};
+
+/**
+ * Paid local-business ads for a placement ('home' top banner, or the bottom of the food /
+ * grocery lists). The database only returns ads switched on and inside their schedule.
+ */
+export async function getLocalAds(
+  cityId: string,
+  placement: 'home' | 'food_bottom' | 'grocery_bottom',
+  forceRefresh = false,
+): Promise<LocalAd[]> {
+  const list = await cached(
+    localAdsKey(cityId, placement),
+    CACHE_TTL_MS,
+    async () => {
+      const { data, error } = await supabase
+        .from('local_ads')
+        .select(LOCAL_AD_COLS)
+        .eq('city_id', cityId)
+        .in('placement', [placement, 'all'])
+        .order('sort_order', { ascending: true })
+        .limit(MAX_LOCAL_ADS);
+      if (error) return { value: [] as LocalAd[], cache: false as const };
+      return ((data ?? []) as LocalAd[]).filter((a) => /^https:\/\//.test(a.image_url));
+    },
+    forceRefresh,
+  );
+  return liveLocalAds(list);
+}
+
+/** Opens a local ad's link (website/map in a new tab, WhatsApp chat, or the dialer). Does nothing for a Fixed ad. */
+export function openLocalAdLink(ad: LocalAd) {
+  if (ad.ad_type !== 'clickable' || !ad.link_value) return;
+  if (ad.link_type === 'call') {
+    window.location.href = ad.link_value;
+  } else {
+    window.open(ad.link_value, '_blank', 'noopener,noreferrer');
+  }
 }
 
 // ---------- HOTEL DISH CATEGORIES ("What's on your mind?") ----------

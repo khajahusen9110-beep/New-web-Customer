@@ -542,6 +542,11 @@ a.install-ok { display: flex; align-items: center; justify-content: center; text
 .cashback-kn { margin: 8px 0 0; color: var(--red); font-size: 14px; font-weight: 700; line-height: 1.5; }
 
 /* Super-Admin promo banners */
+.local-ad-strip { display: flex; flex-direction: column; gap: 8px; margin-bottom: 12px; }
+.local-ad-card { position: relative; border-radius: 12px; overflow: hidden; background: var(--surface-variant); }
+.local-ad-card.clickable { cursor: pointer; }
+.local-ad-card img { width: 100%; display: block; aspect-ratio: 3 / 1; object-fit: cover; }
+.local-ad-tag { position: absolute; top: 6px; right: 6px; background: rgba(0, 0, 0, 0.55); color: #fff; font-size: 10px; font-weight: 700; letter-spacing: 0.03em; padding: 2px 7px; border-radius: 999px; }
 .promo-carousel { margin-bottom: 12px; }
 .promo-track { display: flex; overflow-x: auto; scroll-snap-type: x mandatory; scrollbar-width: none; border-radius: 20px; box-shadow: var(--shadow); }
 .promo-track::-webkit-scrollbar { display: none; }

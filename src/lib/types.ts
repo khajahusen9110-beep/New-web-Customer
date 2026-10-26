@@ -418,3 +418,18 @@ export interface PromoBanner {
   starts_at?: string | null;
   ends_at?: string | null;
 }
+
+/** A paid banner for a local business (table local_ads), set by that city's own City Admin. */
+export interface LocalAd {
+  id: string;
+  city_id: string;
+  advertiser_name: string;
+  image_url: string;
+  placement: 'home' | 'food_bottom' | 'grocery_bottom' | 'all';
+  ad_type: 'fixed' | 'clickable';
+  link_type: 'website' | 'whatsapp' | 'call' | 'map' | null;
+  link_value: string | null;
+  sort_order: number;
+  starts_at?: string | null;
+  ends_at?: string | null;
+}

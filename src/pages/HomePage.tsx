@@ -53,6 +53,8 @@ import {
   prefetchHotelMenu,
   getPromoBanners,
   peekPromoBanners,
+  getLocalAds,
+  peekLocalAds,
   peekFeaturedGroceryProducts,
   peekTopSellingGroceryProducts,
   peekTopSellingFoodProducts,
@@ -62,8 +64,9 @@ import {
   peekHotelExtras,
   peekHotels,
 } from '../lib/repository';
-import type { CartItem, Category, Coupon, OperatingSlot, PromoBanner, ResolvedProduct, Vendor } from '../lib/types';
+import type { CartItem, Category, Coupon, LocalAd, OperatingSlot, PromoBanner, ResolvedProduct, Vendor } from '../lib/types';
 import { PromoCarousel } from '../components/PromoCarousel';
+import { LocalAdStrip } from '../components/LocalAdStrip';
 import { OfferBanner } from '../components/OfferBanner';
 import { OfferInline } from '../lib/promo';
 import { useDebounced, useFreshCart, useInfiniteSentinel, useMyWallet } from '../lib/hooks';
@@ -543,6 +546,7 @@ function HotelCard({
 
 const NO_ITEMS: CartItem[] = [];
 const NO_BANNERS: PromoBanner[] = [];
+const NO_LOCAL_ADS: LocalAd[] = [];
 
 /** Vegetables and fruits only (vegetables first), like the app. */
 function shownGroceryCategories(list: Category[]): Category[] {
@@ -616,6 +620,14 @@ export default function HomePage() {
   // Never show the other tab's banners while this tab's load.
   const banners = bannerState.placement === placementNow ? bannerState.list : NO_BANNERS;
   const setBanners = (placement: 'grocery' | 'food', list: PromoBanner[]) => setBannerState({ placement, list });
+  // Local-business paid ads: 'home' banner + bottom-of-list strip for each tab.
+  const [homeAds, setHomeAds] = useState<LocalAd[]>([]);
+  const [bottomAdState, setBottomAdState] = useState<{ placement: 'grocery_bottom' | 'food_bottom'; list: LocalAd[] }>({
+    placement: 'grocery_bottom',
+    list: [],
+  });
+  const bottomAdsNow = mode === 'hotels' ? 'food_bottom' : 'grocery_bottom';
+  const bottomAds = bottomAdState.placement === bottomAdsNow ? bottomAdState.list : NO_LOCAL_ADS;
   const groceryTopRef = useRef<HTMLDivElement | null>(null);
   const hotelsListRef = useRef<HTMLDivElement | null>(null);
   const selectedDish = dishes.find((d) => d.key === dishKeySel) ?? null;
@@ -914,6 +926,33 @@ export default function HomePage() {
     };
   }, [mode, cityId]);
 
+  // Home-page ad banner — loads once per city (shown at the top, same spot on both tabs).
+  useEffect(() => {
+    if (!cityId) return;
+    let cancelled = false;
+    setHomeAds(peekLocalAds(cityId, 'home') ?? []);
+    getLocalAds(cityId, 'home')
+      .then((a) => !cancelled && setHomeAds(a))
+      .catch(() => undefined);
+    return () => {
+      cancelled = true;
+    };
+  }, [cityId]);
+
+  // Bottom-of-list ad strip, per active tab.
+  useEffect(() => {
+    if (!cityId) return;
+    const placement = mode === 'hotels' ? 'food_bottom' : 'grocery_bottom';
+    let cancelled = false;
+    setBottomAdState({ placement, list: peekLocalAds(cityId, placement) ?? [] });
+    getLocalAds(cityId, placement)
+      .then((a) => !cancelled && setBottomAdState({ placement, list: a }))
+      .catch(() => undefined);
+    return () => {
+      cancelled = true;
+    };
+  }, [mode, cityId]);
+
   const openBanner = (b: PromoBanner) => {
     if (!b.link_value) return;
     if (b.link_type === 'hotel') navigate(`/hotel/${b.link_value}`);
@@ -1071,6 +1110,7 @@ export default function HomePage() {
           {threshold != null && <FreeDeliveryBanner threshold={threshold} />}
           {!search && (
             <>
+              {homeAds.length > 0 && <LocalAdStrip ads={homeAds} />}
               {banners.length ? <PromoCarousel banners={banners} onOpen={openBanner} /> : <DealsBanner />}
               <OfferBanner kind="grocery" />
               {topSelling.length > 0 && (
@@ -1156,6 +1196,7 @@ export default function HomePage() {
                   )}
                 </div>
               )}
+              {!groceryHasMore && bottomAds.length > 0 && <LocalAdStrip ads={bottomAds} />}
             </>
           )}
         </div>
@@ -1272,6 +1313,7 @@ export default function HomePage() {
                   )}
                 </div>
               )}
+              {!hotelsHasMore && bottomAds.length > 0 && <LocalAdStrip ads={bottomAds} />}
             </>
           )}
         </div>
