@@ -707,7 +707,7 @@ export default function CheckoutPage() {
             </div>
             {!codAllowed && (
               <p className="text-danger small" style={{ marginTop: 8 }}>
-                Cash on Delivery aapke account par abhi uplabdh nahi hai (pichle cancelled orders ki wajah se). Kripya UPI se pay karein.
+                ಕ್ಯಾಶ್ ಆನ್ ಡೆಲಿವರಿ ನಿಮ್ಮ ಖಾತೆಯಲ್ಲಿ ಸದ್ಯಕ್ಕೆ ಲಭ್ಯವಿಲ್ಲ (ಹಿಂದಿನ ರದ್ದಾದ ಆರ್ಡರ್‌ಗಳ ಕಾರಣದಿಂದ). ದಯವಿಟ್ಟು UPI ಮೂಲಕ ಪಾವತಿಸಿ.
               </p>
             )}
           </section>
