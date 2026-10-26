@@ -3,6 +3,7 @@ import type { CartItem, CartItemUi, MyWallet, OperatingSlot, ResolvedProduct, Ve
 import { buildCartLines, getLiveCartProducts, getMyWallet, getVendor, getVendorOperatingSlots } from './repository';
 import { cartTotal, checkCartLine, hotelClosedMessage, isVendorOpenNow, type CartLineCheck } from './utils';
 import { useCart } from '../store/cart';
+import { useSession } from '../store/session';
 
 export function useDebounced<T>(value: T, ms = 350): T {
   const [v, setV] = useState(value);
@@ -154,8 +155,9 @@ export function useCartCheck(rawItems: CartItem[], cityId: string | null | undef
     for (const l of over) updateQuantity(l.cartItem.product_id, false, l.maxQty!, l.cartItem.variant_id);
   });
 
-  const hotelOpen = !hotel?.vendor || isVendorOpenNow(hotel.vendor, hotel.slots);
-  const hotelClosed = isHotel && !!hotel && !hotelOpen ? hotelClosedMessage(hotel.vendor, hotel.slots) : null;
+  const city = useSession((s) => s.selectedCity);
+  const hotelOpen = !hotel?.vendor || isVendorOpenNow(hotel.vendor, hotel.slots, city);
+  const hotelClosed = isHotel && !!hotel && !hotelOpen ? hotelClosedMessage(hotel.vendor, hotel.slots, city) : null;
   const available = checked.filter((l) => l.state === 'ok');
   const unavailable = checked.filter((l) => l.state !== 'ok');
   // Lines not in `fresh` yet (still loading) are neither; never order before every line is checked.

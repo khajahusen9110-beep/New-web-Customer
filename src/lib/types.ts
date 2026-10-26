@@ -10,6 +10,11 @@ export interface City {
   service_radius_km?: number | null;
   /** 'food_only' | 'grocery_only' | 'both' — set by City Admin (Launch Mode). Defaults to 'both'. */
   service_mode?: 'food_only' | 'grocery_only' | 'both';
+  /** City-wide ordering window (City Admin, Operating Hours) — caps every vendor's own hours. */
+  open_time?: string | null;
+  close_time?: string | null;
+  /** City Admin's Emergency Close switch — instantly stops every vendor from taking new orders. */
+  emergency_closed?: boolean;
 }
 
 export interface CityLocationResult {

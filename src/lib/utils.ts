@@ -1,6 +1,7 @@
 import type {
   CartItemUi,
   Category,
+  City,
   Coupon,
   CustomerNotification,
   DeliverySlot,
@@ -98,6 +99,16 @@ export function isWithinAnySlot(slots: OperatingSlot[]): boolean {
   return slots.some((s) => isWithinOperatingHours(s.start_time, s.end_time));
 }
 
+/**
+ * City Admin's Operating Hours cap: outside this window, or while Emergency Closed, nothing in
+ * the city — hotel or grocery — can be ordered, regardless of any vendor's own hours.
+ */
+export function isCityOpenNow(city?: Pick<City, 'open_time' | 'close_time' | 'emergency_closed'> | null): boolean {
+  if (!city) return true;
+  if (city.emergency_closed) return false;
+  return isWithinOperatingHours(city.open_time, city.close_time);
+}
+
 export const shortTime = (t?: string | null) => {
   if (!t) return '';
   return t.length >= 8 && t.split(':').length === 3 ? t.slice(0, 5) : t;
@@ -105,7 +116,11 @@ export const shortTime = (t?: string | null) => {
 
 // ---------- Product helpers (ported from ResolvedProduct) ----------
 
-export function isInStockAndActive(p: ResolvedProduct): boolean {
+export function isInStockAndActive(
+  p: ResolvedProduct,
+  city?: Pick<City, 'open_time' | 'close_time' | 'emergency_closed'> | null,
+): boolean {
+  if (!isCityOpenNow(city)) return false;
   if (p.variants.length > 0) {
     return p.isActive && p.variants.some((v) => v.isAvailable && v.stockQty > 0);
   }
@@ -172,7 +187,17 @@ export function checkCartLine(line: CartItemUi, isHotel: boolean): CartLineCheck
 }
 
 /** Closed message for a hotel (same wording as its menu page). */
-export function hotelClosedMessage(v: Vendor | null, slots: OperatingSlot[]): string {
+export function hotelClosedMessage(
+  v: Vendor | null,
+  slots: OperatingSlot[],
+  city?: Pick<City, 'open_time' | 'close_time' | 'emergency_closed'> | null,
+): string {
+  if (city?.emergency_closed) {
+    return 'This city is temporarily closed for orders. Please check back shortly.';
+  }
+  if (!isCityOpenNow(city)) {
+    return `Ordering is closed for now (city hours ${shortTime(city?.open_time)}–${shortTime(city?.close_time)}).`;
+  }
   const hours = v ? vendorHours(v, slots) : slots;
   if (!isWithinAnySlot(hours)) {
     if (slots.length) {
@@ -294,8 +319,12 @@ export function vendorHours(v: Vendor, slots?: OperatingSlot[] | null): Operatin
  * Open right now: active, not switched off by the hotel, and inside its hours. The single check
  * behind the OPEN NOW / CLOSED badge, the grayscale card, the menu page and the list order.
  */
-export function isVendorOpenNow(v: Vendor, slots?: OperatingSlot[] | null): boolean {
-  return v.is_active !== false && v.is_open !== false && isWithinAnySlot(vendorHours(v, slots));
+export function isVendorOpenNow(
+  v: Vendor,
+  slots?: OperatingSlot[] | null,
+  city?: Pick<City, 'open_time' | 'close_time' | 'emergency_closed'> | null,
+): boolean {
+  return v.is_active !== false && v.is_open !== false && isWithinAnySlot(vendorHours(v, slots)) && isCityOpenNow(city);
 }
 
 /** 0 open + featured, 1 open, 2 closed + featured, 3 closed. Featured never beats open. */

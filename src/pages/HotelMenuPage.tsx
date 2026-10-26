@@ -33,6 +33,7 @@ import {
   errorMessage,
   hotelClosedMessage,
   isHotelItemAvailable,
+  isCityOpenNow,
   isVendorOpenNow,
   isWithinAnySlot,
   menuTabs,
@@ -95,6 +96,7 @@ export default function HotelMenuPage() {
   const [params] = useSearchParams();
   const navigate = useNavigate();
   const cityId = useSession((s) => s.selectedCity?.id ?? '');
+  const city = useSession((s) => s.selectedCity);
   const hotelCart = useCart((s) => s.hotelCart);
   const addToCart = useCart((s) => s.addToCart);
   const forceClearHotelCartAndAdd = useCart((s) => s.forceClearHotelCartAndAdd);
@@ -186,7 +188,7 @@ export default function HotelMenuPage() {
 
   const withinHours = isWithinAnySlot(effectiveSlots);
   // Same check as the OPEN NOW badge on Home (active, not switched off, inside hours).
-  const hotelOpen = vendor ? isVendorOpenNow(vendor, slots) : withinHours;
+  const hotelOpen = vendor ? isVendorOpenNow(vendor, slots, city) : withinHours && isCityOpenNow(city);
 
   // "Featured" row: this hotel's featured items that can be ordered right now (max 10).
   const [featuredItems, setFeaturedItems] = useState<ResolvedProduct[]>([]);
@@ -329,7 +331,7 @@ export default function HotelMenuPage() {
     hasMore && products.length > 0,
   );
 
-  const closedMessage = hotelClosedMessage(vendor, slots);
+  const closedMessage = hotelClosedMessage(vendor, slots, city);
 
   const refresh = () => {
     void loadInitial(true);

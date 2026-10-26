@@ -333,7 +333,8 @@ function GroceryProductCard({
   /** First cards on screen: image loads immediately. */
   priority?: boolean;
 }) {
-  const inStock = isInStockAndActive(product);
+  const city = useSession((s) => s.selectedCity);
+  const inStock = isInStockAndActive(product, city);
   const hasVariants = product.variants.length > 0;
   return (
     <div className={`card product-card${inStock ? '' : ' dimmed'}`}>
@@ -494,8 +495,9 @@ function HotelCard({
   onClick: () => void;
   matches?: DishMatch[];
 }) {
+  const city = useSession((s) => s.selectedCity);
   const isActive = vendor.is_active !== false;
-  const isOpen = isVendorOpenNow(vendor, slots);
+  const isOpen = isVendorOpenNow(vendor, slots, city);
   const hours = slots?.length
     ? `Hours: ${slots.map((s) => `${s.start_time}-${s.end_time}`).join(', ')}`
     : vendor.opening_time && vendor.closing_time

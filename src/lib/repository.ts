@@ -190,7 +190,8 @@ const num = (v: unknown, d = 0) => (v === null || v === undefined || v === '' ? 
 
 // ---------- CITIES ----------
 
-const CITY_COLS = 'id,name,state,status,center_lat,center_lng,service_radius_km,service_mode';
+const CITY_COLS =
+  'id,name,state,status,center_lat,center_lng,service_radius_km,service_mode,open_time,close_time,emergency_closed';
 
 export function getActiveCities(forceRefresh = false): Promise<City[]> {
   return cached(
@@ -1005,7 +1006,7 @@ export function getTopSellingGroceryProducts(cityId: string, forceRefresh = fals
       if (error) return [];
       const resolved = ((data ?? []) as unknown as Product[])
         .map((prod) => resolveProduct(prod, cityStockOf(prod), cityId))
-        .filter(isInStockAndActive)
+        .filter((p) => isInStockAndActive(p))
         .map((p) => ({ ...p, soldCount: soldById.get(p.id) ?? 0 }));
       // Keep the RPC's best-selling order.
       resolved.sort((a, b) => (b.soldCount ?? 0) - (a.soldCount ?? 0));
@@ -1076,7 +1077,7 @@ export function getFeaturedGroceryProducts(cityId: string, forceRefresh = false)
       if (error) fail(error, 'Could not load featured products');
       return ((data ?? []) as unknown as Product[])
         .map((prod) => resolveProduct(prod, cityStockOf(prod), cityId))
-        .filter(isInStockAndActive)
+        .filter((p) => isInStockAndActive(p))
         .slice(0, 10);
     },
     forceRefresh,
