@@ -2118,6 +2118,14 @@ export async function applyReferralCode(code: string): Promise<void> {
   if (error) fail(error, 'Could not apply referral code');
 }
 
+// ---------- AGENT PROGRAM (separate from Refer & Earn — see apply_agent_code) ----------
+
+/** Links the caller to an agent by their code (one-time, permanent). Independent of Refer & Earn. */
+export async function applyAgentCode(code: string): Promise<void> {
+  const { error } = await supabase.rpc('apply_agent_code', { p_code: code });
+  if (error) fail(error, 'Could not apply agent code');
+}
+
 // ---------- NOTIFICATIONS ----------
 
 export async function getCustomerNotifications(userId: string, limit = 20, offset = 0): Promise<CustomerNotification[]> {

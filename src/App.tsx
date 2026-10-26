@@ -5,6 +5,7 @@ import { useRouteSeo } from './lib/seo';
 import { Navigate, Route, Routes, useLocation, useNavigate } from 'react-router-dom';
 import { supabase, isSupabaseConfigured } from './lib/supabase';
 import {
+  applyAgentCode,
   checkMaintenanceMode,
   checkStillActiveDevice,
   getAddresses,
@@ -12,6 +13,7 @@ import {
   resolveUserCity,
   syncPendingUpiOrders,
 } from './lib/repository';
+import { takePendingAgentCode } from './lib/agentCode';
 import { useSession } from './store/session';
 import { useCart } from './store/cart';
 import { CenterSpinner, ToastHost, toast } from './components/ui';
@@ -32,6 +34,7 @@ const ProfilePage = lazy(() => import('./pages/ProfilePage'));
 const NotificationsPage = lazy(() => import('./pages/NotificationsPage'));
 const WalletPage = lazy(() => import('./pages/WalletPage'));
 const ReferEarnPage = lazy(() => import('./pages/ReferEarnPage'));
+const AgentCodePage = lazy(() => import('./pages/AgentCodePage'));
 const MyReviewsPage = lazy(() => import('./pages/MyReviewsPage'));
 const AddressBookPage = lazy(() => import('./pages/AddressBookPage'));
 const EditProfilePage = lazy(() => import('./pages/EditProfilePage'));
@@ -122,6 +125,10 @@ function useLoggedInEffects() {
       void refreshUnreadNotificationCount(userId);
       // A UPI payment whose success callback was lost (tab closed in the UPI app switch).
       void syncPendingUpiOrders(userId);
+      // An agent's shared link (?agent=CODE) was captured before login — apply it now that
+      // we have a signed-in user. Silently ignored if invalid/already-linked/self-code.
+      const pendingAgentCode = takePendingAgentCode();
+      if (pendingAgentCode) void applyAgentCode(pendingAgentCode).catch(() => undefined);
       if (!cancelled) setVerified(true);
     })();
 
@@ -264,6 +271,7 @@ export default function App() {
             <Route path="/notifications" element={<NotificationsPage />} />
             <Route path="/wallet" element={<WalletPage />} />
             <Route path="/refer" element={<ReferEarnPage />} />
+            <Route path="/agent-code" element={<AgentCodePage />} />
             <Route path="/reviews" element={<MyReviewsPage />} />
             <Route path="/addresses" element={<AddressBookPage />} />
             <Route path="/profile/edit" element={<EditProfilePage />} />

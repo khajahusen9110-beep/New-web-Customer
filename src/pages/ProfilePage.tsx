@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { Bell, Building2, ChevronRight, CircleHelp, Gift, LogOut, MapPin, Star, User, UserRound, Wallet } from 'lucide-react';
+import { Bell, Briefcase, Building2, ChevronRight, CircleHelp, Gift, LogOut, MapPin, Star, User, UserRound, Wallet } from 'lucide-react';
 import { ConfirmDialog, PageHeader } from '../components/ui';
 import { openCityPicker } from '../components/CityPicker';
 import { signOut } from '../lib/repository';
@@ -41,6 +41,12 @@ export default function ProfilePage() {
       title: 'Refer & Earn',
       sub: 'Share your code, earn wallet cash',
       go: () => navigate('/refer'),
+    },
+    {
+      Icon: Briefcase,
+      title: 'Agent Code',
+      sub: 'Referred by a Sndmart Agent? Enter their code',
+      go: () => navigate('/agent-code'),
     },
     { Icon: Star, title: 'My Reviews', sub: 'Reviews you have submitted', go: () => navigate('/reviews') },
     { Icon: CircleHelp, title: 'Help & Support', sub: 'Call, WhatsApp or email us', go: () => navigate('/help') },
