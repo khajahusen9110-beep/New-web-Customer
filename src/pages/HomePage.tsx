@@ -550,12 +550,13 @@ const NO_ITEMS: CartItem[] = [];
 const NO_BANNERS: PromoBanner[] = [];
 const NO_LOCAL_ADS: LocalAd[] = [];
 
-/** Vegetables and fruits only (vegetables first), like the app. */
+/** All active grocery categories (any vendor_type City Admin created), vegetables first, then fruits, then the rest. */
+const CATEGORY_TYPE_ORDER: Record<string, number> = { vegetable: 0, fruit: 1 };
 function shownGroceryCategories(list: Category[]): Category[] {
-  const filtered = list.filter((c) => /veg|fruit/i.test(c.name));
-  return [...(filtered.length ? filtered : list)].sort((a, b) => (/veg/i.test(a.name) ? 0 : 1) - (/veg/i.test(b.name) ? 0 : 1));
+  const order = (c: Category) => CATEGORY_TYPE_ORDER[c.vendor_type ?? ''] ?? (/veg/i.test(c.name) ? 0 : /fruit/i.test(c.name) ? 1 : 2);
+  return [...list].sort((a, b) => order(a) - order(b));
 }
-const firstGroceryCategory = (shown: Category[]) => (shown.find((c) => /veg/i.test(c.name)) ?? shown[0])?.id ?? null;
+const firstGroceryCategory = (shown: Category[]) => shown[0]?.id ?? null;
 
 /** Runs low-priority work (prefetching) when the browser is idle. */
 function whenIdle(fn: () => void) {
