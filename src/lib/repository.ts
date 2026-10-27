@@ -217,8 +217,8 @@ export async function findCityForLocation(lat: number, lng: number): Promise<Cit
   return rows[0] ?? null;
 }
 
-export async function getCity(cityId: string): Promise<City | null> {
-  const cities = await getActiveCities().catch(() => [] as City[]);
+export async function getCity(cityId: string, forceRefresh = false): Promise<City | null> {
+  const cities = await getActiveCities(forceRefresh).catch(() => [] as City[]);
   const hit = cities.find((c) => c.id === cityId);
   if (hit) return hit;
   const { data } = await supabase.from('cities').select(CITY_COLS).eq('id', cityId).limit(1);

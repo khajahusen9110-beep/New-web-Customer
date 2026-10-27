@@ -9,6 +9,7 @@ import {
   checkMaintenanceMode,
   checkStillActiveDevice,
   getAddresses,
+  getCity,
   refreshUnreadNotificationCount,
   resolveUserCity,
   syncPendingUpiOrders,
@@ -109,6 +110,16 @@ function useLoggedInEffects() {
       if (!s.selectedCity) {
         const city = await resolveUserCity(userId);
         if (city) s.setSelectedCity(city);
+      } else {
+        // A returning session's selectedCity is persisted to localStorage and would
+        // otherwise never pick up admin changes (service_mode, operating hours,
+        // emergency_closed) made after it was first cached — refresh it from the server.
+        try {
+          const fresh = await getCity(s.selectedCity.id, true);
+          if (fresh) useSession.getState().setSelectedCity(fresh);
+        } catch {
+          /* keep the cached city when offline */
+        }
       }
       try {
         const addresses = await getAddresses(userId);
