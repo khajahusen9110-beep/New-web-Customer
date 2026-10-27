@@ -86,6 +86,7 @@ export function initAnalyticsSession(): void {
         id,
         user_id: userId,
         is_authenticated: Boolean(userId),
+        platform: 'web',
         device_type: deviceType,
         browser,
         os,
