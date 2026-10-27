@@ -308,11 +308,13 @@ export default function CheckoutPage() {
       }
     }
     if (result.kind === 'cancelled') {
+      trackEvent('payment_failed', { method: 'upi', reason: 'upi_cancelled' });
       toast('Payment cancelled. You can retry from your Orders page.');
       navigate(`/orders/${orderId}`, { replace: true });
       return;
     }
     if (result.kind === 'error') {
+      trackEvent('payment_failed', { method: 'upi', reason: 'upi_error' });
       toast(result.message);
       navigate(`/orders/${orderId}`, { replace: true });
       return;
@@ -327,6 +329,7 @@ export default function CheckoutPage() {
     // Also confirms with Razorpay directly, in case the verification request did not get through.
     const synced = await syncRazorpayPayment(orderId);
     if (!ok && synced !== 'paid') {
+      trackEvent('payment_failed', { method: 'upi', reason: 'upi_verification_failed' });
       setPlacementError(PAYMENT_VERIFY_FAILED);
       toast(PAYMENT_VERIFY_FAILED);
     }
@@ -414,6 +417,14 @@ export default function CheckoutPage() {
       }
       // Wallet balance changed (used elsewhere / expired): refresh what can be used.
       if (/wallet/i.test(msg)) void runPreview(previewCoupon ? appliedCode : null, payableBeforeWallet, true);
+      // Order was never created — a short, non-PII reason tag only (never the raw message, which
+      // can embed order/customer-specific text).
+      const reason = appliedCode && /coupon|minimum order amount/i.test(msg)
+        ? 'coupon_rejected'
+        : /wallet/i.test(msg)
+          ? 'wallet_mismatch'
+          : 'order_creation_failed';
+      trackEvent('payment_failed', { method: payment, reason });
       setPlacementError(msg);
       toast(msg);
     } finally {
