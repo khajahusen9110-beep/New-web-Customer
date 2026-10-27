@@ -87,6 +87,7 @@ import {
 } from '../lib/utils';
 import { shouldShowRatingPopup, useSession } from '../store/session';
 import { cartCount, useCart } from '../store/cart';
+import { trackEvent } from '../lib/analytics';
 
 const GROCERY_PAGE = 30;
 const HOTEL_PAGE = 20;
@@ -695,6 +696,9 @@ export default function HomePage() {
           return sortGrocery([...cur, ...list.filter((p) => !seen.has(p.id))]);
         });
         setGroceryHasMore(list.length >= GROCERY_PAGE);
+        if (reset && query) {
+          trackEvent('search', { query, result_count: list.length, zero_result: list.length === 0, mode: 'grocery' });
+        }
       } catch (e) {
         if (id !== reqId.current) return;
         if (reset) {
@@ -747,6 +751,9 @@ export default function HomePage() {
           return [...cur, ...list.filter((h) => !seen.has(h.id))];
         });
         setHotelsHasMore(list.length >= HOTEL_PAGE);
+        if (reset && query) {
+          trackEvent('search', { query, result_count: list.length, zero_result: list.length === 0, mode: 'hotel' });
+        }
       } catch (e) {
         if (id === reqId.current && reset) setHotelsError(errorMessage(e));
       } finally {
@@ -1169,7 +1176,15 @@ export default function HomePage() {
                 </section>
               )}
               <div ref={groceryTopRef} />
-              <CategoryRow categories={categories} selectedId={categoryId} onSelect={setCategoryId} />
+              <CategoryRow
+                categories={categories}
+                selectedId={categoryId}
+                onSelect={(id) => {
+                  setCategoryId(id);
+                  const cat = categories.find((c) => c.id === id);
+                  trackEvent('category_select', { category_id: id, category_name: cat?.name });
+                }}
+              />
             </>
           )}
           {groceryLoading && products.length === 0 ? (

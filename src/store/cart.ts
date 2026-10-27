@@ -3,6 +3,7 @@ import { persist } from 'zustand/middleware';
 import { supabase } from '../lib/supabase';
 import type { CartItem } from '../lib/types';
 import { useSession } from './session';
+import { trackEvent } from '../lib/analytics';
 
 // In-memory carts are the UI source of truth; they are mirrored to the
 // cart_items table (no prices stored) exactly like the Android app does.
@@ -142,6 +143,9 @@ export const useCart = create<CartState>()(
           set({ groceryCart: applyDelta(get().groceryCart, productId, variantId, quantityDelta, make) });
         }
         persistCart();
+        if (quantityDelta > 0) {
+          trackEvent('add_to_cart', { product_id: productId, vendor_id: vendorId, is_hotel: isHotel, quantity: quantityDelta });
+        }
         return { kind: 'success' };
       },
 

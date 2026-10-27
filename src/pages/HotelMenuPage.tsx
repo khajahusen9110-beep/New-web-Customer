@@ -42,6 +42,7 @@ import {
 } from '../lib/utils';
 import { useSession } from '../store/session';
 import { cartCount, useCart } from '../store/cart';
+import { trackEvent } from '../lib/analytics';
 
 const PAGE = HOTEL_MENU_PAGE;
 
@@ -127,7 +128,10 @@ export default function HotelMenuPage() {
         getVendorOperatingSlots(vendorId, force),
         getHotelCategories(vendorId, force),
       ]);
-      if (v.status === 'fulfilled') setVendor(v.value);
+      if (v.status === 'fulfilled') {
+        setVendor(v.value);
+        trackEvent('product_view', { vendor_id: vendorId, vendor_name: v.value?.name, category: 'hotel' });
+      }
       if (s.status === 'fulfilled') setSlots(s.value);
       // The selected tab is chosen once the tab order is known (see below).
       if (c.status === 'fulfilled') setCategories(c.value);

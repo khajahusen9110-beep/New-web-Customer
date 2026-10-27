@@ -9,6 +9,7 @@ import { getHotelProducts } from '../lib/repository';
 import type { ResolvedProduct } from '../lib/types';
 import { useSession } from '../store/session';
 import { cartCount, useCart } from '../store/cart';
+import { trackEvent } from '../lib/analytics';
 
 /** "Add more items" strip: popular items from the same hotel that aren't in the cart yet. */
 function FoodRecommendations({ vendorId, cityId, inCartIds }: { vendorId: string; cityId: string; inCartIds: string[] }) {
@@ -120,6 +121,7 @@ export default function CartPage() {
       toast(`Removed ${unavailableCount} unavailable item${unavailableCount > 1 ? 's' : ''}`);
       if (removedAll) return;
     }
+    trackEvent('checkout_started', { mode: isHotel ? 'hotel' : 'grocery', item_count: lines.length, subtotal });
     navigate(`/checkout/${isHotel ? 'hotel' : 'grocery'}`);
   };
 

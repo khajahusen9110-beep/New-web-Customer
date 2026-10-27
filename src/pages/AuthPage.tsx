@@ -15,6 +15,7 @@ import {
 import { errorMessage, isValidPhoneNumber, to10Digits, toE164 } from '../lib/utils';
 import { useSession } from '../store/session';
 import { useCart } from '../store/cart';
+import { trackEvent } from '../lib/analytics';
 
 type Step = 'phone' | 'otp' | 'name';
 
@@ -129,6 +130,7 @@ export default function AuthPage() {
       const phone = user.phone ? toE164(user.phone) : toE164(mobile);
       setVerifiedUserId(user.id);
       setVerifiedPhone(phone);
+      trackEvent('login_success', { method: 'otp' });
       const s = useSession.getState();
       s.saveSession({ userId: user.id, email: user.email ?? null, phone });
 
@@ -176,6 +178,7 @@ export default function AuthPage() {
       s.saveSession({ userId: uid, name, phone });
       await useCart.getState().hydrateForUser(uid);
       s.updateProfileInfo(saved);
+      trackEvent('registration_success', {});
       navigate('/onboarding', { replace: true });
     } catch (e) {
       setError(errorMessage(e, 'Could not save profile. Please try again.'));

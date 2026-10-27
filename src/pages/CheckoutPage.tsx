@@ -37,6 +37,7 @@ import {
 } from '../lib/utils';
 import { useSession } from '../store/session';
 import { useCart } from '../store/cart';
+import { trackEvent } from '../lib/analytics';
 
 const PAYMENT_METHODS = [
   { key: 'cod', label: 'Cash on Delivery (COD)' },
@@ -365,6 +366,14 @@ export default function CheckoutPage() {
         useWallet: walletApplied > 0,
         cookingInstructions,
         deliveryInstructions,
+      });
+      // Fired only here — after the server has genuinely created the order row — never on the
+      // button click itself (a click can fail validation, payment, or server errors below).
+      trackEvent('order_placed', {
+        order_id: order.id,
+        amount: order.total_amount,
+        mode: isHotel ? 'hotel' : 'grocery',
+        payment_method: payment,
       });
       // The server's total is the truth; if it differs from the estimate, show it before paying.
       const serverTotal = Number(order.total_amount ?? 0);
@@ -700,7 +709,15 @@ export default function CheckoutPage() {
             <div className="stack-sm">
               {paymentMethods.map((m) => (
                 <label key={m.key} className={`radio-card${payment === m.key ? ' selected' : ''}`}>
-                  <input type="radio" name="payment" checked={payment === m.key} onChange={() => setPayment(m.key)} />
+                  <input
+                    type="radio"
+                    name="payment"
+                    checked={payment === m.key}
+                    onChange={() => {
+                      setPayment(m.key);
+                      trackEvent('payment_method_selected', { method: m.key });
+                    }}
+                  />
                   <span>{m.label}</span>
                 </label>
               ))}

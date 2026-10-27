@@ -129,3 +129,28 @@ export function trackPageView(page: string): void {
   // heartbeat tick, so "Live Active Users" reacts promptly to real navigation.
   sendHeartbeat();
 }
+
+/**
+ * Generic event tracker (Phase 2: product_view, add_to_cart, category_select, search,
+ * checkout_started, payment_method_selected, order_placed, login_success,
+ * registration_success, ...). Fire-and-forget like trackPageView — never await this in a
+ * caller's critical path (cart/checkout/order placement must never wait on analytics).
+ */
+export function trackEvent(eventName: string, metadata?: Record<string, unknown>, page?: string): void {
+  try {
+    const id = getSessionId();
+    const userId = useSession.getState().userId;
+    supabase
+      .from('analytics_events')
+      .insert({
+        session_id: id,
+        user_id: userId,
+        event_name: eventName,
+        page: page ?? (typeof window !== 'undefined' ? window.location.pathname : null),
+        metadata: metadata ?? null,
+      })
+      .then(undefined, () => {});
+  } catch {
+    /* tracking must never throw into the caller */
+  }
+}
