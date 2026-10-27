@@ -15,6 +15,7 @@ import {
   syncPendingUpiOrders,
 } from './lib/repository';
 import { takePendingAgentCode } from './lib/agentCode';
+import { initAnalyticsSession, trackPageView } from './lib/analytics';
 import { useSession } from './store/session';
 import { useCart } from './store/cart';
 import { CenterSpinner, ToastHost, toast } from './components/ui';
@@ -210,6 +211,13 @@ export default function App() {
   const authReady = useAuthSync();
   const verified = useLoggedInEffects();
   const isLoggedIn = useSession((s) => s.isLoggedIn);
+  const location = useLocation();
+  useEffect(() => {
+    initAnalyticsSession();
+  }, []);
+  useEffect(() => {
+    trackPageView(location.pathname);
+  }, [location.pathname]);
   useEffect(() => {
     if (isLoggedIn) prefetchTabs();
   }, [isLoggedIn]);
