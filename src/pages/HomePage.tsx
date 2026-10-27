@@ -604,6 +604,12 @@ export default function HomePage() {
   const [groceryHasMore, setGroceryHasMore] = useState(true);
   const [groceryError, setGroceryError] = useState<string | null>(null);
   const [variantProduct, setVariantProduct] = useState<ResolvedProduct | null>(null);
+  // Per-product "view" signal — opening the variant/size picker is the closest equivalent
+  // to a product-detail view on this quick-add grid, matching the Android app's semantics.
+  const openVariantPicker = (p: ResolvedProduct) => {
+    trackEvent('product_view', { product_id: p.id, product_name: p.name, category: 'grocery' });
+    setVariantProduct(p);
+  };
 
   // Hotel state
   const [hotels, setHotels] = useState<Vendor[]>([]);
@@ -1151,7 +1157,7 @@ export default function HomePage() {
                           quantity={groceryCart.filter((i) => i.product_id === p.id).reduce((s, i) => s + i.quantity, 0)}
                           onIncrease={() => addToCart({ productId: p.id, cityId, quantityDelta: 1, isHotel: false })}
                           onDecrease={() => addToCart({ productId: p.id, cityId, quantityDelta: -1, isHotel: false })}
-                          onSelectSize={() => setVariantProduct(p)}
+                          onSelectSize={() => openVariantPicker(p)}
                         />
                       </div>
                     ))}
@@ -1169,7 +1175,7 @@ export default function HomePage() {
                           quantity={groceryCart.filter((i) => i.product_id === p.id).reduce((s, i) => s + i.quantity, 0)}
                           onIncrease={() => addToCart({ productId: p.id, cityId, quantityDelta: 1, isHotel: false })}
                           onDecrease={() => addToCart({ productId: p.id, cityId, quantityDelta: -1, isHotel: false })}
-                          onSelectSize={() => setVariantProduct(p)}
+                          onSelectSize={() => openVariantPicker(p)}
                         />
                       </div>
                     ))}
@@ -1216,7 +1222,7 @@ export default function HomePage() {
                     quantity={groceryCart.filter((i) => i.product_id === p.id).reduce((s, i) => s + i.quantity, 0)}
                     onIncrease={() => addToCart({ productId: p.id, cityId, quantityDelta: 1, isHotel: false })}
                     onDecrease={() => addToCart({ productId: p.id, cityId, quantityDelta: -1, isHotel: false })}
-                    onSelectSize={() => setVariantProduct(p)}
+                    onSelectSize={() => openVariantPicker(p)}
                   />
                 ))}
               </div>

@@ -53,6 +53,7 @@ function MenuItemCard({
   slots,
   onIncrease,
   onDecrease,
+  onView,
 }: {
   product: ResolvedProduct;
   quantity: number;
@@ -60,10 +61,11 @@ function MenuItemCard({
   slots: OperatingSlot[];
   onIncrease: () => void;
   onDecrease: () => void;
+  onView: () => void;
 }) {
   const available = hotelOpen && isHotelItemAvailable(product, slots);
   return (
-    <div className={`card menu-item${available ? '' : ' dimmed'}`}>
+    <div className={`card menu-item${available ? '' : ' dimmed'}`} onClick={onView}>
       <div className="menu-img">
         <ProductImage url={product.imageUrl} alt={product.name} width={96} />
         {available && product.isFeatured && <span className="tag tag-blue">FEATURED</span>}
@@ -84,7 +86,9 @@ function MenuItemCard({
         <PriceDisplay price={product.effectivePrice} mrp={product.effectiveMrp} unit={product.unit} kind="food" />
       </div>
       {available ? (
-        <QuantityStepper quantity={quantity} onIncrease={onIncrease} onDecrease={onDecrease} />
+        <div onClick={(e) => e.stopPropagation()}>
+          <QuantityStepper quantity={quantity} onIncrease={onIncrease} onDecrease={onDecrease} />
+        </div>
       ) : (
         <span className="oos-pill small">{hotelOpen ? 'Unavailable' : 'Closed'}</span>
       )}
@@ -130,7 +134,9 @@ export default function HotelMenuPage() {
       ]);
       if (v.status === 'fulfilled') {
         setVendor(v.value);
-        trackEvent('product_view', { vendor_id: vendorId, vendor_name: v.value?.name, category: 'hotel' });
+        // "This hotel's menu was opened" — distinct from a per-dish `product_view` (fired on
+        // tapping an individual item below), kept under its own name so neither signal is lost.
+        trackEvent('vendor_menu_opened', { vendor_id: vendorId, vendor_name: v.value?.name, category: 'hotel' });
       }
       if (s.status === 'fulfilled') setSlots(s.value);
       // The selected tab is chosen once the tab order is known (see below).
@@ -396,6 +402,7 @@ export default function HotelMenuPage() {
                         if (r.kind === 'hotelConflict') setConflict(r.pendingItem);
                       }}
                       onDecrease={() => addToCart({ productId: p.id, vendorId, cityId, quantityDelta: -1, isHotel: true })}
+                      onView={() => trackEvent('product_view', { product_id: p.id, product_name: p.name, category: 'hotel' })}
                     />
                   </div>
                 ))}
@@ -457,6 +464,7 @@ export default function HotelMenuPage() {
                         if (r.kind === 'hotelConflict') setConflict(r.pendingItem);
                       }}
                       onDecrease={() => addToCart({ productId: p.id, vendorId, cityId, quantityDelta: -1, isHotel: true })}
+                      onView={() => trackEvent('product_view', { product_id: p.id, product_name: p.name, category: 'hotel' })}
                     />
                   ))}
                 </div>
