@@ -667,6 +667,7 @@ export default function HomePage() {
     } catch (e) {
       setGroceryError(errorMessage(e));
       setGroceryLoading(false);
+      trackEvent('app_error', { context: 'categories_load', message: 'categories_load_failed' });
     }
   }, []);
 

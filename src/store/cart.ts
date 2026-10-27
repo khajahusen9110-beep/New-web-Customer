@@ -70,6 +70,7 @@ function flushCart(userId: string): Promise<void> {
       if (!persistTimer) useCart.setState({ pendingSync: false });
     } catch (e) {
       console.warn('Failed to persist cart', e);
+      trackEvent('app_error', { context: 'cart_sync', message: 'cart_sync_failed' });
     }
   });
   return writeChain;

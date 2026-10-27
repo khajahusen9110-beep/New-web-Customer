@@ -7,6 +7,7 @@ import { addAddress, updateAddress } from '../lib/repository';
 import type { CustomerAddress } from '../lib/types';
 import { DEFAULT_CENTER, errorMessage, isValidIndianCoordinate, toE164 } from '../lib/utils';
 import { useSession } from '../store/session';
+import { trackEvent } from '../lib/analytics';
 
 export const ADDRESS_LABELS = [
   { label: 'Home', Icon: Home },
@@ -202,6 +203,8 @@ export function AddressPickerModal({
       }
     } catch (e) {
       setError(errorMessage(e, 'Failed to save address'));
+      // Sanitized tag only — never the raw message, which can echo back user-entered text.
+      trackEvent('app_error', { context: 'address_save', message: 'address_save_failed' });
     } finally {
       setSaving(false);
     }
