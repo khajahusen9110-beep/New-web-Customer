@@ -518,7 +518,10 @@ export function HotelItemCarousel({
   if (!item) return null;
   return (
     <>
-      <ProductImage url={item.image_url} alt={`${item.name} at ${name}`} grayscale={!isOpen} width={imageWidth} />
+      {/* Carousel images are always the one currently-visible slide, never off-screen content —
+          loading="lazy" can fail to re-fetch when the <img> src swaps on some mobile browsers
+          (Safari/WebView), leaving later slides blank after the first. Always load eagerly. */}
+      <ProductImage url={item.image_url} alt={`${item.name} at ${name}`} grayscale={!isOpen} width={imageWidth} priority />
       <span className="hotel-item-price">Items at ₹{item.price}</span>
       {items.length > 1 && (
         <span className="hotel-item-dots" aria-hidden="true">
