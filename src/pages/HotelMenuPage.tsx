@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useNavigate, useParams, useSearchParams } from 'react-router-dom';
-import { Clock, Info, RefreshCw, ShoppingCart, Utensils, UtensilsCrossed } from 'lucide-react';
+import { Clock, Info, RefreshCw, Search, ShoppingCart, Utensils, UtensilsCrossed } from 'lucide-react';
 import {
   ConfirmDialog,
   ErrorCard,
@@ -96,6 +96,53 @@ function MenuItemCard({
   );
 }
 
+// Dish grid card for the main menu list — same visual shape as the grocery product grid
+// (.product-card/.product-img), so dishes below the category tabs show as a 2-column grid
+// (photo, name, price, Add) instead of the horizontal list row MenuItemCard renders.
+function MenuGridCard({
+  product,
+  quantity,
+  hotelOpen,
+  slots,
+  onIncrease,
+  onDecrease,
+  onView,
+}: {
+  product: ResolvedProduct;
+  quantity: number;
+  hotelOpen: boolean;
+  slots: OperatingSlot[];
+  onIncrease: () => void;
+  onDecrease: () => void;
+  onView: () => void;
+}) {
+  const available = hotelOpen && isHotelItemAvailable(product, slots);
+  return (
+    <div className={`card product-card${available ? '' : ' dimmed'}`} onClick={onView}>
+      <div className="product-img">
+        <ProductImage url={product.imageUrl} alt={product.name} width={200} />
+        {available && product.isFeatured && <span className="tag tag-blue">FEATURED</span>}
+        {!available && (
+          <div className="img-overlay">
+            <span className="tag tag-red">{hotelOpen ? 'UNAVAILABLE' : 'CLOSED'}</span>
+          </div>
+        )}
+      </div>
+      <div className={`product-name ellipsis${available ? '' : ' muted'}`} title={product.name}>
+        {product.name}
+      </div>
+      <PriceDisplay price={product.effectivePrice} mrp={product.effectiveMrp} unit={product.unit} kind="food" />
+      <div className="product-action" onClick={(e) => e.stopPropagation()}>
+        {available ? (
+          <QuantityStepper quantity={quantity} onIncrease={onIncrease} onDecrease={onDecrease} full />
+        ) : (
+          <div className="oos-pill">{hotelOpen ? 'Unavailable' : 'Closed'}</div>
+        )}
+      </div>
+    </div>
+  );
+}
+
 export default function HotelMenuPage() {
   const { vendorId = '' } = useParams();
   const [params] = useSearchParams();
@@ -119,6 +166,7 @@ export default function HotelMenuPage() {
   const [hasMore, setHasMore] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [conflict, setConflict] = useState<CartItem | null>(null);
+  const [dishQuery, setDishQuery] = useState('');
   const reqId = useRef(0);
 
   const vendorName = vendor?.name ?? params.get('name') ?? 'Hotel';
@@ -309,7 +357,7 @@ export default function HotelMenuPage() {
     if (gap < 0) window.scrollBy({ top: gap - 4 });
   };
 
-  const displayed = useMemo(() => {
+  const sorted = useMemo(() => {
     const tier = (p: ResolvedProduct) => {
       const a = hotelOpen && isHotelItemAvailable(p, effectiveSlots);
       return a && p.isFeatured ? 0 : a ? 1 : 2;
@@ -321,6 +369,14 @@ export default function HotelMenuPage() {
         a.name.toLowerCase().localeCompare(b.name.toLowerCase()),
     );
   }, [products, hotelOpen, effectiveSlots]);
+
+  // Filters the already-loaded menu for this hotel only — no server round trip, the whole
+  // category's items are small enough to filter client-side as the customer types.
+  const trimmedQuery = dishQuery.trim().toLowerCase();
+  const displayed = useMemo(
+    () => (trimmedQuery ? sorted.filter((p) => p.name.toLowerCase().includes(trimmedQuery)) : sorted),
+    [sorted, trimmedQuery],
+  );
 
   const thisHotelItems = useMemo(
     () => hotelCart.filter((i) => i.vendor_id === vendorId || !i.vendor_id),
@@ -409,6 +465,20 @@ export default function HotelMenuPage() {
               </div>
             </section>
           )}
+          {menuShown && (products.length > 0 || trimmedQuery) && (
+            <div className="content-pad">
+              <div className="search-bar">
+                <Search size={18} className="muted" />
+                <input
+                  type="search"
+                  placeholder="Search for dishes"
+                  value={dishQuery}
+                  onChange={(e) => setDishQuery(e.target.value)}
+                  aria-label="Search for dishes in this hotel"
+                />
+              </div>
+            </div>
+          )}
           {tabs.length > 0 && (
             <div className="hotel-cats" ref={tabRow} role="tablist">
               {tabs.map(({ category: c, availableNow, fromLabel }) => {
@@ -441,19 +511,23 @@ export default function HotelMenuPage() {
               <div className="empty-state">
                 <UtensilsCrossed size={48} className="muted" />
                 <p className="muted">
-                  {categories.length === 0 ? 'No menu items currently listed for this hotel.' : 'No items found in this category.'}
+                  {trimmedQuery
+                    ? `No dishes match "${dishQuery.trim()}".`
+                    : categories.length === 0
+                      ? 'No menu items currently listed for this hotel.'
+                      : 'No items found in this category.'}
                 </p>
               </div>
             ) : (
               <div className="stack">
-                {vendor?.banner_url && (
+                {vendor?.banner_url && !trimmedQuery && (
                   <div className="hotel-hero">
                     <ProductImage url={vendor.banner_url} alt={vendorName} width={800} priority />
                   </div>
                 )}
-                <div className="menu-grid">
+                <div className="product-grid">
                   {displayed.map((p) => (
-                    <MenuItemCard
+                    <MenuGridCard
                       key={p.id}
                       product={p}
                       quantity={hotelCart.find((i) => i.product_id === p.id)?.quantity ?? 0}
