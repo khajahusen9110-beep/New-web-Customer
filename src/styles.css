@@ -359,10 +359,13 @@ code { background: var(--surface-variant); padding: 1px 5px; border-radius: 4px;
 .hotel-card:hover { box-shadow: var(--shadow-lg); transform: translateY(-4px); border-color: color-mix(in srgb, var(--primary) 30%, var(--outline-soft)); }
 .hotel-card .hotel-banner .cover-img { transition: transform 0.3s ease; }
 .hotel-card:hover .hotel-banner .cover-img { transform: scale(1.05); }
-.hotel-banner { position: relative; aspect-ratio: 16 / 9; height: auto; }
-.hotel-tags { position: absolute; top: 8px; left: 8px; right: 8px; display: flex; justify-content: space-between; }
-.hotel-item-price { position: absolute; bottom: 8px; left: 8px; background: rgba(20, 20, 20, 0.78); color: #fff; font-size: 12px; font-weight: 700; padding: 4px 10px; border-radius: 8px; }
-.hotel-item-dots { position: absolute; bottom: 10px; right: 10px; display: flex; gap: 3px; }
+.hotel-banner { position: relative; aspect-ratio: 16 / 9; height: auto; overflow: hidden; }
+.hotel-tags { position: absolute; top: 8px; left: 8px; right: 8px; display: flex; justify-content: space-between; z-index: 2; }
+/* All slides are mounted at once; sliding only moves this track's transform, never an <img> src. */
+.hotel-item-carousel-track { display: flex; width: 100%; height: 100%; transition: transform 0.45s ease; }
+.hotel-item-carousel-slide { position: relative; flex: 0 0 100%; width: 100%; height: 100%; }
+.hotel-item-price { position: absolute; bottom: 8px; left: 8px; max-width: calc(100% - 16px); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; background: rgba(20, 20, 20, 0.78); color: #fff; font-size: 12px; font-weight: 700; padding: 4px 10px; border-radius: 8px; }
+.hotel-item-dots { position: absolute; bottom: 10px; right: 10px; display: flex; gap: 3px; z-index: 2; }
 .hotel-item-dots i { width: 5px; height: 5px; border-radius: 50%; background: rgba(255, 255, 255, 0.55); font-style: normal; }
 .hotel-item-dots i.active { background: #fff; width: 14px; border-radius: 3px; }
 .hotel-info { padding: 12px 14px; display: flex; flex-direction: column; gap: 4px; }

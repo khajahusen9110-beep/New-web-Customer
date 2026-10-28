@@ -492,7 +492,13 @@ const ITEM_CAROUSEL_MS = 2800;
 /** Auto-sliding photo+price strip of a hotel's top dishes (Swiggy-style), shown in place of the
  * static banner when at least 2 real item photos are available. Also reused, larger and slightly
  * slower, as the hero carousel on the hotel menu/detail page (see HotelMenuPage.tsx). Dots are decorative only (this
- * sits inside the card's own <button>, so no nested interactive controls). */
+ * sits inside the card's own <button>, so no nested interactive controls).
+ *
+ * Every slide's <img> is mounted once, up front, and stays mounted — "sliding" only moves a CSS
+ * transform on the track. An earlier version re-pointed a single <img>'s src on a timer, which on
+ * some mobile browsers/WebViews would fail to re-fetch and leave every slide after the first blank.
+ * Mounting all images at once (and loading them all eagerly, since the strip is small and above the
+ * fold) removes that race entirely — there is no src swap to race. */
 export function HotelItemCarousel({
   items,
   name,
@@ -516,15 +522,17 @@ export function HotelItemCarousel({
     }, intervalMs);
     return () => clearInterval(t);
   }, [items, intervalMs]);
-  const item = items[index] ?? items[0];
-  if (!item) return null;
+  if (!items.length) return null;
   return (
     <>
-      {/* Carousel images are always the one currently-visible slide, never off-screen content —
-          loading="lazy" can fail to re-fetch when the <img> src swaps on some mobile browsers
-          (Safari/WebView), leaving later slides blank after the first. Always load eagerly. */}
-      <ProductImage url={item.image_url} alt={`${item.name} at ${name}`} grayscale={!isOpen} width={imageWidth} priority />
-      <span className="hotel-item-price">Items at ₹{item.price}</span>
+      <div className="hotel-item-carousel-track" style={{ transform: `translateX(-${index * 100}%)` }}>
+        {items.map((item, i) => (
+          <div className="hotel-item-carousel-slide" key={i}>
+            <ProductImage url={item.image_url} alt={`${item.name} at ${name}`} grayscale={!isOpen} width={imageWidth} priority />
+            <span className="hotel-item-price">{item.name} at ₹{item.price}</span>
+          </div>
+        ))}
+      </div>
       {items.length > 1 && (
         <span className="hotel-item-dots" aria-hidden="true">
           {items.map((_, i) => (
@@ -544,6 +552,7 @@ function HotelCard({
   onIntent,
   matches,
   priority = false,
+  topItems,
 }: {
   vendor: Vendor;
   /** Finger down / mouse over: start loading the menu before the tap completes. */
@@ -554,6 +563,8 @@ function HotelCard({
   rating: number;
   onClick: () => void;
   matches?: DishMatch[];
+  /** Top dish photos for this hotel; 2+ shows the auto-sliding carousel instead of the plain banner. */
+  topItems?: TopItem[];
 }) {
   const city = useSession((s) => s.selectedCity);
   const isActive = vendor.is_active !== false;
@@ -572,7 +583,11 @@ function HotelCard({
       onFocus={onIntent}
     >
       <div className="hotel-banner">
-        <ProductImage url={vendor.banner_url} alt={vendor.name} grayscale={!isOpen} width={480} priority={priority} />
+        {topItems && topItems.length >= 2 ? (
+          <HotelItemCarousel items={topItems} name={vendor.name} isOpen={isOpen} />
+        ) : (
+          <ProductImage url={vendor.banner_url} alt={vendor.name} grayscale={!isOpen} width={480} priority={priority} />
+        )}
         <div className="hotel-tags">
           {vendor.is_featured ? <span className="tag tag-blue">FEATURED</span> : <span />}
           <span className={`tag ${!isActive ? 'tag-red' : isOpen ? 'tag-green' : 'tag-grey'}`}>
@@ -1537,6 +1552,7 @@ export default function HomePage() {
                     vendor={h}
                     slots={hotelExtras.slots[h.id]}
                     rating={hotelExtras.ratings[h.id] ?? 0}
+                    topItems={hotelExtras.topItems[h.id]}
                     matches={dishServing?.matches[h.id]}
                     onClick={() => navigate(`/hotel/${h.id}?name=${encodeURIComponent(h.name)}`)}
                   />

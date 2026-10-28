@@ -15,15 +15,19 @@ import {
   toast,
 } from '../components/ui';
 import { OfferBanner } from '../components/OfferBanner';
+import { HotelItemCarousel } from './HomePage';
 import {
   getHotelCategories,
+  getHotelExtras,
   getHotelFeaturedItems,
   getHotelMenuAvailability,
   getHotelProducts,
   getVendor,
   getVendorOperatingSlots,
   HOTEL_MENU_PAGE,
+  peekHotelExtras,
   peekHotelMenu,
+  type TopItem,
 } from '../lib/repository';
 import type { Category, CartItem, OperatingSlot, ResolvedProduct, Vendor } from '../lib/types';
 import { useFreshCart, useInfiniteSentinel } from '../lib/hooks';
@@ -247,6 +251,20 @@ export default function HotelMenuPage() {
   const withinHours = isWithinAnySlot(effectiveSlots);
   // Same check as the OPEN NOW badge on Home (active, not switched off, inside hours).
   const hotelOpen = vendor ? isVendorOpenNow(vendor, slots, city) : withinHours && isCityOpenNow(city);
+
+  // Top dish photos for the hero carousel (Swiggy-style), in place of the plain static banner
+  // once at least 2 real item photos are known for this hotel.
+  const [heroTopItems, setHeroTopItems] = useState<TopItem[]>(() => peekHotelExtras([vendorId]).topItems[vendorId] ?? []);
+  useEffect(() => {
+    setHeroTopItems(peekHotelExtras([vendorId]).topItems[vendorId] ?? []);
+    let cancelled = false;
+    getHotelExtras([vendorId])
+      .then((extras) => !cancelled && setHeroTopItems(extras.topItems[vendorId] ?? []))
+      .catch(() => undefined);
+    return () => {
+      cancelled = true;
+    };
+  }, [vendorId]);
 
   // "Featured" row: this hotel's featured items that can be ordered right now (max 10).
   const [featuredItems, setFeaturedItems] = useState<ResolvedProduct[]>([]);
@@ -522,7 +540,11 @@ export default function HotelMenuPage() {
               <div className="stack">
                 {vendor?.banner_url && !trimmedQuery && (
                   <div className="hotel-hero">
-                    <ProductImage url={vendor.banner_url} alt={vendorName} width={800} priority />
+                    {heroTopItems.length >= 2 ? (
+                      <HotelItemCarousel items={heroTopItems} name={vendorName} isOpen={hotelOpen} intervalMs={3200} imageWidth={800} />
+                    ) : (
+                      <ProductImage url={vendor.banner_url} alt={vendorName} width={800} priority />
+                    )}
                   </div>
                 )}
                 <div className="product-grid">
