@@ -490,35 +490,68 @@ export async function getVendorAverageRating(vendorId: string): Promise<number> 
   return cacheGet<number>(`rating:${vendorId}`) ?? 0;
 }
 
+export type TopItem = { image_url: string; price: number; name: string };
+const MAX_TOP_ITEMS_PER_HOTEL = 7;
+
+/** One request for the top dishes (photo + price) of many vendors; results cached per vendor. */
+async function primeTopItems(vendorIds: string[]) {
+  const missing = vendorIds.filter((id) => cacheGet(`topItems:${id}`) === null);
+  if (!missing.length) return;
+  const { data, error } = await supabase
+    .from('products')
+    .select('vendor_id,name,image_url,price,is_featured,created_at')
+    .in('vendor_id', missing)
+    .eq('is_active', true)
+    .eq('is_available', true)
+    .not('image_url', 'is', null)
+    .order('is_featured', { ascending: false })
+    .order('created_at', { ascending: false });
+  if (error) return; // cards fall back to the single banner_url
+  const byVendor = new Map<string, TopItem[]>();
+  for (const row of (data ?? []) as { vendor_id: string; name: string; image_url: string; price: number; is_featured: boolean }[]) {
+    const list = byVendor.get(row.vendor_id) ?? [];
+    if (list.length < MAX_TOP_ITEMS_PER_HOTEL) {
+      list.push({ image_url: row.image_url, price: row.price, name: row.name });
+      byVendor.set(row.vendor_id, list);
+    }
+  }
+  for (const id of missing) cacheSet(`topItems:${id}`, byVendor.get(id) ?? []);
+}
+
 /**
- * Hours and ratings for a list of hotels: whatever is not cached yet is fetched for all of them in
- * one request each (never one per card). A vendor missing from `slots` means its hours could not be
- * loaded; callers then use its opening/closing time.
+ * Hours, ratings and top-dish photos for a list of hotels: whatever is not cached yet is fetched for
+ * all of them in one request each (never one per card). A vendor missing from `slots` means its hours
+ * could not be loaded; callers then use its opening/closing time.
  */
 export async function getHotelExtras(vendorIds: string[]) {
   const ids = Array.from(new Set(vendorIds));
-  await Promise.all([primeOperatingSlots(ids), primeAverageRatings(ids)]);
+  await Promise.all([primeOperatingSlots(ids), primeAverageRatings(ids), primeTopItems(ids)]);
   const slots: Record<string, OperatingSlot[]> = {};
   const ratings: Record<string, number> = {};
+  const topItems: Record<string, TopItem[]> = {};
   for (const id of ids) {
     const s = cacheGet<OperatingSlot[]>(`slots:${id}`);
     if (s) slots[id] = s;
     ratings[id] = cacheGet<number>(`rating:${id}`) ?? 0;
+    topItems[id] = cacheGet<TopItem[]>(`topItems:${id}`) ?? [];
   }
-  return { slots, ratings };
+  return { slots, ratings, topItems };
 }
 
-/** Last-known hours/ratings for these hotels, without a request (fresh ones follow via getHotelExtras). */
+/** Last-known hours/ratings/top-items for these hotels, without a request (fresh ones follow via getHotelExtras). */
 export function peekHotelExtras(vendorIds: string[]) {
   const slots: Record<string, OperatingSlot[]> = {};
   const ratings: Record<string, number> = {};
+  const topItems: Record<string, TopItem[]> = {};
   for (const id of vendorIds) {
     const sl = peek<OperatingSlot[]>(`slots:${id}`);
     if (sl) slots[id] = sl;
+    const ti = peek<TopItem[]>(`topItems:${id}`);
+    if (ti) topItems[id] = ti;
     const r = peek<number>(`rating:${id}`);
     if (r !== null) ratings[id] = r;
   }
-  return { slots, ratings };
+  return { slots, ratings, topItems };
 }
 
 /** Already-fetched hours/rating for a vendor (filled by getHotels), without a request. */

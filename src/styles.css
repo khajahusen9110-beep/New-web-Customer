@@ -361,6 +361,10 @@ code { background: var(--surface-variant); padding: 1px 5px; border-radius: 4px;
 .hotel-card:hover .hotel-banner .cover-img { transform: scale(1.05); }
 .hotel-banner { position: relative; aspect-ratio: 16 / 9; height: auto; }
 .hotel-tags { position: absolute; top: 8px; left: 8px; right: 8px; display: flex; justify-content: space-between; }
+.hotel-item-price { position: absolute; bottom: 8px; left: 8px; background: rgba(20, 20, 20, 0.78); color: #fff; font-size: 12px; font-weight: 700; padding: 4px 10px; border-radius: 8px; }
+.hotel-item-dots { position: absolute; bottom: 10px; right: 10px; display: flex; gap: 3px; }
+.hotel-item-dots i { width: 5px; height: 5px; border-radius: 50%; background: rgba(255, 255, 255, 0.55); font-style: normal; }
+.hotel-item-dots i.active { background: #fff; width: 14px; border-radius: 3px; }
 .hotel-info { padding: 12px 14px; display: flex; flex-direction: column; gap: 4px; }
 .hotel-cats { position: sticky; top: var(--header-h); z-index: 40; display: flex; gap: 14px; overflow-x: auto; padding: 10px 16px; background: var(--surface); border-bottom: 1px solid var(--outline-soft); scrollbar-width: none; }
 .hotel-cats::-webkit-scrollbar { display: none; }

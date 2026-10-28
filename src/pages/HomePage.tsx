@@ -50,6 +50,7 @@ import {
   getTopSellingGroceryProducts,
   getTopSellingFoodProducts,
   getHotelExtras,
+  type TopItem,
   prefetchHotelMenu,
   getPromoBanners,
   peekPromoBanners,
@@ -482,9 +483,43 @@ function DishMatches({ items }: { items: DishMatch[] }) {
   );
 }
 
+const ITEM_CAROUSEL_MS = 2800;
+
+/** Auto-sliding photo+price strip of a hotel's top dishes (Swiggy-style), shown in place of the
+ * static banner when at least 2 real item photos are available. Dots are decorative only (this
+ * sits inside the card's own <button>, so no nested interactive controls). */
+function HotelItemCarousel({ items, name, isOpen }: { items: TopItem[]; name: string; isOpen: boolean }) {
+  const [index, setIndex] = useState(0);
+  useEffect(() => {
+    setIndex(0);
+    if (items.length < 2) return;
+    const t = setInterval(() => {
+      if (document.hidden) return;
+      setIndex((i) => (i + 1) % items.length);
+    }, ITEM_CAROUSEL_MS);
+    return () => clearInterval(t);
+  }, [items]);
+  const item = items[index] ?? items[0];
+  if (!item) return null;
+  return (
+    <>
+      <ProductImage url={item.image_url} alt={`${item.name} at ${name}`} grayscale={!isOpen} width={480} />
+      <span className="hotel-item-price">Items at ₹{item.price}</span>
+      {items.length > 1 && (
+        <span className="hotel-item-dots" aria-hidden="true">
+          {items.map((_, i) => (
+            <i key={i} className={i === index ? 'active' : ''} />
+          ))}
+        </span>
+      )}
+    </>
+  );
+}
+
 function HotelCard({
   vendor,
   slots,
+  topItems,
   rating,
   onClick,
   onIntent,
@@ -497,6 +532,8 @@ function HotelCard({
   priority?: boolean;
   /** Hours loaded for the whole list in one request; undefined = use opening/closing time. */
   slots?: OperatingSlot[];
+  /** Top dish photos+prices for the auto-sliding carousel; falls back to the static banner below 2. */
+  topItems?: TopItem[];
   rating: number;
   onClick: () => void;
   matches?: DishMatch[];
@@ -518,7 +555,11 @@ function HotelCard({
       onFocus={onIntent}
     >
       <div className="hotel-banner">
-        <ProductImage url={vendor.banner_url} alt={vendor.name} grayscale={!isOpen} width={480} priority={priority} />
+        {topItems && topItems.length >= 2 ? (
+          <HotelItemCarousel items={topItems} name={vendor.name} isOpen={isOpen} />
+        ) : (
+          <ProductImage url={vendor.banner_url} alt={vendor.name} grayscale={!isOpen} width={480} priority={priority} />
+        )}
         <div className="hotel-tags">
           {vendor.is_featured ? <span className="tag tag-blue">FEATURED</span> : <span />}
           <span className={`tag ${!isActive ? 'tag-red' : isOpen ? 'tag-green' : 'tag-grey'}`}>
@@ -622,10 +663,15 @@ export default function HomePage() {
   const [hotelsMore, setHotelsMore] = useState(false);
   const [hotelsHasMore, setHotelsHasMore] = useState(true);
   const [hotelsError, setHotelsError] = useState<string | null>(null);
-  // Hours + ratings for every loaded hotel (fetched in batches, never per card).
-  const [hotelExtras, setHotelExtras] = useState<{ slots: Record<string, OperatingSlot[]>; ratings: Record<string, number> }>({
+  // Hours + ratings + top-dish photos for every loaded hotel (fetched in batches, never per card).
+  const [hotelExtras, setHotelExtras] = useState<{
+    slots: Record<string, OperatingSlot[]>;
+    ratings: Record<string, number>;
+    topItems: Record<string, TopItem[]>;
+  }>({
     slots: {},
     ratings: {},
+    topItems: {},
   });
   // Re-evaluated every minute and when the tab comes back, since hotels open and close.
   const [clock, setClock] = useState(() => Date.now());
@@ -745,7 +791,11 @@ export default function HomePage() {
           setHotels(seen);
           setHotelsHasMore(seen.length >= HOTEL_PAGE);
           const extras = peekHotelExtras(seen.map((h) => h.id));
-          setHotelExtras((cur) => ({ slots: { ...extras.slots, ...cur.slots }, ratings: { ...extras.ratings, ...cur.ratings } }));
+          setHotelExtras((cur) => ({
+            slots: { ...extras.slots, ...cur.slots },
+            ratings: { ...extras.ratings, ...cur.ratings },
+            topItems: { ...extras.topItems, ...cur.topItems },
+          }));
         }
       } else setHotelsMore(true);
       try {
@@ -874,7 +924,11 @@ export default function HomePage() {
     getHotelExtras(missing)
       .then((x) => {
         if (cancelled) return;
-        setHotelExtras((cur) => ({ slots: { ...cur.slots, ...x.slots }, ratings: { ...cur.ratings, ...x.ratings } }));
+        setHotelExtras((cur) => ({
+          slots: { ...cur.slots, ...x.slots },
+          ratings: { ...cur.ratings, ...x.ratings },
+          topItems: { ...cur.topItems, ...x.topItems },
+        }));
       })
       .catch(() => {
         /* cards fall back to opening/closing time */
@@ -1100,7 +1154,7 @@ export default function HomePage() {
       if (cityId) getFeaturedGroceryProducts(cityId, true).then(setFeaturedProducts).catch(() => undefined);
       if (cityId) getPromoBanners(cityId, 'grocery', true).then((b) => setBanners('grocery', b)).catch(() => undefined);
     } else {
-      setHotelExtras({ slots: {}, ratings: {} });
+      setHotelExtras({ slots: {}, ratings: {}, topItems: {} });
       extrasFetched.current.clear();
       void loadHotels(true, true);
       if (cityId) getPromoBanners(cityId, 'food', true).then((b) => setBanners('food', b)).catch(() => undefined);
@@ -1370,6 +1424,7 @@ export default function HomePage() {
                     onIntent={() => cityId && prefetchHotelMenu(h.id, cityId)}
                     vendor={h}
                     slots={hotelExtras.slots[h.id]}
+                    topItems={hotelExtras.topItems[h.id]}
                     rating={hotelExtras.ratings[h.id] ?? 0}
                     matches={dishServing?.matches[h.id]}
                     onClick={() => navigate(`/hotel/${h.id}?name=${encodeURIComponent(h.name)}`)}
