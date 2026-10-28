@@ -1091,6 +1091,47 @@ export function getTopSellingFoodProducts(cityId: string, forceRefresh = false):
   );
 }
 
+export const peekBudgetFoodProducts = (cityId: string) => peek<ResolvedProduct[]>(`budgetFood:${cityId}`);
+
+/**
+ * Up to 20 hotel dishes priced ₹99 or under across every hotel in this city, for the food
+ * "99 Store" row. The RPC filters by effective price (city override else base price) in one
+ * round trip; one products request resolves full price/stock for display + cart.
+ */
+export function getBudgetFoodProducts(cityId: string, forceRefresh = false): Promise<ResolvedProduct[]> {
+  return cached(
+    `budgetFood:${cityId}`,
+    CACHE_TTL_MS,
+    async () => {
+      const { data: ranked, error: rErr } = await supabase.rpc('get_budget_food_products', {
+        p_city_id: cityId,
+        p_max_price: 99,
+        p_limit: 20,
+      });
+      if (rErr || !ranked || !ranked.length) return [];
+      const vendorNameById = new Map<string, string>(
+        (ranked as { product_id: string; vendor_name: string }[]).map((r) => [r.product_id, r.vendor_name]),
+      );
+      const ids = Array.from(vendorNameById.keys());
+      // HOTEL_PRODUCT_COLS has no product_variants embed, so variants must be off (false),
+      // otherwise the variant-stock filter errors and nothing comes back.
+      const { data, error } = await withCityStock(
+        supabase.from('products').select(HOTEL_PRODUCT_COLS).in('id', ids),
+        cityId,
+        false,
+      );
+      if (error) return [];
+      return ((data ?? []) as unknown as Product[])
+        .map((prod) => {
+          const r = resolveProduct(prod, cityStockOf(prod), cityId);
+          return { ...r, variants: [], vendorName: vendorNameById.get(prod.id) };
+        })
+        .filter((p) => isInStockAndActive(p) && p.effectivePrice > 0 && p.effectivePrice <= 99);
+    },
+    forceRefresh,
+  );
+}
+
 export function getFeaturedGroceryProducts(cityId: string, forceRefresh = false): Promise<ResolvedProduct[]> {
   return cached(
     `featuredGrocery:${cityId}`,

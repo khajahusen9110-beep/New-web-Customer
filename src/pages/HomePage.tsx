@@ -49,6 +49,7 @@ import {
   getFeaturedGroceryProducts,
   getTopSellingGroceryProducts,
   getTopSellingFoodProducts,
+  getBudgetFoodProducts,
   getHotelExtras,
   type TopItem,
   prefetchHotelMenu,
@@ -59,6 +60,7 @@ import {
   peekFeaturedGroceryProducts,
   peekTopSellingGroceryProducts,
   peekTopSellingFoodProducts,
+  peekBudgetFoodProducts,
   peekGroceryCategories,
   peekGroceryProducts,
   peekHotelDishCategories,
@@ -678,6 +680,7 @@ export default function HomePage() {
   const [featuredProducts, setFeaturedProducts] = useState<ResolvedProduct[]>([]);
   const [topSelling, setTopSelling] = useState<ResolvedProduct[]>([]);
   const [topFood, setTopFood] = useState<ResolvedProduct[]>([]);
+  const [budgetFood, setBudgetFood] = useState<ResolvedProduct[]>([]);
   const [dishes, setDishes] = useState<DishCategory[]>([]);
   const [dishKeySel, setDishKeySel] = useState<string | null>(null);
   const [promoCoupon, setPromoCoupon] = useState<Coupon | null>(null);
@@ -996,6 +999,11 @@ export default function HomePage() {
     getTopSellingFoodProducts(cityId)
       .then((list) => !cancelled && setTopFood(list))
       .catch(() => !cancelled && setTopFood([]));
+    const seenBudget = peekBudgetFoodProducts(cityId);
+    if (seenBudget) setBudgetFood(seenBudget);
+    getBudgetFoodProducts(cityId)
+      .then((list) => !cancelled && setBudgetFood(list))
+      .catch(() => !cancelled && setBudgetFood([]));
     return () => {
       cancelled = true;
     };
@@ -1356,6 +1364,27 @@ export default function HomePage() {
                     <div className="product-img">
                       <ProductImage url={p.imageUrl} alt={p.name} width={200} />
                       {(p.soldCount ?? 0) > 0 && <span className="sold-badge">🔥 {p.soldCount} sold</span>}
+                    </div>
+                    <div className="product-name" title={p.name}>{p.name}</div>
+                    <div className="muted small ellipsis">{p.vendorName}</div>
+                    <div className="price"><OfferInline price={p.effectivePrice} kind="food" /></div>
+                  </button>
+                ))}
+              </div>
+            </section>
+          )}
+          {!search && budgetFood.length > 0 && (
+            <section className="featured-section">
+              <h3 className="section-title">💸 99 Store</h3>
+              <div className="featured-row">
+                {budgetFood.map((p) => (
+                  <button
+                    key={p.id}
+                    className="card product-card food-order-card"
+                    onClick={() => addDishToCart(p, 1)}
+                  >
+                    <div className="product-img">
+                      <ProductImage url={p.imageUrl} alt={p.name} width={200} />
                     </div>
                     <div className="product-name" title={p.name}>{p.name}</div>
                     <div className="muted small ellipsis">{p.vendorName}</div>
