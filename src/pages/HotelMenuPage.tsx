@@ -17,7 +17,6 @@ import {
 import { OfferBanner } from '../components/OfferBanner';
 import {
   getHotelCategories,
-  getHotelExtras,
   getHotelFeaturedItems,
   getHotelMenuAvailability,
   getHotelProducts,
@@ -25,9 +24,7 @@ import {
   getVendorOperatingSlots,
   HOTEL_MENU_PAGE,
   peekHotelMenu,
-  type TopItem,
 } from '../lib/repository';
-import { HotelItemCarousel } from './HomePage';
 import type { Category, CartItem, OperatingSlot, ResolvedProduct, Vendor } from '../lib/types';
 import { useFreshCart, useInfiniteSentinel } from '../lib/hooks';
 import {
@@ -170,7 +167,6 @@ export default function HotelMenuPage() {
   const [error, setError] = useState<string | null>(null);
   const [conflict, setConflict] = useState<CartItem | null>(null);
   const [dishQuery, setDishQuery] = useState('');
-  const [topItems, setTopItems] = useState<TopItem[]>([]);
   const reqId = useRef(0);
 
   const vendorName = vendor?.name ?? params.get('name') ?? 'Hotel';
@@ -195,11 +191,6 @@ export default function HotelMenuPage() {
       if (c.status === 'fulfilled') setCategories(c.value);
       else setError(errorMessage(c.reason));
       setLoadingInitial(false);
-
-      // Hero carousel photos — never blocks the page; falls back to the static banner below 2.
-      getHotelExtras([vendorId])
-        .then((extras) => setTopItems(extras.topItems[vendorId] ?? []))
-        .catch(() => {});
     },
     [vendorId],
   );
@@ -531,11 +522,7 @@ export default function HotelMenuPage() {
               <div className="stack">
                 {vendor?.banner_url && !trimmedQuery && (
                   <div className="hotel-hero">
-                    {topItems.length >= 2 ? (
-                      <HotelItemCarousel items={topItems} name={vendorName} isOpen={hotelOpen} intervalMs={3300} imageWidth={800} />
-                    ) : (
-                      <ProductImage url={vendor.banner_url} alt={vendorName} width={800} priority />
-                    )}
+                    <ProductImage url={vendor.banner_url} alt={vendorName} width={800} priority />
                   </div>
                 )}
                 <div className="product-grid">

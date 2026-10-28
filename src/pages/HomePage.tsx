@@ -537,7 +537,6 @@ export function HotelItemCarousel({
 function HotelCard({
   vendor,
   slots,
-  topItems,
   rating,
   onClick,
   onIntent,
@@ -550,8 +549,6 @@ function HotelCard({
   priority?: boolean;
   /** Hours loaded for the whole list in one request; undefined = use opening/closing time. */
   slots?: OperatingSlot[];
-  /** Top dish photos+prices for the auto-sliding carousel; falls back to the static banner below 2. */
-  topItems?: TopItem[];
   rating: number;
   onClick: () => void;
   matches?: DishMatch[];
@@ -573,11 +570,7 @@ function HotelCard({
       onFocus={onIntent}
     >
       <div className="hotel-banner">
-        {topItems && topItems.length >= 2 ? (
-          <HotelItemCarousel items={topItems} name={vendor.name} isOpen={isOpen} />
-        ) : (
-          <ProductImage url={vendor.banner_url} alt={vendor.name} grayscale={!isOpen} width={480} priority={priority} />
-        )}
+        <ProductImage url={vendor.banner_url} alt={vendor.name} grayscale={!isOpen} width={480} priority={priority} />
         <div className="hotel-tags">
           {vendor.is_featured ? <span className="tag tag-blue">FEATURED</span> : <span />}
           <span className={`tag ${!isActive ? 'tag-red' : isOpen ? 'tag-green' : 'tag-grey'}`}>
@@ -1469,7 +1462,6 @@ export default function HomePage() {
                     onIntent={() => cityId && prefetchHotelMenu(h.id, cityId)}
                     vendor={h}
                     slots={hotelExtras.slots[h.id]}
-                    topItems={hotelExtras.topItems[h.id]}
                     rating={hotelExtras.ratings[h.id] ?? 0}
                     matches={dishServing?.matches[h.id]}
                     onClick={() => navigate(`/hotel/${h.id}?name=${encodeURIComponent(h.name)}`)}
