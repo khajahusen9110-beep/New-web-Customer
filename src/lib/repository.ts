@@ -1121,12 +1121,28 @@ export function getBudgetFoodProducts(cityId: string, forceRefresh = false): Pro
         false,
       );
       if (error) return [];
-      return ((data ?? []) as unknown as Product[])
+      const resolved = ((data ?? []) as unknown as Product[])
         .map((prod) => {
           const r = resolveProduct(prod, cityStockOf(prod), cityId);
           return { ...r, variants: [], vendorName: vendorNameById.get(prod.id) };
         })
         .filter((p) => isInStockAndActive(p) && p.effectivePrice > 0 && p.effectivePrice <= 99);
+      // Stock/price alone isn't "available" for a hotel dish: also require the hotel to be open
+      // right now and the item to be inside its own serving hours (same rule the menu page and
+      // dish search use), so 99 Store never offers something you can't actually order.
+      const vendorIds = Array.from(new Set(resolved.map((p) => p.vendorId).filter((v): v is string => !!v)));
+      if (!vendorIds.length) return [];
+      const [{ data: vendorRows }] = await Promise.all([
+        supabase.from('vendors').select(VENDOR_COLS).in('id', vendorIds),
+        primeOperatingSlots(vendorIds),
+      ]);
+      const vendorById = new Map<string, Vendor>(((vendorRows ?? []) as Vendor[]).map((v) => [v.id, v]));
+      return resolved.filter((p) => {
+        const vendor = p.vendorId ? vendorById.get(p.vendorId) : undefined;
+        if (!vendor) return false;
+        const slots = cacheGet<OperatingSlot[]>(`slots:${vendor.id}`) ?? [];
+        return isVendorOpenNow(vendor, slots) && isHotelItemAvailable(p, vendorHours(vendor, slots));
+      });
     },
     forceRefresh,
   );
