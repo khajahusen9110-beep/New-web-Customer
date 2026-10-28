@@ -50,6 +50,8 @@ import {
   getTopSellingGroceryProducts,
   getTopSellingFoodProducts,
   getBudgetFoodProducts,
+  getRecentlyViewedProducts,
+  peekRecentlyViewedProducts,
   getHotelExtras,
   type TopItem,
   prefetchHotelMenu,
@@ -310,7 +312,7 @@ function CategoryRow({
   onSelect: (id: string) => void;
 }) {
   return (
-    <section>
+    <section className="section-tint tint-mint">
       <h3 className="section-title">Shop by Category</h3>
       <div className="category-row">
         {categories.map((c) => (
@@ -690,6 +692,8 @@ export default function HomePage() {
   const [topSelling, setTopSelling] = useState<ResolvedProduct[]>([]);
   const [topFood, setTopFood] = useState<ResolvedProduct[]>([]);
   const [budgetFood, setBudgetFood] = useState<ResolvedProduct[]>([]);
+  const [recentGrocery, setRecentGrocery] = useState<ResolvedProduct[]>([]);
+  const [recentFood, setRecentFood] = useState<ResolvedProduct[]>([]);
   const [dishes, setDishes] = useState<DishCategory[]>([]);
   const [dishKeySel, setDishKeySel] = useState<string | null>(null);
   const [promoCoupon, setPromoCoupon] = useState<Coupon | null>(null);
@@ -1018,6 +1022,37 @@ export default function HomePage() {
     };
   }, [mode, cityId]);
 
+  // Personalized "recently viewed" — real product_view history for this logged-in customer
+  // only; signed-out visitors have no server-side history to show, so this is skipped for them.
+  useEffect(() => {
+    if (!cityId || !userId) {
+      setRecentGrocery([]);
+      setRecentFood([]);
+      return;
+    }
+    let cancelled = false;
+    const seen = peekRecentlyViewedProducts(cityId, userId);
+    if (seen) {
+      setRecentGrocery(seen.grocery);
+      setRecentFood(seen.food);
+    }
+    getRecentlyViewedProducts(cityId, userId)
+      .then((r) => {
+        if (cancelled) return;
+        setRecentGrocery(r.grocery);
+        setRecentFood(r.food);
+      })
+      .catch(() => {
+        if (!cancelled) {
+          setRecentGrocery([]);
+          setRecentFood([]);
+        }
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [cityId, userId]);
+
   useEffect(() => {
     if (!cityId) return;
     const placement = mode === 'hotels' ? 'food' : 'grocery';
@@ -1250,8 +1285,26 @@ export default function HomePage() {
               {homeAds.length > 0 && <LocalAdStrip ads={homeAds} />}
               {banners.length ? <PromoCarousel banners={banners} onOpen={openBanner} /> : <DealsBanner />}
               <OfferBanner kind="grocery" />
+              {recentGrocery.length > 0 && (
+                <section className="featured-section section-tint tint-sky">
+                  <h3 className="section-title">👀 Recently Viewed</h3>
+                  <div className="featured-row">
+                    {recentGrocery.map((p) => (
+                      <div key={p.id} className="featured-item">
+                        <GroceryProductCard
+                          product={p}
+                          quantity={groceryCart.filter((i) => i.product_id === p.id).reduce((s, i) => s + i.quantity, 0)}
+                          onIncrease={() => addToCart({ productId: p.id, cityId, quantityDelta: 1, isHotel: false })}
+                          onDecrease={() => addToCart({ productId: p.id, cityId, quantityDelta: -1, isHotel: false })}
+                          onSelectSize={() => openVariantPicker(p)}
+                        />
+                      </div>
+                    ))}
+                  </div>
+                </section>
+              )}
               {topSelling.length > 0 && (
-                <section className="featured-section">
+                <section className="featured-section section-tint tint-sage">
                   <h3 className="section-title">🔥 Most Selling</h3>
                   <div className="featured-row">
                     {topSelling.map((p) => (
@@ -1269,7 +1322,7 @@ export default function HomePage() {
                 </section>
               )}
               {featuredProducts.length > 0 && (
-                <section className="featured-section">
+                <section className="featured-section section-tint tint-sand">
                   <h3 className="section-title">Featured Products</h3>
                   <div className="featured-row">
                     {featuredProducts.map((p) => (
@@ -1360,8 +1413,29 @@ export default function HomePage() {
           )}
           {!search && banners.length > 0 && <PromoCarousel banners={banners} onOpen={openBanner} />}
           {!search && <OfferBanner kind="food" />}
+          {!search && recentFood.length > 0 && (
+            <section className="featured-section section-tint tint-sky">
+              <h3 className="section-title">👀 Recently Viewed</h3>
+              <div className="featured-row">
+                {recentFood.map((p) => (
+                  <button
+                    key={p.id}
+                    className="card product-card food-order-card"
+                    onClick={() => navigate(`/hotel/${p.vendorId}?name=${encodeURIComponent(p.vendorName ?? '')}`)}
+                  >
+                    <div className="product-img">
+                      <ProductImage url={p.imageUrl} alt={p.name} width={200} />
+                    </div>
+                    <div className="product-name" title={p.name}>{p.name}</div>
+                    <div className="muted small ellipsis">{p.vendorName}</div>
+                    <div className="price"><OfferInline price={p.effectivePrice} kind="food" /></div>
+                  </button>
+                ))}
+              </div>
+            </section>
+          )}
           {!search && topFood.length > 0 && (
-            <section className="featured-section">
+            <section className="featured-section section-tint tint-peach">
               <h3 className="section-title">🔥 Most Ordered</h3>
               <div className="featured-row">
                 {topFood.map((p) => (
@@ -1383,7 +1457,7 @@ export default function HomePage() {
             </section>
           )}
           {!search && budgetFood.length > 0 && (
-            <section className="featured-section">
+            <section className="featured-section section-tint tint-mint">
               <h3 className="section-title">💸 99 Store</h3>
               <div className="featured-row">
                 {budgetFood.map((p) => (

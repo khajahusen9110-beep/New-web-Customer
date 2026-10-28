@@ -1132,6 +1132,56 @@ export function getBudgetFoodProducts(cityId: string, forceRefresh = false): Pro
   );
 }
 
+export const peekRecentlyViewedProducts = (cityId: string, userId: string) =>
+  peek<{ grocery: ResolvedProduct[]; food: ResolvedProduct[] }>(`recentlyViewed:${cityId}:${userId}`);
+
+/**
+ * The logged-in customer's own recently-viewed products (real `product_view` analytics
+ * history, newest first), split into grocery and food so each can render with its usual
+ * card component. Signed-out customers have no personal history to show, so callers must
+ * skip this entirely rather than call it (the RPC requires auth.uid() and returns nothing
+ * for anon anyway).
+ */
+export function getRecentlyViewedProducts(
+  cityId: string,
+  userId: string,
+  forceRefresh = false,
+): Promise<{ grocery: ResolvedProduct[]; food: ResolvedProduct[] }> {
+  return cached(
+    `recentlyViewed:${cityId}:${userId}`,
+    CACHE_TTL_MS,
+    async () => {
+      const { data: ranked, error: rErr } = await supabase.rpc('get_recently_viewed_products', { p_limit: 12 });
+      if (rErr || !ranked || !ranked.length) return { grocery: [], food: [] };
+      const order = (ranked as { product_id: string }[]).map((r) => r.product_id);
+      const ids = Array.from(new Set(order));
+      const { data, error } = await withCityStock(
+        supabase.from('products').select(`${CART_PRODUCT_COLS},vendors(name)`).in('id', ids),
+        cityId,
+      );
+      if (error) return { grocery: [], food: [] };
+      const byId = new Map<string, Product & { vendors?: { name: string } | null }>(
+        ((data ?? []) as unknown as (Product & { vendors?: { name: string } | null })[]).map((prod) => [prod.id, prod]),
+      );
+      const grocery: ResolvedProduct[] = [];
+      const food: ResolvedProduct[] = [];
+      for (const id of order) {
+        const prod = byId.get(id);
+        if (!prod) continue;
+        const r = resolveProduct(prod, cityStockOf(prod), cityId);
+        if (!isInStockAndActive(r)) continue;
+        if (prod.vendor_id) {
+          food.push({ ...r, variants: [], vendorName: prod.vendors?.name });
+        } else {
+          grocery.push(r);
+        }
+      }
+      return { grocery, food };
+    },
+    forceRefresh,
+  );
+}
+
 export function getFeaturedGroceryProducts(cityId: string, forceRefresh = false): Promise<ResolvedProduct[]> {
   return cached(
     `featuredGrocery:${cityId}`,
