@@ -63,9 +63,14 @@ import {
   peekHotelDishCategories,
   peekHotelExtras,
   peekHotels,
+  getMyPendingScratchCards,
+  scratchMyCard,
+  type ScratchCard,
 } from '../lib/repository';
 import type { CartItem, Category, Coupon, LocalAd, OperatingSlot, PromoBanner, ResolvedProduct, Vendor } from '../lib/types';
 import { PromoCarousel } from '../components/PromoCarousel';
+import { ScratchCard as ScratchCardReveal } from '../components/ScratchCard';
+import { Gift } from 'lucide-react';
 import { LocalAdStrip } from '../components/LocalAdStrip';
 import { OfferBanner } from '../components/OfferBanner';
 import { OfferInline } from '../lib/promo';
@@ -663,6 +668,12 @@ export default function HomePage() {
   const completedRef = useRef(0);
   const reqId = useRef(0);
 
+  // Scratch-card rewards credited on delivery but not yet revealed — a customer who doesn't
+  // revisit that order's detail page would otherwise never find out. Checked once per Home
+  // load (logged-in only) and shown as a persistent banner until scratched.
+  const [pendingScratchCards, setPendingScratchCards] = useState<ScratchCard[]>([]);
+  const [revealingScratchCard, setRevealingScratchCard] = useState<ScratchCard | null>(null);
+
   const loadCategories = useCallback(async (force = false) => {
     try {
       const list = await getGroceryCategories(force);
@@ -1022,6 +1033,13 @@ export default function HomePage() {
     }
   };
 
+  useEffect(() => {
+    if (!userId) return;
+    getMyPendingScratchCards()
+      .then(setPendingScratchCards)
+      .catch(() => undefined);
+  }, [userId]);
+
   // Only price the cart of the tab being shown (no hotel requests while browsing grocery, and vice versa).
   const groceryFresh = useFreshCart(mode === 'grocery' ? groceryCart : NO_ITEMS, cityId);
   const hotelFresh = useFreshCart(mode === 'hotels' ? hotelCart : NO_ITEMS, cityId);
@@ -1127,6 +1145,21 @@ export default function HomePage() {
           </button>
         </div>
       </div>
+
+      {pendingScratchCards.length > 0 && (
+        <button
+          className="scratch-reminder-banner"
+          onClick={() => setRevealingScratchCard(pendingScratchCards[0])}
+        >
+          <Gift size={20} />
+          <span>
+            {pendingScratchCards.length > 1
+              ? `You have ${pendingScratchCards.length} scratch card rewards waiting!`
+              : 'You have a scratch card reward waiting!'}
+          </span>
+          <span className="scratch-reminder-cta">Tap to reveal</span>
+        </button>
+      )}
 
       {!city ? (
         <EmptyState
@@ -1460,6 +1493,20 @@ export default function HomePage() {
           </div>
         </div>
       </Modal>
+
+      {revealingScratchCard && (
+        <ScratchCardReveal
+          amount={revealingScratchCard.amount}
+          onReveal={() => {
+            void scratchMyCard(revealingScratchCard.order_id).catch(() => undefined);
+          }}
+          onClose={() => {
+            const scratchedId = revealingScratchCard.id;
+            setRevealingScratchCard(null);
+            setPendingScratchCards((list) => list.filter((c) => c.id !== scratchedId));
+          }}
+        />
+      )}
     </div>
   );
 }

@@ -2146,6 +2146,22 @@ export async function getMyScratchCard(orderId: string): Promise<ScratchCard | n
   return { id: d.id, order_id: d.order_id, amount: num(d.amount), is_scratched: !!d.is_scratched, status: d.status };
 }
 
+/** Any credited-but-unscratched scratch cards (from any past order), newest first — for a
+ * persistent Home reminder so a reward isn't missed if the customer doesn't revisit that
+ * order's detail page. */
+export async function getMyPendingScratchCards(): Promise<ScratchCard[]> {
+  const { data, error } = await supabase.rpc('get_my_pending_scratch_cards');
+  if (error) fail(error, 'Failed to load pending scratch cards');
+  const list: any[] = Array.isArray(data) ? data : [];
+  return list.map((d) => ({
+    id: d.id,
+    order_id: d.order_id,
+    amount: num(d.amount),
+    is_scratched: !!d.is_scratched,
+    status: d.status,
+  }));
+}
+
 /** Marks the card scratched (idempotent — calling again just returns the already-revealed amount). */
 export async function scratchMyCard(orderId: string): Promise<ScratchCard> {
   const { data, error } = await supabase.rpc('scratch_my_card', { p_order_id: orderId });
