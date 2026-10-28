@@ -79,23 +79,25 @@ export function initAnalyticsSession(): void {
   const { deviceType, browser, os } = parseDevice();
   const userId = useSession.getState().userId;
 
+  // A plain insert, not .upsert(): with RLS SELECT restricted to admins, anon/authenticated
+  // callers can't satisfy the ON CONFLICT check an upsert needs, so it always fails silently
+  // ("new row violates row-level security policy") and no session row is ever created. A
+  // duplicate id (rare — one per sessionStorage lifetime) just fails the primary key and is
+  // swallowed below, same as before, but a first-time insert now actually succeeds.
   supabase
     .from('analytics_sessions')
-    .upsert(
-      {
-        id,
-        user_id: userId,
-        is_authenticated: Boolean(userId),
-        platform: 'web',
-        device_type: deviceType,
-        browser,
-        os,
-        entry_page: window.location.pathname,
-        traffic_source: trafficSource(),
-        last_seen_at: new Date().toISOString(),
-      },
-      { onConflict: 'id', ignoreDuplicates: true },
-    )
+    .insert({
+      id,
+      user_id: userId,
+      is_authenticated: Boolean(userId),
+      platform: 'web',
+      device_type: deviceType,
+      browser,
+      os,
+      entry_page: window.location.pathname,
+      traffic_source: trafficSource(),
+      last_seen_at: new Date().toISOString(),
+    })
     .then(undefined, () => {});
 
   if (heartbeatTimer) clearInterval(heartbeatTimer);
