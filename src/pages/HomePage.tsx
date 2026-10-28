@@ -488,9 +488,22 @@ function DishMatches({ items }: { items: DishMatch[] }) {
 const ITEM_CAROUSEL_MS = 2800;
 
 /** Auto-sliding photo+price strip of a hotel's top dishes (Swiggy-style), shown in place of the
- * static banner when at least 2 real item photos are available. Dots are decorative only (this
+ * static banner when at least 2 real item photos are available. Also reused, larger and slightly
+ * slower, as the hero carousel on the hotel menu/detail page (see HotelMenuPage.tsx). Dots are decorative only (this
  * sits inside the card's own <button>, so no nested interactive controls). */
-function HotelItemCarousel({ items, name, isOpen }: { items: TopItem[]; name: string; isOpen: boolean }) {
+export function HotelItemCarousel({
+  items,
+  name,
+  isOpen,
+  intervalMs = ITEM_CAROUSEL_MS,
+  imageWidth = 480,
+}: {
+  items: TopItem[];
+  name: string;
+  isOpen: boolean;
+  intervalMs?: number;
+  imageWidth?: number;
+}) {
   const [index, setIndex] = useState(0);
   useEffect(() => {
     setIndex(0);
@@ -498,14 +511,14 @@ function HotelItemCarousel({ items, name, isOpen }: { items: TopItem[]; name: st
     const t = setInterval(() => {
       if (document.hidden) return;
       setIndex((i) => (i + 1) % items.length);
-    }, ITEM_CAROUSEL_MS);
+    }, intervalMs);
     return () => clearInterval(t);
-  }, [items]);
+  }, [items, intervalMs]);
   const item = items[index] ?? items[0];
   if (!item) return null;
   return (
     <>
-      <ProductImage url={item.image_url} alt={`${item.name} at ${name}`} grayscale={!isOpen} width={480} />
+      <ProductImage url={item.image_url} alt={`${item.name} at ${name}`} grayscale={!isOpen} width={imageWidth} />
       <span className="hotel-item-price">Items at ₹{item.price}</span>
       {items.length > 1 && (
         <span className="hotel-item-dots" aria-hidden="true">

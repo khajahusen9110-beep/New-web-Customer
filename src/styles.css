@@ -375,7 +375,7 @@ code { background: var(--surface-variant); padding: 1px 5px; border-radius: 4px;
 .hotel-cat.selected .hotel-cat-img img { border-radius: 50%; }
 .hotel-cat-name { font-size: 12px; font-weight: 600; color: var(--text-2); text-align: center; line-height: 1.2; }
 .hotel-cat.selected .hotel-cat-name { color: var(--primary); font-weight: 800; }
-.hotel-hero { aspect-ratio: 16 / 9; height: auto; border-radius: 16px; overflow: hidden; }
+.hotel-hero { position: relative; aspect-ratio: 16 / 9; height: auto; border-radius: 16px; overflow: hidden; }
 .menu-grid { display: grid; grid-template-columns: 1fr; gap: 12px; }
 @media (min-width: 900px) { .menu-grid { grid-template-columns: 1fr 1fr; } }
 .menu-item { display: flex; align-items: center; gap: 12px; padding: 12px; border-radius: 20px; }
