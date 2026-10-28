@@ -15,6 +15,14 @@ import {
   syncPendingUpiOrders,
 } from './lib/repository';
 import { takePendingAgentCode } from './lib/agentCode';
+import {
+  enableNotifications,
+  getNotificationPermissionStatus,
+  hasDismissedNotificationPrompt,
+  isFirebaseConfigured,
+  isNotificationSupported,
+  setDismissedNotificationPrompt,
+} from './lib/webPush';
 import { initAnalyticsSession, trackPageView } from './lib/analytics';
 import { useSession } from './store/session';
 import { useCart } from './store/cart';
@@ -137,6 +145,19 @@ function useLoggedInEffects() {
       void refreshUnreadNotificationCount(userId);
       // A UPI payment whose success callback was lost (tab closed in the UPI app switch).
       void syncPendingUpiOrders(userId);
+      // Order-status and re-engagement pushes need a registered web-push token. Only ask
+      // once: skip silently if unsupported, not configured yet, already decided (granted,
+      // denied, or previously dismissed), so this never nags a returning customer.
+      if (
+        isFirebaseConfigured() &&
+        isNotificationSupported() &&
+        getNotificationPermissionStatus() === 'default' &&
+        !hasDismissedNotificationPrompt()
+      ) {
+        enableNotifications()
+          .catch(() => undefined)
+          .finally(() => setDismissedNotificationPrompt(true));
+      }
       // An agent's shared link (?agent=CODE) was captured before login — apply it now that
       // we have a signed-in user. Silently ignored if invalid/already-linked/self-code.
       const pendingAgentCode = takePendingAgentCode();
