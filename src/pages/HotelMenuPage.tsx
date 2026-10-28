@@ -253,7 +253,7 @@ export default function HotelMenuPage() {
   const hotelOpen = vendor ? isVendorOpenNow(vendor, slots, city) : withinHours && isCityOpenNow(city);
 
   // Top dish photos for the hero carousel (Swiggy-style), in place of the plain static banner
-  // once at least 2 real item photos are known for this hotel.
+  // once at least 1 real item photo is known for this hotel.
   const [heroTopItems, setHeroTopItems] = useState<TopItem[]>(() => peekHotelExtras([vendorId]).topItems[vendorId] ?? []);
   useEffect(() => {
     setHeroTopItems(peekHotelExtras([vendorId]).topItems[vendorId] ?? []);
@@ -540,7 +540,7 @@ export default function HotelMenuPage() {
               <div className="stack">
                 {vendor?.banner_url && !trimmedQuery && (
                   <div className="hotel-hero">
-                    {heroTopItems.length >= 2 ? (
+                    {heroTopItems.length >= 1 ? (
                       <HotelItemCarousel items={heroTopItems} name={vendorName} isOpen={hotelOpen} intervalMs={3200} imageWidth={800} />
                     ) : (
                       <ProductImage url={vendor.banner_url} alt={vendorName} width={800} priority />

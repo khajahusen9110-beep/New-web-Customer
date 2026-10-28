@@ -583,7 +583,7 @@ function HotelCard({
       onFocus={onIntent}
     >
       <div className="hotel-banner">
-        {topItems && topItems.length >= 2 ? (
+        {topItems && topItems.length >= 1 ? (
           <HotelItemCarousel items={topItems} name={vendor.name} isOpen={isOpen} />
         ) : (
           <ProductImage url={vendor.banner_url} alt={vendor.name} grayscale={!isOpen} width={480} priority={priority} />
