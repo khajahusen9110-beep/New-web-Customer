@@ -1126,7 +1126,11 @@ export function getBudgetFoodProducts(cityId: string, forceRefresh = false): Pro
           const r = resolveProduct(prod, cityStockOf(prod), cityId);
           return { ...r, variants: [], vendorName: vendorNameById.get(prod.id) };
         })
-        .filter((p) => isInStockAndActive(p) && p.effectivePrice > 0 && p.effectivePrice <= 99);
+        // Hotel dishes aren't stock-tracked like groceries (stock_qty is routinely 0 for every
+        // item), so isInStockAndActive's `effectiveStock > 0` requirement would wipe out every
+        // real dish. Active + available is the actual "can this be ordered" signal for food,
+        // same as checkCartLine's hotel branch.
+        .filter((p) => p.isActive && p.effectiveIsAvailable && p.effectivePrice > 0 && p.effectivePrice <= 99);
       // Stock/price alone isn't "available" for a hotel dish: also require the hotel to be open
       // right now and the item to be inside its own serving hours (same rule the menu page and
       // dish search use), so 99 Store never offers something you can't actually order.
