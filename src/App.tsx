@@ -234,12 +234,17 @@ export default function App() {
   const isLoggedIn = useSession((s) => s.isLoggedIn);
   const location = useLocation();
   useEffect(() => {
-    initAnalyticsSession();
     // A real visit via an agent's shared link (?agent=CODE, captured in main.tsx before the
     // router/analytics even existed yet). Peek, don't consume — the actual apply-on-login
     // flow below still needs takePendingAgentCode() to read the same value later.
     const clickedCode = peekPendingAgentCode();
-    if (clickedCode) trackEvent('referral_link_click', { agent_code: clickedCode });
+    // trackEvent's insert has an FK on session_id — firing it before the session row actually
+    // exists fails silently (fire-and-forget swallows the error) and the click is lost. Await
+    // the session insert settling first; initAnalyticsSession() itself is still a no-op on
+    // repeat calls, so this doesn't duplicate the session.
+    void initAnalyticsSession().then(() => {
+      if (clickedCode) trackEvent('referral_link_click', { agent_code: clickedCode });
+    });
   }, []);
   useEffect(() => {
     trackPageView(location.pathname);

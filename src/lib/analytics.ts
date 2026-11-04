@@ -72,8 +72,13 @@ function trafficSource(): string | null {
 }
 
 /** Call once near app bootstrap. Safe to call more than once — only initializes a session once. */
-export function initAnalyticsSession(): void {
-  if (sessionStarted) return;
+// Resolves once the session row insert has settled (success or failure) — lets a caller that
+// needs the session to actually exist first (e.g. a trackEvent() that must not race the FK)
+// await it, without changing the fire-and-forget behavior for ordinary callers who ignore it.
+let sessionReady: Promise<void> = Promise.resolve();
+
+export function initAnalyticsSession(): Promise<void> {
+  if (sessionStarted) return sessionReady;
   sessionStarted = true;
   const id = getSessionId();
   const { deviceType, browser, os } = parseDevice();
@@ -84,21 +89,26 @@ export function initAnalyticsSession(): void {
   // ("new row violates row-level security policy") and no session row is ever created. A
   // duplicate id (rare — one per sessionStorage lifetime) just fails the primary key and is
   // swallowed below, same as before, but a first-time insert now actually succeeds.
-  supabase
-    .from('analytics_sessions')
-    .insert({
-      id,
-      user_id: userId,
-      is_authenticated: Boolean(userId),
-      platform: 'web',
-      device_type: deviceType,
-      browser,
-      os,
-      entry_page: window.location.pathname,
-      traffic_source: trafficSource(),
-      last_seen_at: new Date().toISOString(),
-    })
-    .then(undefined, () => {});
+  sessionReady = Promise.resolve(
+    supabase
+      .from('analytics_sessions')
+      .insert({
+        id,
+        user_id: userId,
+        is_authenticated: Boolean(userId),
+        platform: 'web',
+        device_type: deviceType,
+        browser,
+        os,
+        entry_page: window.location.pathname,
+        traffic_source: trafficSource(),
+        last_seen_at: new Date().toISOString(),
+      })
+      .then(
+        () => undefined,
+        () => undefined
+      )
+  );
 
   if (heartbeatTimer) clearInterval(heartbeatTimer);
   heartbeatTimer = setInterval(() => {
@@ -109,6 +119,8 @@ export function initAnalyticsSession(): void {
   document.addEventListener('visibilitychange', () => {
     if (document.visibilityState === 'visible') sendHeartbeat();
   });
+
+  return sessionReady;
 }
 
 function sendHeartbeat(): void {
