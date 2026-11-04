@@ -23,3 +23,12 @@ export function takePendingAgentCode(): string | null {
     return null;
   }
 }
+
+/** Non-destructive read — for click tracking, which must not consume the code before login applies it. */
+export function peekPendingAgentCode(): string | null {
+  try {
+    return sessionStorage.getItem(KEY);
+  } catch {
+    return null;
+  }
+}

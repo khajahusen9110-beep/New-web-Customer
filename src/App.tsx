@@ -14,7 +14,7 @@ import {
   resolveUserCity,
   syncPendingUpiOrders,
 } from './lib/repository';
-import { takePendingAgentCode } from './lib/agentCode';
+import { takePendingAgentCode, peekPendingAgentCode } from './lib/agentCode';
 import {
   enableNotifications,
   getNotificationPermissionStatus,
@@ -23,7 +23,7 @@ import {
   isNotificationSupported,
   setDismissedNotificationPrompt,
 } from './lib/webPush';
-import { initAnalyticsSession, trackPageView } from './lib/analytics';
+import { initAnalyticsSession, trackPageView, trackEvent } from './lib/analytics';
 import { useSession } from './store/session';
 import { useCart } from './store/cart';
 import { CenterSpinner, ToastHost, toast } from './components/ui';
@@ -235,6 +235,11 @@ export default function App() {
   const location = useLocation();
   useEffect(() => {
     initAnalyticsSession();
+    // A real visit via an agent's shared link (?agent=CODE, captured in main.tsx before the
+    // router/analytics even existed yet). Peek, don't consume — the actual apply-on-login
+    // flow below still needs takePendingAgentCode() to read the same value later.
+    const clickedCode = peekPendingAgentCode();
+    if (clickedCode) trackEvent('referral_link_click', { agent_code: clickedCode });
   }, []);
   useEffect(() => {
     trackPageView(location.pathname);
