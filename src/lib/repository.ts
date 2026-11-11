@@ -1545,6 +1545,30 @@ export function getCityDeliverySettings(cityId: string): Promise<CityDeliverySet
   });
 }
 
+export interface HomeSectionSettings {
+  showMostSelling: boolean;
+  showRecentlyViewed: boolean;
+}
+
+/**
+ * City Admin on/off switches for the home page's "Most Selling" and "Recently Viewed"
+ * rows. No row for a city = both sections on (matches the table's own column defaults).
+ */
+export function getHomeSectionSettings(cityId: string): Promise<HomeSectionSettings> {
+  return cached(`homeSections:${cityId}`, CACHE_TTL_MS, async () => {
+    const { data, error } = await supabase
+      .from('city_home_section_settings')
+      .select('show_most_selling, show_recently_viewed')
+      .eq('city_id', cityId)
+      .maybeSingle();
+    if (error || !data) return { showMostSelling: true, showRecentlyViewed: true };
+    return {
+      showMostSelling: data.show_most_selling !== false,
+      showRecentlyViewed: data.show_recently_viewed !== false,
+    };
+  });
+}
+
 export async function getFreeDeliveryThreshold(cityId: string): Promise<number | null> {
   const s = await getCityDeliverySettings(cityId);
   if (s?.free_delivery_min_order_amount != null) return Number(s.free_delivery_min_order_amount);

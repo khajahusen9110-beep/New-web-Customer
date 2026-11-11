@@ -52,6 +52,7 @@ import {
   getBudgetFoodProducts,
   getRecentlyViewedProducts,
   peekRecentlyViewedProducts,
+  getHomeSectionSettings,
   getHotelExtras,
   type TopItem,
   prefetchHotelMenu,
@@ -1004,6 +1005,18 @@ export default function HomePage() {
     };
   }, [mode, cityId]);
 
+  // City Admin on/off switches for the "Most Selling" and "Recently Viewed" home rows.
+  // Default to both on while loading so nothing flickers hidden-then-shown for the common case.
+  const [homeSections, setHomeSections] = useState({ showMostSelling: true, showRecentlyViewed: true });
+  useEffect(() => {
+    if (!cityId) return;
+    let cancelled = false;
+    getHomeSectionSettings(cityId).then((s) => !cancelled && setHomeSections(s));
+    return () => {
+      cancelled = true;
+    };
+  }, [cityId]);
+
   // Grocery tab only: most-selling products in this city (by units sold).
   useEffect(() => {
     if (mode !== 'grocery' || !cityId) return;
@@ -1300,7 +1313,7 @@ export default function HomePage() {
               {homeAds.length > 0 && <LocalAdStrip ads={homeAds} />}
               {banners.length ? <PromoCarousel banners={banners} onOpen={openBanner} /> : <DealsBanner />}
               <OfferBanner kind="grocery" />
-              {recentGrocery.length > 0 && (
+              {homeSections.showRecentlyViewed && recentGrocery.length > 0 && (
                 <section className="featured-section section-tint tint-sky">
                   <h3 className="section-title">👀 Recently Viewed</h3>
                   <div className="featured-row">
@@ -1318,7 +1331,7 @@ export default function HomePage() {
                   </div>
                 </section>
               )}
-              {topSelling.length > 0 && (
+              {homeSections.showMostSelling && topSelling.length > 0 && (
                 <section className="featured-section section-tint tint-sage">
                   <h3 className="section-title">🔥 Most Selling</h3>
                   <div className="featured-row">
@@ -1428,7 +1441,7 @@ export default function HomePage() {
           )}
           {!search && banners.length > 0 && <PromoCarousel banners={banners} onOpen={openBanner} />}
           {!search && <OfferBanner kind="food" />}
-          {!search && recentFood.length > 0 && (
+          {!search && homeSections.showRecentlyViewed && recentFood.length > 0 && (
             <section className="featured-section section-tint tint-sky">
               <h3 className="section-title">👀 Recently Viewed</h3>
               <div className="featured-row">
@@ -1449,7 +1462,7 @@ export default function HomePage() {
               </div>
             </section>
           )}
-          {!search && topFood.length > 0 && (
+          {!search && homeSections.showMostSelling && topFood.length > 0 && (
             <section className="featured-section section-tint tint-peach">
               <h3 className="section-title">🔥 Most Ordered</h3>
               <div className="featured-row">
