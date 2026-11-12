@@ -26,8 +26,8 @@ export function OfferBanner({ kind }: { kind?: PromoKind }) {
 
   const isGrocery = kind === 'grocery' || (!kind && !food && !!grocery);
   const bg = isGrocery
-    ? 'linear-gradient(135deg,#15803d,#166534)'
-    : 'linear-gradient(135deg,#e11d48,#b91c3c)';
+    ? 'linear-gradient(135deg,#4a9d68,#3f7a54)'
+    : 'linear-gradient(135deg,#e35f79,#c4596c)';
   const pct = Math.round(promo.percent);
   const title = promo.bannerNote || `${pct}% OFF`;
 
