@@ -1093,6 +1093,35 @@ export function getTopSellingFoodProducts(cityId: string, forceRefresh = false):
   );
 }
 
+/**
+ * Real top-selling dishes for ONE hotel (by units sold in this city), for the hotel menu's
+ * "Recommended" tab. Unlike the hero carousel's "top items" (which is really just
+ * featured/recent dishes for a photo rotation), this is genuine sales data.
+ */
+export async function getVendorTopProducts(vendorId: string, cityId: string, limit = 10): Promise<ResolvedProduct[]> {
+  const { data: ranked, error: rErr } = await supabase.rpc('get_vendor_top_products', {
+    p_vendor_id: vendorId,
+    p_city_id: cityId,
+    p_limit: limit,
+  });
+  if (rErr || !ranked || !ranked.length) return [];
+  const soldById = new Map<string, number>(
+    (ranked as { product_id: string; units_sold: number }[]).map((r) => [r.product_id, Number(r.units_sold) || 0]),
+  );
+  const ids = Array.from(soldById.keys());
+  const { data, error } = await withCityStock(
+    supabase.from('products').select(HOTEL_PRODUCT_COLS).in('id', ids),
+    cityId,
+    false,
+  );
+  if (error) return [];
+  const resolved = ((data ?? []) as unknown as Product[])
+    .map((prod) => ({ ...resolveProduct(prod, cityStockOf(prod), cityId), variants: [], soldCount: soldById.get(prod.id) ?? 0 }))
+    .filter((p) => p.isActive && p.effectiveIsAvailable);
+  resolved.sort((a, b) => (b.soldCount ?? 0) - (a.soldCount ?? 0));
+  return resolved;
+}
+
 export const peekBudgetFoodProducts = (cityId: string) => peek<ResolvedProduct[]>(`budgetFood:${cityId}`);
 
 /**

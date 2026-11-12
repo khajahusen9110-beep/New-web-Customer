@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useNavigate, useParams, useSearchParams } from 'react-router-dom';
-import { Clock, Info, RefreshCw, Search, ShoppingCart, Utensils, UtensilsCrossed } from 'lucide-react';
+import { BadgeCheck, Clock, Flame, Info, RefreshCw, Search, Share2, ShoppingCart, Utensils, UtensilsCrossed } from 'lucide-react';
 import {
   ConfirmDialog,
   ErrorCard,
@@ -19,6 +19,7 @@ import { HotelItemCarousel } from './HomePage';
 import {
   getHotelCategories,
   getHotelExtras,
+  getVendorTopProducts,
   getHotelFeaturedItems,
   getHotelMenuAvailability,
   getHotelProducts,
@@ -36,6 +37,7 @@ import {
   defaultMenuTab,
   errorMessage,
   hotelClosedMessage,
+  clockLabel,
   isHotelItemAvailable,
   isCityOpenNow,
   isVendorOpenNow,
@@ -49,6 +51,9 @@ import { cartCount, useCart } from '../store/cart';
 import { trackEvent } from '../lib/analytics';
 
 const PAGE = HOTEL_MENU_PAGE;
+// Synthetic tab id: not a real category, shows this hotel's real top-selling items (by sales,
+// not just featured/recent) instead of a server-paginated category fetch.
+const RECOMMENDED_TAB_ID = '__recommended__';
 
 function MenuItemCard({
   product,
@@ -171,7 +176,20 @@ export default function HotelMenuPage() {
   const [error, setError] = useState<string | null>(null);
   const [conflict, setConflict] = useState<CartItem | null>(null);
   const [dishQuery, setDishQuery] = useState('');
+  const [vendorTopProducts, setVendorTopProducts] = useState<ResolvedProduct[]>([]);
   const reqId = useRef(0);
+
+  // This hotel's real top-selling items (by sales), for the "Recommended" tab.
+  useEffect(() => {
+    if (!vendorId || !cityId) return;
+    let cancelled = false;
+    getVendorTopProducts(vendorId, cityId)
+      .then((list) => !cancelled && setVendorTopProducts(list))
+      .catch(() => !cancelled && setVendorTopProducts([]));
+    return () => {
+      cancelled = true;
+    };
+  }, [vendorId, cityId]);
 
   const vendorName = vendor?.name ?? params.get('name') ?? 'Hotel';
 
@@ -202,6 +220,13 @@ export default function HotelMenuPage() {
   const loadProducts = useCallback(
     async (reset: boolean, force = false) => {
       if (!categoryId) return;
+      if (categoryId === RECOMMENDED_TAB_ID) {
+        setProducts(vendorTopProducts);
+        setHasMore(false);
+        setLoadingProducts(false);
+        setLoadingMore(false);
+        return;
+      }
       const id = ++reqId.current;
       if (reset) {
         setLoadingProducts(true);
@@ -234,7 +259,7 @@ export default function HotelMenuPage() {
         }
       }
     },
-    [vendorId, cityId, categoryId, products.length],
+    [vendorId, cityId, categoryId, products.length, vendorTopProducts],
   );
 
   useEffect(() => {
@@ -326,7 +351,7 @@ export default function HotelMenuPage() {
     };
   }, [loadAvailability, vendorId]);
 
-  const tabs: MenuTab[] = useMemo(
+  const realTabs: MenuTab[] = useMemo(
     () =>
       availItems
         ? menuTabs(categories, availItems, hotelOpen, effectiveSlots)
@@ -334,6 +359,17 @@ export default function HotelMenuPage() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
     [categories, availItems, hotelOpen, effectiveSlots, minute],
   );
+  // "Recommended" sits first, ahead of the hotel's real categories, and only appears once this
+  // hotel actually has real sales to show (never an empty/fabricated tab).
+  const tabs: MenuTab[] = useMemo(() => {
+    if (!vendorTopProducts.length) return realTabs;
+    const recommendedTab: MenuTab = {
+      category: { id: RECOMMENDED_TAB_ID, name: 'Recommended', image_url: null, sort_order: -1 },
+      availableNow: hotelOpen,
+      fromLabel: null,
+    };
+    return [recommendedTab, ...realTabs];
+  }, [realTabs, vendorTopProducts.length, hotelOpen]);
 
   // Default tab until the customer taps one; their choice is kept while the menu is open.
   const userPicked = useRef(false);
@@ -380,14 +416,19 @@ export default function HotelMenuPage() {
       const a = hotelOpen && isHotelItemAvailable(p, effectiveSlots);
       return a && p.isFeatured ? 0 : a ? 1 : 2;
     };
+    // Recommended's whole point is sales ranking — keep products in that (stable-sort) order
+    // instead of re-sorting it by price/name; only the availability tier still takes priority.
+    const isRecommended = categoryId === RECOMMENDED_TAB_ID;
     return [...products].sort(
       (a, b) =>
         tier(a) - tier(b) ||
-        Number(b.isFeatured) - Number(a.isFeatured) ||
-        a.effectivePrice - b.effectivePrice ||
-        a.name.toLowerCase().localeCompare(b.name.toLowerCase()),
+        (isRecommended
+          ? 0
+          : Number(b.isFeatured) - Number(a.isFeatured) ||
+            a.effectivePrice - b.effectivePrice ||
+            a.name.toLowerCase().localeCompare(b.name.toLowerCase())),
     );
-  }, [products, hotelOpen, effectiveSlots]);
+  }, [products, hotelOpen, effectiveSlots, categoryId]);
 
   // Filters the already-loaded menu for this hotel only — no server round trip, the whole
   // category's items are small enough to filter client-side as the customer types.
@@ -425,13 +466,43 @@ export default function HotelMenuPage() {
     getHotelFeaturedItems(vendorId, cityId, true).then(setFeaturedItems).catch(() => undefined);
   };
 
+  const timingText =
+    vendor?.opening_time && vendor?.closing_time ? `${clockLabel(vendor.opening_time)} - ${clockLabel(vendor.closing_time)}` : null;
+
+  const shareHotel = async () => {
+    const url = `${window.location.origin}/hotel/${vendorId}?name=${encodeURIComponent(vendorName)}`;
+    if (navigator.share) {
+      try {
+        await navigator.share({ title: vendorName, text: `Order from ${vendorName} on Sndmart!`, url });
+      } catch {
+        // Share sheet dismissed — not an error.
+      }
+    } else {
+      await navigator.clipboard.writeText(url).catch(() => undefined);
+      toast('Link copied!');
+    }
+  };
+
   return (
     <div className="page">
       <PageHeader
-        title={vendorName}
-        subtitle="Hotel Menu"
+        title={
+          <span className="hotel-title-row">
+            {vendorName}
+            <BadgeCheck size={16} className="hotel-verified-badge" aria-label="Verified" />
+          </span>
+        }
+        subtitle={
+          <span className={`hotel-open-badge ${hotelOpen ? 'is-open' : 'is-closed'}`}>
+            {hotelOpen ? 'Open Now' : 'Closed'}
+            {timingText && <span className="muted"> · {timingText}</span>}
+          </span>
+        }
         actions={
           <>
+            <button className="icon-btn" aria-label="Share hotel" onClick={shareHotel}>
+              <Share2 size={20} />
+            </button>
             <button className="icon-btn" aria-label="Refresh menu" onClick={refresh}>
               <RefreshCw size={20} />
             </button>
@@ -442,6 +513,18 @@ export default function HotelMenuPage() {
           </>
         }
       />
+
+      {vendor?.banner_url && (
+        <div className="content-pad">
+          <div className="hotel-hero">
+            {heroTopItems.length >= 1 ? (
+              <HotelItemCarousel items={heroTopItems} name={vendorName} isOpen={hotelOpen} intervalMs={3200} imageWidth={800} />
+            ) : (
+              <ProductImage url={vendor.banner_url} alt={vendorName} width={800} priority />
+            )}
+          </div>
+        </div>
+      )}
 
       {showSkeleton ? (
         <div className="content-pad">
@@ -511,8 +594,14 @@ export default function HotelMenuPage() {
                     className={`hotel-cat${categoryId === c.id ? ' selected' : ''}${later ? ' later' : ''}`}
                     onClick={() => pickTab(c.id)}
                   >
-                    <span className="hotel-cat-img">
-                      {c.image_url ? <ResizedImg url={c.image_url} width={64} /> : <Utensils size={24} />}
+                    <span className={`hotel-cat-img${c.id === RECOMMENDED_TAB_ID ? ' hotel-cat-recommended' : ''}`}>
+                      {c.id === RECOMMENDED_TAB_ID ? (
+                        <Flame size={24} />
+                      ) : c.image_url ? (
+                        <ResizedImg url={c.image_url} width={64} />
+                      ) : (
+                        <Utensils size={24} />
+                      )}
                     </span>
                     <span className="hotel-cat-name">{c.name}</span>
                     {later && fromLabel && (
@@ -539,15 +628,6 @@ export default function HotelMenuPage() {
               </div>
             ) : (
               <div className="stack">
-                {vendor?.banner_url && !trimmedQuery && (
-                  <div className="hotel-hero">
-                    {heroTopItems.length >= 1 ? (
-                      <HotelItemCarousel items={heroTopItems} name={vendorName} isOpen={hotelOpen} intervalMs={3200} imageWidth={800} />
-                    ) : (
-                      <ProductImage url={vendor.banner_url} alt={vendorName} width={800} priority />
-                    )}
-                  </div>
-                )}
                 <div className="product-grid">
                   {displayed.map((p) => (
                     <MenuGridCard

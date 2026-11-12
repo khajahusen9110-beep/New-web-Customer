@@ -444,6 +444,13 @@ code { background: var(--surface-variant); padding: 1px 5px; border-radius: 4px;
 .hotel-cat-name { font-size: 12px; font-weight: 600; color: var(--text-2); text-align: center; line-height: 1.2; }
 .hotel-cat.selected .hotel-cat-name { color: var(--primary); font-weight: 800; }
 .hotel-hero { position: relative; aspect-ratio: 16 / 9; height: auto; border-radius: 16px; overflow: hidden; }
+.hotel-title-row { display: inline-flex; align-items: center; gap: 5px; }
+.hotel-verified-badge { color: var(--primary); flex-shrink: 0; }
+.hotel-open-badge { font-size: 12px; font-weight: 700; }
+.hotel-open-badge.is-open { color: var(--green, #1a7f37); }
+.hotel-open-badge.is-closed { color: var(--red, #d92d20); }
+.hotel-cat-recommended { background: linear-gradient(145deg, #ffedd5, #fed7aa); color: #c2410c; }
+.hotel-cat.selected .hotel-cat-recommended { border: 3px solid #f97316; padding: 2px; color: #c2410c; }
 .menu-grid { display: grid; grid-template-columns: 1fr; gap: 12px; }
 @media (min-width: 900px) { .menu-grid { grid-template-columns: 1fr 1fr; } }
 .menu-item { display: flex; align-items: center; gap: 12px; padding: 12px; border-radius: 20px; }
