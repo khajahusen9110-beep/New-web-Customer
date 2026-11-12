@@ -1067,7 +1067,7 @@ export default function HomePage() {
 
   // City Admin on/off switches for the "Most Selling" and "Recently Viewed" home rows.
   // Default to both on while loading so nothing flickers hidden-then-shown for the common case.
-  const [homeSections, setHomeSections] = useState({ showMostSelling: true, showRecentlyViewed: true });
+  const [homeSections, setHomeSections] = useState({ showMostSelling: true, showRecentlyViewed: true, foodBannerBeforeCategories: true });
   useEffect(() => {
     if (!cityId) return;
     let cancelled = false;
@@ -1522,17 +1522,30 @@ export default function HomePage() {
       ) : (
         <div className="content-pad">
           {threshold != null && <FreeDeliveryBanner threshold={threshold} />}
-          {!search && banners.length > 0 && <PromoCarousel banners={banners} onOpen={openBanner} />}
-          {!search && dishes.length > 0 && (
-            <DishRow
-              dishes={dishes}
-              selectedKey={dishKeySel}
-              onSelect={(k) => {
-                setDishKeySel(k);
-                if (k) hotelsListRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' });
-              }}
-            />
-          )}
+          {(() => {
+            const banner = !search && banners.length > 0 && <PromoCarousel banners={banners} onOpen={openBanner} />;
+            const dishRow = !search && dishes.length > 0 && (
+              <DishRow
+                dishes={dishes}
+                selectedKey={dishKeySel}
+                onSelect={(k) => {
+                  setDishKeySel(k);
+                  if (k) hotelsListRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+                }}
+              />
+            );
+            return homeSections.foodBannerBeforeCategories ? (
+              <>
+                {banner}
+                {dishRow}
+              </>
+            ) : (
+              <>
+                {dishRow}
+                {banner}
+              </>
+            );
+          })()}
           {!search && <OfferBanner kind="food" />}
           {!search && homeSections.showRecentlyViewed && recentFood.length > 0 && (
             <section className="featured-section section-tint tint-sky">

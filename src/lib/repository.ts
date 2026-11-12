@@ -1711,23 +1711,69 @@ export function getCityDeliverySettings(cityId: string): Promise<CityDeliverySet
 export interface HomeSectionSettings {
   showMostSelling: boolean;
   showRecentlyViewed: boolean;
+  foodBannerBeforeCategories: boolean;
 }
 
 /**
  * City Admin on/off switches for the home page's "Most Selling" and "Recently Viewed"
- * rows. No row for a city = both sections on (matches the table's own column defaults).
+ * rows, plus whether the food home's banner carousel shows before or after dish
+ * categories. No row for a city = all on/before (matches the table's own column defaults).
  */
 export function getHomeSectionSettings(cityId: string): Promise<HomeSectionSettings> {
   return cached(`homeSections:${cityId}`, CACHE_TTL_MS, async () => {
     const { data, error } = await supabase
       .from('city_home_section_settings')
-      .select('show_most_selling, show_recently_viewed')
+      .select('show_most_selling, show_recently_viewed, food_banner_before_categories')
       .eq('city_id', cityId)
       .maybeSingle();
-    if (error || !data) return { showMostSelling: true, showRecentlyViewed: true };
+    if (error || !data) return { showMostSelling: true, showRecentlyViewed: true, foodBannerBeforeCategories: true };
     return {
       showMostSelling: data.show_most_selling !== false,
       showRecentlyViewed: data.show_recently_viewed !== false,
+      foodBannerBeforeCategories: data.food_banner_before_categories !== false,
+    };
+  });
+}
+
+export interface CityThemeColors {
+  foodPromoColorStart: string;
+  foodPromoColorEnd: string;
+  groceryBannerColorStart: string;
+  groceryBannerColorEnd: string;
+  soldBadgeColorStart: string;
+  soldBadgeColorEnd: string;
+  oceanColor: string;
+}
+
+const DEFAULT_THEME_COLORS: CityThemeColors = {
+  foodPromoColorStart: '#f4975a',
+  foodPromoColorEnd: '#dd6b74',
+  groceryBannerColorStart: '#4a9d68',
+  groceryBannerColorEnd: '#3f7a54',
+  soldBadgeColorStart: '#f4728a',
+  soldBadgeColorEnd: '#e35f79',
+  oceanColor: '#3d7ea6',
+};
+
+/** City Admin-configurable accent colors for home page banners/badges. Falls back to the built-in defaults. */
+export function getThemeColors(cityId: string): Promise<CityThemeColors> {
+  return cached(`themeColors:${cityId}`, CACHE_TTL_MS, async () => {
+    const { data, error } = await supabase
+      .from('city_theme_settings')
+      .select(
+        'food_promo_color_start, food_promo_color_end, grocery_banner_color_start, grocery_banner_color_end, sold_badge_color_start, sold_badge_color_end, ocean_color'
+      )
+      .eq('city_id', cityId)
+      .maybeSingle();
+    if (error || !data) return DEFAULT_THEME_COLORS;
+    return {
+      foodPromoColorStart: data.food_promo_color_start,
+      foodPromoColorEnd: data.food_promo_color_end,
+      groceryBannerColorStart: data.grocery_banner_color_start,
+      groceryBannerColorEnd: data.grocery_banner_color_end,
+      soldBadgeColorStart: data.sold_badge_color_start,
+      soldBadgeColorEnd: data.sold_badge_color_end,
+      oceanColor: data.ocean_color,
     };
   });
 }
