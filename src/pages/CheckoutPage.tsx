@@ -82,6 +82,7 @@ export default function CheckoutPage() {
   const [slots, setSlots] = useState<DeliverySlot[]>([]);
   const [express, setExpress] = useState<ExpressDeliverySettings | null>(null);
   const [handlingFee, setHandlingFee] = useState(DEFAULT_HANDLING_FEE);
+  const [platformFee, setPlatformFee] = useState(0);
   const [loadingDelivery, setLoadingDelivery] = useState(true);
   const [deliveryType, setDeliveryType] = useState<DeliveryType>('scheduled');
   const [slotId, setSlotId] = useState<string | null>(null);
@@ -173,6 +174,7 @@ export default function CheckoutPage() {
         setSlots(s);
         setExpress(e);
         if (cds?.handling_fee != null) setHandlingFee(Number(cds.handling_fee));
+        setPlatformFee(cds?.platform_fee != null ? Number(cds.platform_fee) : 0);
         const hasSlots = s.length > 0;
         const hasExpress = !!e?.is_active;
         setDeliveryType((cur) =>
@@ -250,8 +252,8 @@ export default function CheckoutPage() {
   const promoInfo = usePromoFor(isHotel ? 'food' : 'grocery');
   const promoDiscount = cartPromoDiscount(subtotal, promoInfo);
 
-  // Items - instant discount - offer + delivery + handling, before the wallet.
-  const payableBeforeWallet = Math.max(subtotal - discount - promoDiscount + (deliveryFee ?? 0) + handlingFee, 0);
+  // Items - instant discount - offer + delivery + handling + platform, before the wallet.
+  const payableBeforeWallet = Math.max(subtotal - discount - promoDiscount + (deliveryFee ?? 0) + handlingFee + platformFee, 0);
   const payableEstimateRef = useRef(payableBeforeWallet);
   payableEstimateRef.current = payableBeforeWallet;
   const wallet = preview?.wallet ?? null;
@@ -807,6 +809,7 @@ export default function CheckoutPage() {
                   }
                 />
                 <BillRow label="Handling Fee" value={rupees(handlingFee)} />
+                {platformFee > 0 && <BillRow label="Platform Fee" value={rupees(platformFee)} />}
                 {walletApplied > 0 && <BillRow label="Wallet" value={`−${rupees(walletApplied, 2)}`} accent />}
                 <hr />
                 <BillRow label="To Pay" value={total != null && deliveryAvailable ? rupees(total, 2) : '--'} bold accent />

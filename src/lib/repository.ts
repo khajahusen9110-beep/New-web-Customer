@@ -1537,7 +1537,7 @@ export function getCityDeliverySettings(cityId: string): Promise<CityDeliverySet
   return cached(`citySettings:${cityId}`, CACHE_TTL_MS, async () => {
     const { data, error } = await supabase
       .from('city_delivery_settings')
-      .select('city_id,free_delivery_min_order_amount,handling_fee')
+      .select('city_id,free_delivery_min_order_amount,handling_fee,platform_fee')
       .eq('city_id', cityId)
       .maybeSingle();
     if (error) return { value: null, cache: false as const };
@@ -2000,7 +2000,7 @@ const ORDER_LIST_COLS =
   'id,order_number,customer_id,vendor_id,status,payment_method,payment_status,total_amount,wallet_used_amount,cashback_amount,placed_at,created_at';
 const ORDER_DETAIL_COLS =
   'id,order_number,customer_id,vendor_id,delivery_partner_id,address_id,slot_id,status,payment_method,payment_status,' +
-  'subtotal,discount_amount,delivery_fee,handling_fee,total_amount,wallet_used_amount,cashback_amount,city_id,delivery_type,placed_at,created_at';
+  'subtotal,discount_amount,delivery_fee,handling_fee,platform_fee,total_amount,wallet_used_amount,cashback_amount,city_id,delivery_type,placed_at,created_at';
 
 export async function getOrders(userId: string, limit = 20, offset = 0): Promise<Order[]> {
   const { data, error } = await supabase

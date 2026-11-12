@@ -203,6 +203,7 @@ export interface CityDeliverySettings {
   city_id: string;
   free_delivery_min_order_amount?: number | null;
   handling_fee?: number | null;
+  platform_fee?: number | null;
 }
 
 export interface Coupon {
@@ -307,6 +308,7 @@ export interface Order {
   discount_amount: number;
   delivery_fee: number;
   handling_fee: number;
+  platform_fee?: number;
   total_amount: number;
   /** Paid from the Sndmart Wallet (already taken off total_amount). */
   wallet_used_amount?: number | null;

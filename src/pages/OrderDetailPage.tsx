@@ -617,6 +617,7 @@ export default function OrderDetailPage() {
             {order.discount_amount > 0 && <BillRow label="Discount" value={`-${rupees(order.discount_amount, 2)}`} accent />}
             <BillRow label="Delivery Fee" value={rupees(order.delivery_fee, 2)} />
             <BillRow label="Handling Fee" value={rupees(order.handling_fee, 2)} />
+            {Number(order.platform_fee ?? 0) > 0 && <BillRow label="Platform Fee" value={rupees(order.platform_fee, 2)} />}
             {Number(order.wallet_used_amount ?? 0) > 0 && (
               <BillRow label="Wallet used" value={`−${rupees(order.wallet_used_amount, 2)}`} accent />
             )}
