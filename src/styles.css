@@ -170,7 +170,7 @@ code { background: var(--surface-variant); padding: 1px 5px; border-radius: 4px;
 .scratch-overlay { position: fixed; inset: 0; background: rgba(0, 0, 0, 0.6); z-index: 2500; display: flex; align-items: center; justify-content: center; padding: 20px; }
 .scratch-sheet { background: var(--surface); border-radius: 20px; padding: 24px 20px; max-width: 340px; width: 100%; text-align: center; }
 .scratch-title { margin: 0 0 4px; font-size: 20px; }
-.scratch-card-face { position: relative; height: 140px; border-radius: 14px; overflow: hidden; margin-bottom: 14px; background: linear-gradient(135deg, var(--primary), #8b5cf6); touch-action: none; }
+.scratch-card-face { position: relative; height: 140px; border-radius: 14px; overflow: hidden; margin-bottom: 14px; background: linear-gradient(135deg, var(--primary), #9c7fcf); touch-action: none; }
 .scratch-reward { position: absolute; inset: 0; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 6px; color: white; }
 .scratch-amount { font-size: 28px; font-weight: 800; }
 .scratch-canvas { position: absolute; inset: 0; width: 100%; height: 100%; cursor: pointer; touch-action: none; }
