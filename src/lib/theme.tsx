@@ -1,6 +1,6 @@
-import { useEffect } from 'react';
+import { useEffect, useState } from 'react';
 import { useSession } from '../store/session';
-import { getThemeColors } from './repository';
+import { getThemeColors, getBannerImages, type CityBannerImages } from './repository';
 
 const CSS_VAR_BY_KEY: Record<string, string> = {
   foodPromoColorStart: '--food-promo-start',
@@ -37,4 +37,30 @@ export function ThemeProvider({ children }: { children: React.ReactNode }) {
   }, [cityId]);
 
   return children as React.ReactElement;
+}
+
+const EMPTY_BANNER_IMAGES: CityBannerImages = {
+  offerBannerGroceryImageUrl: null,
+  offerBannerFoodImageUrl: null,
+  dealsBannerImageUrl: null,
+  foodPromoBannerImageUrl: null,
+};
+
+/** This city's admin-uploaded background photos for OfferBanner/DealsBanner/FoodPromoBanner, if any. */
+export function useBannerImages(): CityBannerImages {
+  const cityId = useSession((s) => s.selectedCity?.id ?? '');
+  const [images, setImages] = useState<CityBannerImages>(EMPTY_BANNER_IMAGES);
+
+  useEffect(() => {
+    if (!cityId) return;
+    let cancelled = false;
+    getBannerImages(cityId).then((v) => {
+      if (!cancelled) setImages(v);
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, [cityId]);
+
+  return images;
 }

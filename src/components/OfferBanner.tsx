@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react';
 import { usePromoFor, type PromoKind } from '../lib/promo';
+import { useBannerImages } from '../lib/theme';
 
 // A promo banner with a live countdown, shown only when an offer is active for the given section.
 // All numbers (the %, the end time) come from the backend promo_campaigns via usePromoFor.
@@ -21,13 +22,17 @@ export function OfferBanner({ kind }: { kind?: PromoKind }) {
     const t = setInterval(() => setNow(Date.now()), 1000);
     return () => clearInterval(t);
   }, [promo?.endsAt]);
+  const images = useBannerImages();
 
   if (!promo || promo.percent <= 0) return null;
 
   const isGrocery = kind === 'grocery' || (!kind && !food && !!grocery);
-  const bg = isGrocery
-    ? 'linear-gradient(135deg,var(--grocery-banner-start),var(--grocery-banner-end))'
-    : 'linear-gradient(135deg,var(--food-promo-start),var(--food-promo-end))';
+  const bgImage = isGrocery ? images.offerBannerGroceryImageUrl : images.offerBannerFoodImageUrl;
+  const bg = bgImage
+    ? `linear-gradient(135deg, rgba(0,0,0,.5), rgba(0,0,0,.28)), url("${bgImage}") center/cover no-repeat`
+    : isGrocery
+      ? 'linear-gradient(135deg,var(--grocery-banner-start),var(--grocery-banner-end))'
+      : 'linear-gradient(135deg,var(--food-promo-start),var(--food-promo-end))';
   const pct = Math.round(promo.percent);
   const title = promo.bannerNote || `${pct}% OFF`;
 

@@ -108,6 +108,7 @@ import { shouldShowRatingPopup, useSession } from '../store/session';
 import { cartCount, useCart } from '../store/cart';
 import { addRecentFoodSearch, getRecentFoodSearches } from '../lib/recentSearches';
 import { trackEvent } from '../lib/analytics';
+import { useBannerImages } from '../lib/theme';
 
 const GROCERY_PAGE = 30;
 const HOTEL_PAGE = 20;
@@ -168,11 +169,18 @@ function FreeDeliveryBanner({ threshold }: { threshold: number }) {
   );
 }
 
-function DealsBanner() {
+function DealsBanner({ imageUrl }: { imageUrl?: string | null }) {
+  const style = imageUrl
+    ? { backgroundImage: `linear-gradient(120deg, rgba(0,0,0,.45), rgba(0,0,0,.2)), url("${imageUrl}")`, backgroundSize: 'cover', backgroundPosition: 'center' }
+    : undefined;
   return (
-    <div className="deals-banner">
-      <span className="deco deco-1">🥬</span>
-      <span className="deco deco-2">🍅</span>
+    <div className="deals-banner" style={style}>
+      {!imageUrl && (
+        <>
+          <span className="deco deco-1">🥬</span>
+          <span className="deco deco-2">🍅</span>
+        </>
+      )}
       <div>
         <div className="deals-kicker">FARM FRESH DAILY</div>
         <div className="deals-title">
@@ -1068,6 +1076,7 @@ export default function HomePage() {
   // City Admin on/off switches for the "Most Selling" and "Recently Viewed" home rows.
   // Default to both on while loading so nothing flickers hidden-then-shown for the common case.
   const [homeSections, setHomeSections] = useState({ showMostSelling: true, showRecentlyViewed: true, foodBannerBeforeCategories: true });
+  const bannerImages = useBannerImages();
   useEffect(() => {
     if (!cityId) return;
     let cancelled = false;
@@ -1404,7 +1413,7 @@ export default function HomePage() {
           {!search && (
             <>
               {homeAds.length > 0 && <LocalAdStrip ads={homeAds} />}
-              {banners.length ? <PromoCarousel banners={banners} onOpen={openBanner} /> : <DealsBanner />}
+              {banners.length ? <PromoCarousel banners={banners} onOpen={openBanner} /> : <DealsBanner imageUrl={bannerImages.dealsBannerImageUrl} />}
               <OfferBanner kind="grocery" />
               {homeSections.showRecentlyViewed && recentGrocery.length > 0 && (
                 <section className="featured-section section-tint tint-sky">
@@ -1615,7 +1624,7 @@ export default function HomePage() {
             <FoodPromoBanner
               coupon={promoCoupon}
               threshold={threshold}
-              imageUrl={dishes.find((d) => d.key === 'biryani')?.imageUrl ?? dishes[0]?.imageUrl ?? null}
+              imageUrl={bannerImages.foodPromoBannerImageUrl ?? dishes.find((d) => d.key === 'biryani')?.imageUrl ?? dishes[0]?.imageUrl ?? null}
               onOrder={() => hotelsListRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' })}
             />
           )}

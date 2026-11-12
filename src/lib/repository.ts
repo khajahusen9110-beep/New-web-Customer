@@ -1778,6 +1778,37 @@ export function getThemeColors(cityId: string): Promise<CityThemeColors> {
   });
 }
 
+export interface CityBannerImages {
+  offerBannerGroceryImageUrl: string | null;
+  offerBannerFoodImageUrl: string | null;
+  dealsBannerImageUrl: string | null;
+  foodPromoBannerImageUrl: string | null;
+}
+
+/** Optional admin-uploaded background photos for the OfferBanner/DealsBanner/FoodPromoBanner cards. */
+export function getBannerImages(cityId: string): Promise<CityBannerImages> {
+  return cached(`bannerImages:${cityId}`, CACHE_TTL_MS, async () => {
+    const empty: CityBannerImages = {
+      offerBannerGroceryImageUrl: null,
+      offerBannerFoodImageUrl: null,
+      dealsBannerImageUrl: null,
+      foodPromoBannerImageUrl: null,
+    };
+    const { data, error } = await supabase
+      .from('city_theme_settings')
+      .select('offer_banner_grocery_image_url, offer_banner_food_image_url, deals_banner_image_url, food_promo_banner_image_url')
+      .eq('city_id', cityId)
+      .maybeSingle();
+    if (error || !data) return empty;
+    return {
+      offerBannerGroceryImageUrl: data.offer_banner_grocery_image_url ?? null,
+      offerBannerFoodImageUrl: data.offer_banner_food_image_url ?? null,
+      dealsBannerImageUrl: data.deals_banner_image_url ?? null,
+      foodPromoBannerImageUrl: data.food_promo_banner_image_url ?? null,
+    };
+  });
+}
+
 export async function getFreeDeliveryThreshold(cityId: string): Promise<number | null> {
   const s = await getCityDeliverySettings(cityId);
   if (s?.free_delivery_min_order_amount != null) return Number(s.free_delivery_min_order_amount);
