@@ -1356,6 +1356,138 @@ export async function searchHotelDishes(cityId: string, query: string, limit = 6
     .sort((a, b) => (meta.get(a.id)?.order ?? 999) - (meta.get(b.id)?.order ?? 999));
 }
 
+// ---------- SMART FOOD SEARCH (search_food_items RPC — typo-tolerant, ranked, filterable) ----------
+
+export type FoodSearchSort = 'relevance' | 'price_asc' | 'price_desc' | 'popular' | 'rating';
+export type FoodVegFilter = 'all' | 'veg' | 'nonveg';
+
+export interface FoodSearchFilters {
+  sort?: FoodSearchSort;
+  veg?: FoodVegFilter;
+  maxPrice?: number | null;
+  minRating?: number | null;
+  offersOnly?: boolean;
+}
+
+/**
+ * The upgraded dish search: typo correction + partial-word matching (server-side pg_trgm),
+ * exact matches ranked first, Veg/Non-Veg/Budget/Rating/Offers filters, and 5 sort modes.
+ * Every row the RPC returns is already filtered to "open + available right now" — callers
+ * never need to re-check availability (see ResolvedProduct.guaranteedAvailable).
+ */
+export async function smartSearchFoodItems(
+  cityId: string,
+  query: string,
+  filters: FoodSearchFilters = {},
+  limit = 30,
+  offset = 0,
+): Promise<{ items: ResolvedProduct[]; totalCount: number }> {
+  const { data, error } = await supabase.rpc('search_food_items', {
+    p_city_id: cityId,
+    p_query: query,
+    p_sort: filters.sort ?? 'relevance',
+    p_veg_filter: filters.veg ?? 'all',
+    p_max_price: filters.maxPrice ?? null,
+    p_min_rating: filters.minRating ?? null,
+    p_offers_only: filters.offersOnly ?? false,
+    p_limit: limit,
+    p_offset: offset,
+  });
+  if (error) {
+    console.warn('Food search notice:', error.message);
+    return { items: [], totalCount: 0 };
+  }
+  type Row = {
+    id: string;
+    name: string;
+    price: number;
+    mrp: number | null;
+    discount_percent: number | null;
+    image_url: string | null;
+    is_veg: boolean | null;
+    vendor_id: string;
+    vendor_name: string;
+    vendor_rating: number | null;
+    vendor_review_count: number;
+    units_sold: number;
+    total_count: number;
+  };
+  const rows = (data ?? []) as Row[];
+  const items: ResolvedProduct[] = rows.map((r) => ({
+    base: {
+      id: r.id,
+      name: r.name,
+      price: Number(r.price),
+      mrp: r.mrp != null ? Number(r.mrp) : null,
+      available_from: null,
+      available_until: null,
+      is_active: true,
+      is_available: true,
+    },
+    id: r.id,
+    name: r.name,
+    imageUrl: r.image_url,
+    vendorId: r.vendor_id,
+    isFeatured: false,
+    isActive: true,
+    effectivePrice: Number(r.price),
+    effectiveMrp: r.mrp != null ? Number(r.mrp) : null,
+    effectiveStock: 1,
+    effectiveIsAvailable: true,
+    variants: [],
+    vendorName: r.vendor_name,
+    hotelOpen: true,
+    guaranteedAvailable: true,
+    isVeg: r.is_veg,
+    vendorRating: r.vendor_rating != null ? Number(r.vendor_rating) : null,
+    vendorReviewCount: Number(r.vendor_review_count ?? 0),
+    discountPercent: r.discount_percent != null ? Number(r.discount_percent) : null,
+    soldCount: Number(r.units_sold ?? 0),
+  }));
+  return { items, totalCount: Number(rows[0]?.total_count ?? items.length) };
+}
+
+/** Logs a "committed" search (debounce settled) — used only to build Trending Searches. */
+export function logFoodSearch(cityId: string, query: string, resultsCount: number): void {
+  void supabase.rpc('log_food_search', { p_city_id: cityId, p_query: query, p_results_count: resultsCount });
+}
+
+/** Top searched terms in this city over the last 14 days. */
+export async function getTrendingFoodSearches(cityId: string, limit = 8): Promise<string[]> {
+  const { data, error } = await supabase.rpc('get_trending_food_searches', { p_city_id: cityId, p_limit: limit });
+  if (error) return [];
+  return ((data ?? []) as { query: string; search_count: number }[]).map((r) => r.query);
+}
+
+/** "You might also like" — same hotel/category, popularity ranked. */
+export async function getSimilarFoodItems(productId: string, cityId: string, limit = 8): Promise<ResolvedProduct[]> {
+  const { data, error } = await supabase.rpc('get_similar_food_items', {
+    p_product_id: productId,
+    p_city_id: cityId,
+    p_limit: limit,
+  });
+  if (error) return [];
+  type Row = { id: string; name: string; price: number; image_url: string | null; is_veg: boolean | null; vendor_id: string; vendor_name: string; units_sold: number };
+  return ((data ?? []) as Row[]).map((r) => ({
+    base: { id: r.id, name: r.name, price: Number(r.price), available_from: null, available_until: null, is_active: true, is_available: true },
+    id: r.id,
+    name: r.name,
+    imageUrl: r.image_url,
+    vendorId: r.vendor_id,
+    isFeatured: false,
+    isActive: true,
+    effectivePrice: Number(r.price),
+    effectiveStock: 1,
+    effectiveIsAvailable: true,
+    variants: [],
+    vendorName: r.vendor_name,
+    hotelOpen: true,
+    guaranteedAvailable: true,
+    isVeg: r.is_veg,
+    soldCount: Number(r.units_sold ?? 0),
+  }));
+}
+
 // Only what the menu tabs need to know which categories have something orderable right now.
 const HOTEL_AVAILABILITY_COLS =
   'id,category_id,vendor_id,name,price,is_available,is_active,available_from,available_until,' + CITY_STOCK_EMBED;

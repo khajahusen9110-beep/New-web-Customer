@@ -7,13 +7,17 @@ import {
   ChevronRight,
   Clock,
   Copy,
+  Flame,
   MapPin,
+  Percent,
   RefreshCw,
   Search,
   ShoppingCart,
+  SlidersHorizontal,
   Star,
   Store,
   Tag,
+  TrendingUp,
   Truck,
   X,
 } from 'lucide-react';
@@ -42,7 +46,11 @@ import {
   getHotels,
   getHotelsServingDish,
   searchHotelVendorIds,
-  searchHotelDishes,
+  smartSearchFoodItems,
+  logFoodSearch,
+  getTrendingFoodSearches,
+  type FoodSearchSort,
+  type FoodVegFilter,
   type DishCategory,
   type DishMatch,
   getResolvedGroceryProducts,
@@ -98,6 +106,7 @@ import {
 } from '../lib/utils';
 import { shouldShowRatingPopup, useSession } from '../store/session';
 import { cartCount, useCart } from '../store/cart';
+import { addRecentFoodSearch, getRecentFoodSearches } from '../lib/recentSearches';
 import { trackEvent } from '../lib/analytics';
 
 const GROCERY_PAGE = 30;
@@ -399,7 +408,7 @@ function SearchDishCard({
   onDecrease: () => void;
   onOpenHotel: () => void;
 }) {
-  const orderable = (product.hotelOpen ?? false) && isHotelItemAvailable(product);
+  const orderable = product.guaranteedAvailable || ((product.hotelOpen ?? false) && isHotelItemAvailable(product));
   return (
     <div className={`card product-card${orderable ? '' : ' dimmed'}`}>
       <button className="product-img dish-img-btn" onClick={onOpenHotel} aria-label={`Open ${product.vendorName ?? 'hotel'}`}>
@@ -409,12 +418,23 @@ function SearchDishCard({
             <span className="tag tag-red">{product.hotelOpen ? 'Not available' : 'Hotel closed'}</span>
           </div>
         )}
+        {product.isVeg != null && (
+          <span className={`veg-dot ${product.isVeg ? 'veg-dot-veg' : 'veg-dot-nonveg'}`} aria-hidden="true" />
+        )}
+        {!!product.discountPercent && product.discountPercent > 0 && (
+          <span className="dish-discount-badge">{Math.round(product.discountPercent)}% OFF</span>
+        )}
       </button>
       <div className="product-name" title={product.name}>
         {product.name}
       </div>
       <button className="dish-hotel-link muted small ellipsis" onClick={onOpenHotel} title={product.vendorName ?? ''}>
         <Store size={12} /> {product.vendorName}
+        {product.vendorRating != null && (
+          <span className="dish-vendor-rating">
+            <Star size={10} /> {product.vendorRating.toFixed(1)}
+          </span>
+        )}
       </button>
       <div className="price"><OfferInline price={product.effectivePrice} kind="food" /></div>
       <div className="product-action">
@@ -665,9 +685,20 @@ export default function HomePage() {
   const [dishResults, setDishResults] = useState<ResolvedProduct[]>([]);
   const [dishResultsLoading, setDishResultsLoading] = useState(false);
   const [dishConflict, setDishConflict] = useState<{ item: CartItem; hotel: string } | null>(null);
+  // Smart Food Search: sort + filters (default sort = Price Low-High per spec; "relevance"
+  // only takes over once the customer is actually typing a query).
+  const [foodSort, setFoodSort] = useState<FoodSearchSort>('price_asc');
+  const [foodVeg, setFoodVeg] = useState<FoodVegFilter>('all');
+  const [foodBudgetOnly, setFoodBudgetOnly] = useState(false);
+  const [foodRatingOnly, setFoodRatingOnly] = useState(false);
+  const [foodOffersOnly, setFoodOffersOnly] = useState(false);
+  const [showFoodFilters, setShowFoodFilters] = useState(false);
+  const [trendingSearches, setTrendingSearches] = useState<string[]>([]);
+  const [recentSearches, setRecentSearches] = useState<string[]>([]);
+  const loggedQueryRef = useRef<string>('');
 
   const [search, setSearch] = useState('');
-  const query = useDebounced(search.trim(), 350);
+  const query = useDebounced(search.trim(), 280);
 
   // Grocery state
   // Last visit's categories (if any) let the product request start immediately.
@@ -877,7 +908,9 @@ export default function HomePage() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [mode, cityId, categoryId, query, dishServing]);
 
-  // Food search: fetch matching dishes directly (shown above the hotels list).
+  // Smart Food Search: fetch matching dishes directly (shown above the hotels list) —
+  // typo-tolerant + partial-word matched + ranked server-side, with Veg/Budget/Rating/Offers
+  // filters and 5 sort modes. Every result is already "open + available right now".
   useEffect(() => {
     if (mode !== 'hotels' || !cityId || !query) {
       setDishResults([]);
@@ -886,9 +919,28 @@ export default function HomePage() {
     }
     let cancelled = false;
     setDishResultsLoading(true);
-    searchHotelDishes(cityId, query)
-      .then((list) => {
-        if (!cancelled) setDishResults(list);
+    smartSearchFoodItems(
+      cityId,
+      query,
+      {
+        sort: foodSort,
+        veg: foodVeg,
+        maxPrice: foodBudgetOnly ? 149 : null,
+        minRating: foodRatingOnly ? 4 : null,
+        offersOnly: foodOffersOnly,
+      },
+      40,
+    )
+      .then(({ items }) => {
+        if (cancelled) return;
+        setDishResults(items);
+        // Log once per settled query (not every keystroke) so Trending Searches stays meaningful.
+        if (loggedQueryRef.current !== query) {
+          loggedQueryRef.current = query;
+          logFoodSearch(cityId, query, items.length);
+          addRecentFoodSearch(query);
+          setRecentSearches(getRecentFoodSearches());
+        }
       })
       .catch(() => {
         if (!cancelled) setDishResults([]);
@@ -899,7 +951,15 @@ export default function HomePage() {
     return () => {
       cancelled = true;
     };
-  }, [mode, cityId, query]);
+  }, [mode, cityId, query, foodSort, foodVeg, foodBudgetOnly, foodRatingOnly, foodOffersOnly]);
+
+  // Trending searches (server) + Recent searches (this device) — shown before the customer
+  // has typed anything, so they always have a one-tap starting point.
+  useEffect(() => {
+    if (!cityId) return;
+    setRecentSearches(getRecentFoodSearches());
+    getTrendingFoodSearches(cityId).then(setTrendingSearches).catch(() => setTrendingSearches([]));
+  }, [cityId]);
 
   const addDishToCart = useCallback(
     (p: ResolvedProduct, delta: number) => {
@@ -1280,6 +1340,39 @@ export default function HomePage() {
         </div>
       </div>
 
+      {isHotels && !search && (recentSearches.length > 0 || trendingSearches.length > 0) && (
+        <div className="search-suggest-row">
+          {recentSearches.length > 0 && (
+            <div className="search-suggest-group">
+              <span className="search-suggest-label">
+                <Clock size={12} /> Recent
+              </span>
+              <div className="search-suggest-pills">
+                {recentSearches.slice(0, 5).map((q) => (
+                  <button key={`recent-${q}`} className="search-pill" onClick={() => setSearch(q)}>
+                    {q}
+                  </button>
+                ))}
+              </div>
+            </div>
+          )}
+          {trendingSearches.length > 0 && (
+            <div className="search-suggest-group">
+              <span className="search-suggest-label">
+                <TrendingUp size={12} /> Trending
+              </span>
+              <div className="search-suggest-pills">
+                {trendingSearches.slice(0, 6).map((q) => (
+                  <button key={`trend-${q}`} className="search-pill search-pill-trending" onClick={() => setSearch(q)}>
+                    <Flame size={11} /> {q}
+                  </button>
+                ))}
+              </div>
+            </div>
+          )}
+        </div>
+      )}
+
       {pendingScratchCards.length > 0 && (
         <button
           className="scratch-reminder-banner"
@@ -1515,9 +1608,55 @@ export default function HomePage() {
           )}
           {search && (
             <section className="dish-results">
-              <h3 className="section-title">
-                {dishResultsLoading ? 'Finding dishes…' : dishResults.length > 0 ? `Dishes matching "${search.trim()}"` : ''}
-              </h3>
+              <div className="row between dish-results-head">
+                <h3 className="section-title">
+                  {dishResultsLoading ? 'Finding dishes…' : dishResults.length > 0 ? `Dishes matching "${search.trim()}"` : ''}
+                </h3>
+                {(dishResults.length > 0 || foodVeg !== 'all' || foodBudgetOnly || foodRatingOnly || foodOffersOnly) && (
+                  <button
+                    className={`filter-toggle-btn${showFoodFilters ? ' active' : ''}`}
+                    onClick={() => setShowFoodFilters((v) => !v)}
+                  >
+                    <SlidersHorizontal size={14} /> Filters
+                  </button>
+                )}
+              </div>
+
+              {showFoodFilters && (
+                <div className="food-search-filters">
+                  <div className="food-filter-chips">
+                    {(['all', 'veg', 'nonveg'] as const).map((v) => (
+                      <button
+                        key={v}
+                        className={`food-chip${foodVeg === v ? ' active' : ''} ${v === 'veg' ? 'food-chip-veg' : v === 'nonveg' ? 'food-chip-nonveg' : ''}`}
+                        onClick={() => setFoodVeg(v)}
+                      >
+                        {v === 'all' ? 'All' : v === 'veg' ? '🟢 Veg' : '🔴 Non-Veg'}
+                      </button>
+                    ))}
+                    <button className={`food-chip${foodBudgetOnly ? ' active' : ''}`} onClick={() => setFoodBudgetOnly((v) => !v)}>
+                      Under ₹149
+                    </button>
+                    <button className={`food-chip${foodRatingOnly ? ' active' : ''}`} onClick={() => setFoodRatingOnly((v) => !v)}>
+                      <Star size={12} /> 4.0+
+                    </button>
+                    <button className={`food-chip${foodOffersOnly ? ' active' : ''}`} onClick={() => setFoodOffersOnly((v) => !v)}>
+                      <Percent size={12} /> Offers
+                    </button>
+                  </div>
+                  <div className="food-sort-row">
+                    <span className="food-sort-label">Sort by</span>
+                    <select className="food-sort-select" value={foodSort} onChange={(e) => setFoodSort(e.target.value as FoodSearchSort)}>
+                      <option value="price_asc">Price: Low to High</option>
+                      <option value="price_desc">Price: High to Low</option>
+                      <option value="popular">Popular</option>
+                      <option value="rating">Best Rated</option>
+                      <option value="relevance">Best Match</option>
+                    </select>
+                  </div>
+                </div>
+              )}
+
               {dishResultsLoading && dishResults.length === 0 ? (
                 <GridSkeleton count={4} />
               ) : dishResults.length > 0 ? (
@@ -1533,6 +1672,8 @@ export default function HomePage() {
                     />
                   ))}
                 </div>
+              ) : (foodVeg !== 'all' || foodBudgetOnly || foodRatingOnly || foodOffersOnly) ? (
+                <p className="muted center-pad">No dishes match these filters — try loosening them.</p>
               ) : null}
             </section>
           )}

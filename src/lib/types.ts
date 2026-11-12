@@ -140,6 +140,13 @@ export interface ResolvedProduct {
   hotelOpen?: boolean;
   /** Cart only: the product no longer exists or is hidden from customers. */
   missing?: boolean;
+  /** Smart Search results only: backend already filtered to open+available — skip the client-side check. */
+  guaranteedAvailable?: boolean;
+  /** Smart Search results only. */
+  isVeg?: boolean | null;
+  vendorRating?: number | null;
+  vendorReviewCount?: number;
+  discountPercent?: number | null;
 }
 
 export interface CartItem {

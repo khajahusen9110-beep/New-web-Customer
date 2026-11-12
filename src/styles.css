@@ -339,6 +339,56 @@ code { background: var(--surface-variant); padding: 1px 5px; border-radius: 4px;
 .sold-badge { position: absolute; top: 6px; right: 6px; background: linear-gradient(135deg, #f43f5e, #e11d48); color: #fff; font-size: 10px; font-weight: 800; padding: 3px 7px; border-radius: 999px; box-shadow: 0 2px 6px -2px rgba(225, 29, 72, 0.5); white-space: nowrap; }
 .food-order-card { flex: 0 0 150px; scroll-snap-align: start; text-align: left; cursor: pointer; display: flex; flex-direction: column; gap: 4px; }
 .dish-results { margin-bottom: 16px; }
+.dish-results-head { align-items: center; margin-bottom: 2px; }
+.veg-dot { position: absolute; bottom: 6px; left: 6px; width: 14px; height: 14px; border-radius: 3px; border: 2px solid; background: var(--surface); }
+.veg-dot-veg { border-color: #0f8a3f; }
+.veg-dot-veg::after { content: ''; position: absolute; inset: 3px; border-radius: 50%; background: #0f8a3f; }
+.veg-dot-nonveg { border-color: #b91c1c; }
+.veg-dot-nonveg::after { content: ''; position: absolute; inset: 3px; border-radius: 50%; background: #b91c1c; }
+.dish-discount-badge { position: absolute; top: 6px; left: 6px; background: linear-gradient(135deg, #16a34a, #15803d); color: #fff; font-size: 10px; font-weight: 800; padding: 3px 7px; border-radius: 6px; box-shadow: 0 2px 6px -2px rgba(21, 128, 61, 0.5); }
+.dish-vendor-rating { display: inline-flex; align-items: center; gap: 2px; color: #b45309; font-weight: 700; margin-left: 4px; }
+.dish-vendor-rating svg { fill: #f59e0b; stroke: #f59e0b; }
+
+/* Smart Food Search: Recent / Trending pills (below the search bar, shown when empty) */
+.search-suggest-row { display: flex; flex-direction: column; gap: 10px; margin: 2px 0 12px; }
+.search-suggest-group { display: flex; flex-direction: column; gap: 6px; }
+.search-suggest-label { display: inline-flex; align-items: center; gap: 5px; font-size: 11px; font-weight: 800; letter-spacing: 0.03em; text-transform: uppercase; color: var(--muted); }
+.search-suggest-pills { display: flex; gap: 8px; flex-wrap: wrap; }
+.search-pill {
+  padding: 7px 13px; border-radius: 18px; border: 1px solid var(--outline-soft); background: var(--surface);
+  box-shadow: var(--shadow); font-size: 12.5px; font-weight: 600; color: var(--text); cursor: pointer;
+  display: inline-flex; align-items: center; gap: 5px; transition: transform 0.12s ease, border-color 0.12s ease;
+}
+.search-pill:active { transform: scale(0.96); }
+.search-pill-trending { background: linear-gradient(180deg, #fff7ed 0%, #ffedd5 100%); border-color: #fdba74; color: #9a3412; }
+.search-pill-trending svg { fill: #f97316; stroke: #f97316; }
+
+/* Smart Food Search: filter/sort bar */
+.filter-toggle-btn {
+  display: inline-flex; align-items: center; gap: 6px; padding: 7px 12px; border-radius: 14px;
+  border: 1px solid var(--outline); background: var(--surface); font-size: 12.5px; font-weight: 700; color: var(--text);
+  cursor: pointer; box-shadow: var(--shadow);
+}
+.filter-toggle-btn.active { background: var(--primary); border-color: var(--primary); color: #fff; }
+.food-search-filters {
+  background: var(--surface); border: 1px solid var(--outline-soft); border-radius: 18px;
+  box-shadow: var(--shadow); padding: 12px; margin: 8px 0 14px; display: flex; flex-direction: column; gap: 10px;
+}
+.food-filter-chips { display: flex; gap: 7px; flex-wrap: wrap; }
+.food-chip {
+  display: inline-flex; align-items: center; gap: 5px; padding: 7px 12px; border-radius: 16px;
+  border: 1px solid var(--outline); background: var(--surface-variant); font-size: 12.5px; font-weight: 700; color: var(--text);
+  cursor: pointer;
+}
+.food-chip.active { background: var(--primary); border-color: var(--primary); color: #fff; }
+.food-chip-veg.active { background: #0f8a3f; border-color: #0f8a3f; }
+.food-chip-nonveg.active { background: #b91c1c; border-color: #b91c1c; }
+.food-sort-row { display: flex; align-items: center; gap: 10px; padding-top: 8px; border-top: 1px solid var(--outline-soft); }
+.food-sort-label { font-size: 12.5px; font-weight: 700; color: var(--muted); }
+.food-sort-select {
+  flex: 1; padding: 8px 10px; border-radius: 12px; border: 1px solid var(--outline);
+  background: var(--surface-variant); font-size: 13px; font-weight: 600; color: var(--text);
+}
 .dish-img-btn { border: none; padding: 0; background: none; cursor: pointer; display: block; width: 100%; }
 .dish-hotel-link { border: none; background: none; padding: 0; cursor: pointer; display: inline-flex; align-items: center; gap: 3px; color: var(--muted); text-align: left; }
 .dish-hotel-link:hover { color: var(--text); text-decoration: underline; }
