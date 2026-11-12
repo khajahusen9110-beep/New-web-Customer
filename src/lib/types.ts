@@ -433,7 +433,9 @@ export interface LocalAd {
   id: string;
   city_id: string;
   advertiser_name: string;
-  image_url: string;
+  image_url: string | null;
+  video_url?: string | null;
+  media_type?: 'image' | 'video';
   placement: 'home' | 'food_bottom' | 'grocery_bottom' | 'all';
   ad_type: 'fixed' | 'clickable';
   link_type: 'website' | 'whatsapp' | 'call' | 'map' | null;

@@ -608,7 +608,7 @@ export async function getPromoBanners(cityId: string, placement: 'grocery' | 'fo
 // ---------- LOCAL ADS (paid banners from local businesses, set per-city by City Admin) ----------
 
 const LOCAL_AD_COLS =
-  'id,city_id,advertiser_name,image_url,placement,ad_type,link_type,link_value,sort_order,starts_at,ends_at';
+  'id,city_id,advertiser_name,image_url,video_url,media_type,placement,ad_type,link_type,link_value,sort_order,starts_at,ends_at';
 const MAX_LOCAL_ADS = 5;
 
 const localAdsKey = (cityId: string, placement: 'home' | 'food_bottom' | 'grocery_bottom') => `localAds:${cityId}:${placement}`;
@@ -645,7 +645,9 @@ export async function getLocalAds(
         .order('sort_order', { ascending: true })
         .limit(MAX_LOCAL_ADS);
       if (error) return { value: [] as LocalAd[], cache: false as const };
-      return ((data ?? []) as LocalAd[]).filter((a) => /^https:\/\//.test(a.image_url));
+      return ((data ?? []) as LocalAd[]).filter((a) =>
+        a.media_type === 'video' ? /^https:\/\//.test(a.video_url ?? '') : /^https:\/\//.test(a.image_url ?? ''),
+      );
     },
     forceRefresh,
   );

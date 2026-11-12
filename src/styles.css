@@ -597,11 +597,23 @@ a.install-ok { display: flex; align-items: center; justify-content: center; text
 .cashback-kn { margin: 8px 0 0; color: var(--red); font-size: 14px; font-weight: 700; line-height: 1.5; }
 
 /* Super-Admin promo banners */
-.local-ad-strip { display: flex; flex-direction: column; gap: 8px; margin-bottom: 12px; }
-.local-ad-card { position: relative; border-radius: 12px; overflow: hidden; background: var(--surface-variant); }
-.local-ad-card.clickable { cursor: pointer; }
-.local-ad-card img { width: 100%; display: block; aspect-ratio: 3 / 1; object-fit: cover; }
-.local-ad-tag { position: absolute; top: 6px; right: 6px; background: rgba(0, 0, 0, 0.55); color: #fff; font-size: 10px; font-weight: 700; letter-spacing: 0.03em; padding: 2px 7px; border-radius: 999px; }
+.local-ad-strip { display: flex; flex-direction: column; gap: 14px; margin-bottom: 12px; }
+.local-ad-card {
+  border-radius: 20px; overflow: hidden; background: var(--surface);
+  border: 1px solid var(--outline-soft); box-shadow: var(--shadow-lg);
+}
+.local-ad-media { position: relative; background: var(--surface-variant); }
+.local-ad-media img, .local-ad-media video { width: 100%; display: block; aspect-ratio: 3 / 1; object-fit: cover; }
+.local-ad-tag { position: absolute; top: 8px; right: 8px; background: rgba(0, 0, 0, 0.6); color: #fff; font-size: 10px; font-weight: 700; letter-spacing: 0.03em; padding: 3px 8px; border-radius: 999px; }
+.local-ad-cta {
+  width: 100%; display: flex; align-items: center; justify-content: center; gap: 7px;
+  padding: 11px 12px; font-size: 14px; font-weight: 700; border: none; border-top: 1px solid var(--outline-soft);
+  cursor: pointer; transition: filter 0.15s ease;
+}
+.local-ad-cta:active { filter: brightness(0.94); }
+.local-ad-cta-whatsapp { background: linear-gradient(180deg, #25d366 0%, #1fb757 100%); color: #fff; }
+.local-ad-cta-call { background: linear-gradient(180deg, var(--primary) 0%, var(--primary-dark) 100%); color: #fff; }
+.local-ad-cta-visit { background: linear-gradient(180deg, #ffffff 0%, var(--primary-container) 100%); color: var(--primary-dark); border-top-color: color-mix(in srgb, var(--primary) 25%, var(--outline-soft)); }
 .promo-carousel { margin-bottom: 12px; }
 .promo-track { display: flex; overflow-x: auto; scroll-snap-type: x mandatory; scrollbar-width: none; border-radius: 20px; box-shadow: var(--shadow); }
 .promo-track::-webkit-scrollbar { display: none; }
