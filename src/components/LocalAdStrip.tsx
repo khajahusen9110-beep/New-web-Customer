@@ -14,9 +14,10 @@ const CTA_META: Record<string, { label: string; icon: typeof MessageCircle; clas
 
 /**
  * Paid banners from local businesses (table local_ads, managed by the city's own City Admin).
- * Separate from PromoCarousel (Sndmart's own offers): shows a small "Ad" tag for transparency.
+ * Separate from PromoCarousel (Sndmart's own offers): shows a small "Sponsored" tag for transparency.
  * Media is either a photo or a short (<=15s) looping video, never both — admin picks one.
- * A Clickable ad also gets a dedicated CTA button below the media (WhatsApp / Call / Visit Now).
+ * A clickable ad gets a CTA pill overlaid on the media itself (WhatsApp / Call / Visit Now), like a
+ * native social-feed ad, instead of a separate bar below — keeps the card as one cohesive unit.
  */
 export function LocalAdStrip({ ads }: { ads: LocalAd[] }) {
   if (!ads.length) return null;
@@ -41,14 +42,17 @@ export function LocalAdStrip({ ads }: { ads: LocalAd[] }) {
                   onError={fallbackToOriginal(ad.image_url ?? '')}
                 />
               )}
-              <span className="local-ad-tag">Ad</span>
+              <span className="local-ad-tag">Sponsored</span>
+              <div className="local-ad-overlay">
+                <span className="local-ad-advertiser">{ad.advertiser_name}</span>
+                {clickable && cta && (
+                  <button type="button" className={`local-ad-cta ${cta.className}`} onClick={() => openLocalAdLink(ad)}>
+                    <cta.icon size={14} />
+                    {cta.label}
+                  </button>
+                )}
+              </div>
             </div>
-            {clickable && cta && (
-              <button type="button" className={`local-ad-cta ${cta.className}`} onClick={() => openLocalAdLink(ad)}>
-                <cta.icon size={16} />
-                {cta.label}
-              </button>
-            )}
           </div>
         );
       })}
