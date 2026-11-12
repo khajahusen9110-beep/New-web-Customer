@@ -5,6 +5,7 @@ import { useNavigate } from 'react-router-dom';
 import { AlertCircle, ArrowLeft, ArrowRight, ChevronDown, Minus, Plus, Utensils, X } from 'lucide-react';
 import { rupees } from '../lib/utils';
 import { usePromoFor, offerPrice, type PromoKind } from '../lib/promo';
+import { feedback } from '../lib/feedback';
 
 // ---------- Toast (Snackbar) ----------
 
@@ -214,21 +215,29 @@ export function QuantityStepper({
   onDecrease: () => void;
   full?: boolean;
 }) {
+  const inc = () => {
+    feedback.add();
+    onIncrease();
+  };
+  const dec = () => {
+    feedback.remove();
+    onDecrease();
+  };
   if (quantity === 0) {
     return (
-      <button className={`btn btn-primary btn-sm stepper-add${full ? ' w-full' : ''}`} onClick={onIncrease}>
-        <Plus size={16} /> ADD
+      <button data-fb="none" className={`btn btn-sm stepper-add${full ? ' w-full' : ''}`} onClick={inc}>
+        ADD <Plus size={15} strokeWidth={3} />
       </button>
     );
   }
   return (
-    <div className={`stepper${full ? ' w-full' : ''}`}>
-      <button aria-label="Decrease" onClick={onDecrease}>
-        <Minus size={16} />
+    <div data-fb="none" className={`stepper${full ? ' w-full' : ''}`}>
+      <button aria-label="Decrease" onClick={dec}>
+        <Minus size={16} strokeWidth={3} />
       </button>
-      <span>{quantity}</span>
-      <button aria-label="Increase" onClick={onIncrease}>
-        <Plus size={16} />
+      <span key={quantity} className="stepper-qty">{quantity}</span>
+      <button aria-label="Increase" onClick={inc}>
+        <Plus size={16} strokeWidth={3} />
       </button>
     </div>
   );
@@ -385,6 +394,64 @@ export function ListSkeleton({ count = 4, height = 96 }: { count?: number; heigh
       {Array.from({ length: count }).map((_, i) => (
         <div key={i} className="skeleton" style={{ height, borderRadius: 16 }} />
       ))}
+    </div>
+  );
+}
+
+// ---------- Order placed celebration ----------
+
+interface OrderSuccessState {
+  shownAt: number | null;
+  show: () => void;
+  hide: () => void;
+}
+
+export const useOrderSuccess = create<OrderSuccessState>()((set) => ({
+  shownAt: null,
+  show: () => set({ shownAt: Date.now() }),
+  hide: () => set({ shownAt: null }),
+}));
+
+/** Call right after the server confirms the order (or the payment): chime + full-screen tick. */
+export function celebrateOrder() {
+  feedback.success();
+  useOrderSuccess.getState().show();
+}
+
+const CONFETTI = Array.from({ length: 26 }, (_, i) => i);
+const CONFETTI_COLORS = ['#7c4dff', '#22c55e', '#f59e0b', '#ef4444', '#06b6d4', '#ec4899'];
+
+/** Full-screen "Order placed" moment: drawn tick, confetti burst, then fades by itself. */
+export function OrderSuccessOverlay() {
+  const shownAt = useOrderSuccess((s) => s.shownAt);
+  const hide = useOrderSuccess((s) => s.hide);
+  useEffect(() => {
+    if (!shownAt) return;
+    const t = setTimeout(hide, 2600);
+    return () => clearTimeout(t);
+  }, [shownAt, hide]);
+  if (!shownAt) return null;
+  return (
+    <div className="order-success" role="status" aria-live="polite" onClick={hide}>
+      <div className="order-success-burst" aria-hidden="true">
+        {CONFETTI.map((i) => (
+          <i
+            key={i}
+            style={{
+              ['--a' as string]: `${(360 / CONFETTI.length) * i}deg`,
+              ['--d' as string]: `${90 + ((i * 37) % 80)}px`,
+              ['--c' as string]: CONFETTI_COLORS[i % CONFETTI_COLORS.length],
+              animationDelay: `${0.35 + (i % 5) * 0.03}s`,
+            }}
+          />
+        ))}
+      </div>
+      <svg className="order-success-tick" viewBox="0 0 96 96" aria-hidden="true">
+        <circle cx="48" cy="48" r="44" />
+        <path d="M28 49.5 42 63l27-29" />
+      </svg>
+      <div className="order-success-title">Order Placed!</div>
+      <div className="order-success-sub">ನಿಮ್ಮ ಆರ್ಡರ್ ಯಶಸ್ವಿಯಾಗಿದೆ</div>
     </div>
   );
 }

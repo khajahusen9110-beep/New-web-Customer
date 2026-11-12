@@ -32,7 +32,12 @@ export function imageSrcSet(url: string, cssWidth: number): string | undefined {
 export function fallbackToOriginal(original: string) {
   return (e: { currentTarget: HTMLImageElement }) => {
     const img = e.currentTarget;
-    if (img.dataset.fallback) return;
+    if (img.dataset.fallback) {
+      // The original is missing too: hide it so the tile's own background shows instead of
+      // the browser's broken-image icon.
+      img.style.visibility = 'hidden';
+      return;
+    }
     img.dataset.fallback = '1';
     img.removeAttribute('srcset');
     img.src = original;

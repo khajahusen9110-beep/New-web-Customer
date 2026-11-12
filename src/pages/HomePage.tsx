@@ -91,6 +91,7 @@ import { OfferInline } from '../lib/promo';
 import { useDebounced, useFreshCart, useInfiniteSentinel, useMyWallet } from '../lib/hooks';
 import { WalletChip } from '../components/WalletChip';
 import {
+  clockLabel,
   cartTotal,
   couponHeadline,
   couponTerms,
@@ -330,7 +331,7 @@ function CategoryRow({
   onSelect: (id: string) => void;
 }) {
   return (
-    <section className="section-tint tint-mint">
+    <section className="category-section">
       <h3 className="section-title">Shop by Category</h3>
       <div className="category-row">
         {categories.map((c) => (
@@ -383,7 +384,9 @@ function GroceryProductCard({
         {product.name}
       </div>
       {hasVariants ? (
-        <div className="price"><OfferInline prefix="Starting from " price={startingPrice(product)} kind="grocery" /></div>
+        <div className="price price-from">
+          <span className="price-from-label">From</span> <OfferInline price={startingPrice(product)} kind="grocery" />
+        </div>
       ) : (
         <PriceDisplay price={product.effectivePrice} mrp={product.effectiveMrp} unit={product.unit} kind="grocery" />
       )}
@@ -391,8 +394,8 @@ function GroceryProductCard({
         {!inStock ? (
           <div className="oos-pill">Out of Stock</div>
         ) : hasVariants ? (
-          <button className={`btn btn-sm w-full ${quantity > 0 ? 'btn-tonal' : 'btn-primary'}`} onClick={onSelectSize}>
-            {quantity > 0 ? `Select Size (${quantity})` : 'Select Size'}
+          <button className={`btn btn-sm w-full stepper-add${quantity > 0 ? ' has-qty' : ''}`} onClick={onSelectSize}>
+            {quantity > 0 ? `${quantity} in cart` : 'ADD'} <ChevronDown size={15} strokeWidth={3} />
           </button>
         ) : (
           <QuantityStepper quantity={quantity} onIncrease={onIncrease} onDecrease={onDecrease} full />
@@ -599,9 +602,9 @@ function HotelCard({
   const isActive = vendor.is_active !== false;
   const isOpen = isVendorOpenNow(vendor, slots, city);
   const hours = slots?.length
-    ? `Hours: ${slots.map((s) => `${s.start_time}-${s.end_time}`).join(', ')}`
+    ? slots.map((s) => `${clockLabel(s.start_time)} - ${clockLabel(s.end_time)}`).join(', ')
     : vendor.opening_time && vendor.closing_time
-      ? `Hours: ${vendor.opening_time} - ${vendor.closing_time}`
+      ? `${clockLabel(vendor.opening_time)} - ${clockLabel(vendor.closing_time)}`
       : null;
   return (
     <button
@@ -630,8 +633,8 @@ function HotelCard({
           <ChevronRight size={20} className="text-primary" />
         </div>
         {rating > 0 && (
-          <div className="row gap-4 small">
-            <Star size={14} className="text-warning" fill="currentColor" /> <strong>{rating.toFixed(1)}</strong>
+          <div className="rating-pill">
+            <Star size={11} fill="currentColor" /> {rating.toFixed(1)}
           </div>
         )}
         {vendor.address && (

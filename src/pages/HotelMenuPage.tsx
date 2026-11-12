@@ -515,7 +515,7 @@ export default function HotelMenuPage() {
       />
 
       {vendor?.banner_url && (
-        <div className="content-pad">
+        <div className="content-pad hotel-block">
           <div className="hotel-hero">
             {heroTopItems.length >= 1 ? (
               <HotelItemCarousel items={heroTopItems} name={vendorName} isOpen={hotelOpen} intervalMs={3200} imageWidth={800} />
@@ -536,7 +536,7 @@ export default function HotelMenuPage() {
         </div>
       ) : (
         <>
-          <div className="content-pad"><OfferBanner kind="food" /></div>
+          <div className="content-pad hotel-block"><OfferBanner kind="food" /></div>
           {!hotelOpen && (
             <div className="content-pad">
               <div className="alert alert-danger">
@@ -568,7 +568,7 @@ export default function HotelMenuPage() {
             </section>
           )}
           {menuShown && (products.length > 0 || trimmedQuery) && (
-            <div className="content-pad">
+            <div className="content-pad hotel-block">
               <div className="search-bar">
                 <Search size={18} className="muted" />
                 <input

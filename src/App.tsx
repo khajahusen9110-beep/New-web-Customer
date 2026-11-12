@@ -26,7 +26,7 @@ import {
 import { initAnalyticsSession, trackPageView, trackEvent } from './lib/analytics';
 import { useSession } from './store/session';
 import { useCart } from './store/cart';
-import { CenterSpinner, ToastHost, toast } from './components/ui';
+import { CenterSpinner, OrderSuccessOverlay, ToastHost, toast } from './components/ui';
 import { PlainLayout, TabLayout } from './components/Layout';
 import { CityPickerModal, LocationDetectDialog } from './components/CityPicker';
 import AuthPage from './pages/AuthPage';
@@ -285,6 +285,7 @@ export default function App() {
   return (
     <>
       <SessionExpiredRedirect />
+      <OrderSuccessOverlay />
       <Suspense fallback={<CenterSpinner />}>
         <PromoProvider>
         <ThemeProvider>

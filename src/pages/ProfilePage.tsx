@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { Bell, Briefcase, Building2, ChevronRight, CircleHelp, Gift, LogOut, MapPin, Star, User, UserRound, Wallet } from 'lucide-react';
+import { Bell, Briefcase, Building2, ChevronRight, CircleHelp, Gift, LogOut, MapPin, Star, User, UserRound, Volume2, VolumeX, Wallet } from 'lucide-react';
 import { ConfirmDialog, PageHeader } from '../components/ui';
 import { openCityPicker } from '../components/CityPicker';
 import { signOut } from '../lib/repository';
@@ -8,12 +8,14 @@ import { useSession } from '../store/session';
 import { rupees } from '../lib/utils';
 import { useMyWallet } from '../lib/hooks';
 import { WalletChip } from '../components/WalletChip';
+import { feedback, setSoundsEnabled, soundsEnabled } from '../lib/feedback';
 
 export default function ProfilePage() {
   const wallet = useMyWallet();
   const navigate = useNavigate();
   const { userName, userEmail, userPhone, selectedCity, unreadNotificationCount, logout } = useSession();
   const [confirmLogout, setConfirmLogout] = useState(false);
+  const [sounds, setSounds] = useState(soundsEnabled);
 
   const items = [
     { Icon: User, title: 'Edit Profile', sub: 'Update your name and phone number', go: () => navigate('/profile/edit') },
@@ -79,6 +81,25 @@ export default function ProfilePage() {
               <ChevronRight size={18} className="muted" />
             </button>
           ))}
+          <button
+            className="menu-row"
+            data-fb="none"
+            role="switch"
+            aria-checked={sounds}
+            onClick={() => {
+              const next = !sounds;
+              setSoundsEnabled(next);
+              setSounds(next);
+              if (next) feedback.add();
+            }}
+          >
+            {sounds ? <Volume2 size={22} className="text-primary" /> : <VolumeX size={22} className="muted" />}
+            <span className="grow">
+              <strong className="block">App Sounds</strong>
+              <span className="muted small">Tap and order sounds are {sounds ? 'on' : 'off'}</span>
+            </span>
+            <span className={`switch${sounds ? ' on' : ''}`} aria-hidden="true" />
+          </button>
         </div>
         <button className="btn btn-danger-soft btn-lg w-full" onClick={() => setConfirmLogout(true)}>
           <LogOut size={20} /> Log Out

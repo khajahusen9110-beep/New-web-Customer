@@ -2,7 +2,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Navigate, useLocation, useNavigate, useParams } from 'react-router-dom';
 import { AlertTriangle, CalendarDays, CheckCircle2, Info, LocateFixed, MapPin, Navigation, Plus, Wallet as WalletIcon, Zap } from 'lucide-react';
 import { AddressPickerModal } from '../components/AddressPickerModal';
-import { BillRow, ErrorCard, FeesBreakdownRow, Modal, PageHeader, Spinner, toast } from '../components/ui';
+import { BillRow, ErrorCard, FeesBreakdownRow, Modal, PageHeader, Spinner, celebrateOrder, toast } from '../components/ui';
 import MaintenancePage from './MaintenancePage';
 import {
   checkMaintenanceMode,
@@ -319,7 +319,7 @@ export default function CheckoutPage() {
       // The payment may still have gone through in the UPI app: ask Razorpay before saying it failed.
       setPlacingMsg('Checking payment status...');
       if ((await syncRazorpayPayment(orderId)) === 'paid') {
-        toast('Payment received!');
+        celebrateOrder();
         navigate(`/orders/${orderId}`, { replace: true });
         return;
       }
@@ -349,6 +349,8 @@ export default function CheckoutPage() {
       trackEvent('payment_failed', { method: 'upi', reason: 'upi_verification_failed' });
       setPlacementError(PAYMENT_VERIFY_FAILED);
       toast(PAYMENT_VERIFY_FAILED);
+    } else {
+      celebrateOrder();
     }
     navigate(`/orders/${orderId}`, { replace: true });
   }
@@ -413,6 +415,7 @@ export default function CheckoutPage() {
           navigate(`/orders/${order.id}`, { replace: true });
         }
       } else {
+        celebrateOrder();
         navigate(`/orders/${order.id}`, { replace: true });
       }
     } catch (e) {
