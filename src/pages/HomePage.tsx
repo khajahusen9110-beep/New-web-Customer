@@ -672,7 +672,16 @@ function whenIdle(fn: () => void) {
   else setTimeout(fn, 300);
 }
 
+// Rotating examples in the search box (hints only — typing searches everything as before).
+const GROCERY_SEARCH_HINTS = ['tomato', 'onion', 'fruits', 'vegetables'];
+const FOOD_SEARCH_HINTS = ['biryani', 'dosa', 'roti', 'fried rice'];
+
 export default function HomePage() {
+  const [searchHint, setSearchHint] = useState(0);
+  useEffect(() => {
+    const t = setInterval(() => !document.hidden && setSearchHint((n) => n + 1), 2600);
+    return () => clearInterval(t);
+  }, []);
   const navigate = useNavigate();
   const [params, setParams] = useSearchParams();
   const city = useSession((s) => s.selectedCity);
@@ -1323,7 +1332,7 @@ export default function HomePage() {
           <input
             value={search}
             onChange={(e) => setSearch(e.target.value)}
-            placeholder={isHotels ? 'Search hotels, restaurants, cuisines...' : 'Search groceries or hotels...'}
+            placeholder={`Search "${(isHotels ? FOOD_SEARCH_HINTS : GROCERY_SEARCH_HINTS)[searchHint % 4]}"`}
             aria-label="Search"
           />
           {search && (
@@ -1759,6 +1768,7 @@ export default function HomePage() {
           itemCount={activeCount}
           total={activeTotal}
           onClick={() => navigate(`/checkout/${isHotels ? 'hotel' : 'grocery'}`)}
+          freeDeliveryAt={threshold}
         />
       </div>
 

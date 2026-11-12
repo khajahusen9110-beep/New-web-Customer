@@ -17,6 +17,7 @@ import {
 import { OfferBanner } from '../components/OfferBanner';
 import { HotelItemCarousel } from './HomePage';
 import {
+  getFreeDeliveryThreshold,
   getHotelCategories,
   getHotelExtras,
   getVendorTopProducts,
@@ -178,6 +179,18 @@ export default function HotelMenuPage() {
   const [dishQuery, setDishQuery] = useState('');
   const [vendorTopProducts, setVendorTopProducts] = useState<ResolvedProduct[]>([]);
   const reqId = useRef(0);
+
+  const [freeDeliveryAt, setFreeDeliveryAt] = useState<number | null>(null);
+  useEffect(() => {
+    if (!cityId) return;
+    let cancelled = false;
+    getFreeDeliveryThreshold(cityId)
+      .then((v) => !cancelled && setFreeDeliveryAt(v))
+      .catch(() => undefined);
+    return () => {
+      cancelled = true;
+    };
+  }, [cityId]);
 
   // This hotel's real top-selling items (by sales), for the "Recommended" tab.
   useEffect(() => {
@@ -667,6 +680,7 @@ export default function HotelMenuPage() {
           itemCount={cartCount(thisHotelItems)}
           total={thisTotal}
           onClick={() => navigate('/checkout/hotel')}
+          freeDeliveryAt={freeDeliveryAt}
         />
       </div>
 

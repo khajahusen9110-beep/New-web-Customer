@@ -357,17 +357,64 @@ export function FeesBreakdownRow({ handlingFee, platformFee }: { handlingFee: nu
   );
 }
 
-export function FloatingCartButton({ itemCount, total, onClick }: { itemCount: number; total: number; onClick: () => void }) {
+export function FloatingCartButton({
+  itemCount,
+  total,
+  onClick,
+  freeDeliveryAt,
+}: {
+  itemCount: number;
+  total: number;
+  onClick: () => void;
+  /** City's free-delivery order amount; shows a progress strip towards it when set. */
+  freeDeliveryAt?: number | null;
+}) {
   if (itemCount <= 0) return null;
+  const goal = freeDeliveryAt != null && freeDeliveryAt > 0 ? freeDeliveryAt : null;
+  const left = goal != null ? Math.max(0, Math.ceil(goal - total)) : 0;
+  const pct = goal != null ? Math.min(100, Math.round((total / goal) * 100)) : 0;
   return (
-    <button className="floating-cart" onClick={onClick}>
-      <span>
-        {itemCount} item{itemCount > 1 ? 's' : ''} • {rupees(total)}
+    <div className="floating-cart-box">
+      {goal != null && (
+        <div className={`fd-progress${left === 0 ? ' done' : ''}`}>
+          <span className="fd-progress-text">
+            {left === 0 ? (
+              <>🎉 FREE delivery amount reached</>
+            ) : (
+              <>
+                Add <strong>{rupees(left)}</strong> more for FREE delivery
+              </>
+            )}
+          </span>
+          <span className="fd-progress-bar">
+            <i style={{ width: `${pct}%` }} />
+          </span>
+        </div>
+      )}
+      <button className="floating-cart" onClick={onClick}>
+        <span key={itemCount} className="floating-cart-count">
+          {itemCount} item{itemCount > 1 ? 's' : ''} • {rupees(total)}
+        </span>
+        <span className="row gap-6">
+          Checkout <ArrowRight size={20} />
+        </span>
+      </button>
+    </div>
+  );
+}
+
+/** First-load screen: the brand mark breathing, instead of a bare spinner. */
+export function BrandSplash() {
+  return (
+    <div className="brand-splash" role="status" aria-label="Loading Sndmart">
+      <img src="/sndmart-icon.jpg" alt="" />
+      <strong>Sndmart</strong>
+      <span className="brand-splash-dots" aria-hidden="true">
+        <i />
+        <i />
+        <i />
       </span>
-      <span className="row gap-6">
-        Checkout <ArrowRight size={20} />
-      </span>
-    </button>
+    </div>
   );
 }
 

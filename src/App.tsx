@@ -26,7 +26,7 @@ import {
 import { initAnalyticsSession, trackPageView, trackEvent } from './lib/analytics';
 import { useSession } from './store/session';
 import { useCart } from './store/cart';
-import { CenterSpinner, OrderSuccessOverlay, ToastHost, toast } from './components/ui';
+import { BrandSplash, CenterSpinner, OrderSuccessOverlay, ToastHost, toast } from './components/ui';
 import { PlainLayout, TabLayout } from './components/Layout';
 import { CityPickerModal, LocationDetectDialog } from './components/CityPicker';
 import AuthPage from './pages/AuthPage';
@@ -279,7 +279,7 @@ export default function App() {
   // first visit waits, because routing needs to know the city and address.
   const knownCustomer = useSession.getState().selectedCity != null && useSession.getState().hasSavedAddress;
   const waitForBootstrap = isLoggedIn && !verified && !initialDone && !knownCustomer;
-  if (!authReady || waitForBootstrap || (maintenance === undefined && !knownCustomer)) return <CenterSpinner />;
+  if (!authReady || waitForBootstrap || (maintenance === undefined && !knownCustomer)) return <BrandSplash />;
   if (maintenance) return <MaintenancePage message={maintenance} isChecking={checking} onRetry={runStartupChecks} />;
 
   return (
