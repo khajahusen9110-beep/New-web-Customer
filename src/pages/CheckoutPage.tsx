@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { Navigate, useNavigate, useParams } from 'react-router-dom';
+import { Navigate, useLocation, useNavigate, useParams } from 'react-router-dom';
 import { AlertTriangle, CalendarDays, CheckCircle2, Info, LocateFixed, MapPin, Navigation, Plus, Wallet as WalletIcon, Zap } from 'lucide-react';
 import { AddressPickerModal } from '../components/AddressPickerModal';
 import { BillRow, ErrorCard, Modal, PageHeader, Spinner, toast } from '../components/ui';
@@ -56,6 +56,11 @@ export default function CheckoutPage() {
   const { type } = useParams();
   const isHotel = type === 'hotel';
   const navigate = useNavigate();
+  const location = useLocation();
+  // Carried from the Cart page, which already validated this coupon against the live cart
+  // (same server RPC) — applied here too so the customer sees one continuous total, not a
+  // discount that newly "appears" only now.
+  const initialCouponCode = (location.state as { appliedCouponCode?: string | null } | null)?.appliedCouponCode ?? null;
   const { userId, isLoggedIn, selectedCity, userPhone, userEmail } = useSession();
   const cart = useCart((s) => (isHotel ? s.hotelCart : s.groceryCart));
   const hotelCart = useCart((s) => s.hotelCart);
@@ -229,6 +234,16 @@ export default function CheckoutPage() {
     await runPreview(c, payableEstimateRef.current, true);
     setValidatingCoupon(false);
   };
+
+  // Auto-apply the coupon the Cart page already validated, once the cart/cityId are ready.
+  const autoAppliedRef = useRef(false);
+  useEffect(() => {
+    if (autoAppliedRef.current || !initialCouponCode || !cityId || subtotal <= 0) return;
+    autoAppliedRef.current = true;
+    setCouponInput(initialCouponCode);
+    void applyCoupon(initialCouponCode);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [initialCouponCode, cityId, subtotal]);
 
   const distance = distanceKm ?? 1;
   const hasSlots = slots.length > 0;

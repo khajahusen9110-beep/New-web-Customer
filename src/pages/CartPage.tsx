@@ -5,7 +5,7 @@ import { BillRow, CenterSpinner, EmptyState, ErrorCard, PageHeader, ProductImage
 import { useCartCheck } from '../lib/hooks';
 import { cartLineForError, rupees } from '../lib/utils';
 import { usePromoFor, cartPromoDiscount } from '../lib/promo';
-import { getHotelProducts } from '../lib/repository';
+import { getHotelProducts, getPromoCoupon, previewCheckoutRewards } from '../lib/repository';
 import type { ResolvedProduct } from '../lib/types';
 import { useSession } from '../store/session';
 import { cartCount, useCart } from '../store/cart';
@@ -91,7 +91,44 @@ export default function CartPage() {
   // Promotional offer (backend-driven). Vendor is paid in full; Sndmart bears the discount.
   const promoInfo = usePromoFor(isHotel ? 'food' : 'grocery');
   const promoDiscount = cartPromoDiscount(subtotal, promoInfo);
-  const payable = Math.max(subtotal - promoDiscount, 0);
+
+  // Auto-applied coupon preview: the city's current promo coupon is checked (real server
+  // validation, same RPC checkout uses) as soon as items are in the cart, so the discount is
+  // visible here instead of only appearing after the customer reaches Checkout.
+  const [autoCoupon, setAutoCoupon] = useState<{ code: string; discount: number; cashback: number } | null>(null);
+  const lastCouponPreviewKey = useRef('');
+  useEffect(() => {
+    if (!city?.id || subtotal <= 0) {
+      setAutoCoupon(null);
+      return;
+    }
+    let cancelled = false;
+    getPromoCoupon(city.id).then((c) => {
+      if (cancelled || !c) {
+        if (!cancelled) setAutoCoupon(null);
+        return;
+      }
+      const key = `${city.id}|${c.code}|${subtotal.toFixed(2)}`;
+      if (key === lastCouponPreviewKey.current) return;
+      lastCouponPreviewKey.current = key;
+      previewCheckoutRewards({ subtotal, couponCode: c.code, payableBeforeWallet: subtotal })
+        .then((r) => {
+          if (cancelled) return;
+          if (r.coupon?.valid) {
+            setAutoCoupon({ code: r.coupon.code, discount: r.coupon.discount ?? 0, cashback: r.coupon.cashback ?? 0 });
+          } else {
+            setAutoCoupon(null);
+          }
+        })
+        .catch(() => !cancelled && setAutoCoupon(null));
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, [city?.id, subtotal]);
+
+  const couponDiscount = autoCoupon?.discount ?? 0;
+  const payable = Math.max(subtotal - promoDiscount - couponDiscount, 0);
 
   // Clear the one-time error from history so a reload does not show it again.
   useEffect(() => {
@@ -122,7 +159,7 @@ export default function CartPage() {
       if (removedAll) return;
     }
     trackEvent('checkout_started', { mode: isHotel ? 'hotel' : 'grocery', item_count: lines.length, subtotal });
-    navigate(`/checkout/${isHotel ? 'hotel' : 'grocery'}`);
+    navigate(`/checkout/${isHotel ? 'hotel' : 'grocery'}`, { state: { appliedCouponCode: autoCoupon?.code ?? null } });
   };
 
   return (
@@ -281,10 +318,15 @@ export default function CartPage() {
               <h3>Bill Details</h3>
               <BillRow label="Item Subtotal" value={rupees(subtotal, 2)} />
               {promoDiscount > 0 && <BillRow label={`Offer ${Math.round(promoInfo?.percent ?? 0)}% OFF`} value={`−${rupees(promoDiscount, 2)}`} accent />}
+              {couponDiscount > 0 && (
+                <BillRow label={`Coupon ${autoCoupon?.code} applied`} value={`−${rupees(couponDiscount, 2)}`} accent />
+              )}
               <BillRow label="Delivery Fee" value={<span className="muted">Calculated at checkout</span>} />
               <hr />
               <BillRow label="Total to Pay" value={rupees(payable, 2)} bold accent />
-              {promoDiscount > 0 && <p className="small text-primary bold">You save {rupees(promoDiscount, 2)} 🎉</p>}
+              {(promoDiscount > 0 || couponDiscount > 0) && (
+                <p className="small text-primary bold">You save {rupees(promoDiscount + couponDiscount, 2)} 🎉</p>
+              )}
               {unavailableCount > 0 && !hotelClosed && <p className="muted small">Unavailable items are not included.</p>}
             </div>
             <div className="sticky-bottom">
