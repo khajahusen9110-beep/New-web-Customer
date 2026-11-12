@@ -2,7 +2,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Navigate, useLocation, useNavigate, useParams } from 'react-router-dom';
 import { AlertTriangle, CalendarDays, CheckCircle2, Info, LocateFixed, MapPin, Navigation, Plus, Wallet as WalletIcon, Zap } from 'lucide-react';
 import { AddressPickerModal } from '../components/AddressPickerModal';
-import { BillRow, ErrorCard, Modal, PageHeader, Spinner, toast } from '../components/ui';
+import { BillRow, ErrorCard, FeesBreakdownRow, Modal, PageHeader, Spinner, toast } from '../components/ui';
 import MaintenancePage from './MaintenancePage';
 import {
   checkMaintenanceMode,
@@ -823,8 +823,7 @@ export default function CheckoutPage() {
                     )
                   }
                 />
-                <BillRow label="Handling Fee" value={rupees(handlingFee)} />
-                {platformFee > 0 && <BillRow label="Platform Fee" value={rupees(platformFee)} />}
+                <FeesBreakdownRow handlingFee={handlingFee} platformFee={platformFee} />
                 {walletApplied > 0 && <BillRow label="Wallet" value={`−${rupees(walletApplied, 2)}`} accent />}
                 <hr />
                 <BillRow label="To Pay" value={total != null && deliveryAvailable ? rupees(total, 2) : '--'} bold accent />

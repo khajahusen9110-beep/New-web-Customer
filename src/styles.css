@@ -474,6 +474,11 @@ code { background: var(--surface-variant); padding: 1px 5px; border-radius: 4px;
 .bill-row > span:last-child.text-primary { color: var(--primary); }
 .bill-row.bold { font-weight: 800; font-size: 16px; color: var(--text); }
 .bill-row.bold > span:last-child { font-weight: 800; }
+.fees-toggle { width: 100%; background: none; border: none; font: inherit; cursor: pointer; text-align: left; }
+.fees-toggle-label { display: inline-flex; align-items: center; gap: 4px; }
+.fees-toggle-chevron { transition: transform 0.18s ease; }
+.fees-toggle-chevron.open { transform: rotate(180deg); }
+.fees-breakdown-detail { padding-left: 2px; }
 .total-big { font-size: 20px; font-weight: 800; color: var(--primary); }
 .sticky-bottom { position: sticky; bottom: calc(var(--bottom-nav-h) + 8px); display: flex; align-items: center; justify-content: space-between; gap: 12px; background: var(--surface); border: 1px solid var(--outline-soft); border-radius: 18px; padding: 12px 14px; box-shadow: var(--shadow-lg); z-index: 30; }
 .plain-content .sticky-bottom { bottom: 8px; }

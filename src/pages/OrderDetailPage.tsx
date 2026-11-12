@@ -16,7 +16,7 @@ import {
   Star,
   XCircle,
 } from 'lucide-react';
-import { BillRow, CenterSpinner, ErrorCard, Modal, PageHeader, Spinner, toast } from '../components/ui';
+import { BillRow, CenterSpinner, ErrorCard, FeesBreakdownRow, Modal, PageHeader, Spinner, toast } from '../components/ui';
 import { TrackingMap } from '../components/MapView';
 import { CashbackNote } from '../components/CashbackNote';
 import {
@@ -616,8 +616,7 @@ export default function OrderDetailPage() {
             <BillRow label="Subtotal" value={rupees(order.subtotal, 2)} />
             {order.discount_amount > 0 && <BillRow label="Discount" value={`-${rupees(order.discount_amount, 2)}`} accent />}
             <BillRow label="Delivery Fee" value={rupees(order.delivery_fee, 2)} />
-            <BillRow label="Handling Fee" value={rupees(order.handling_fee, 2)} />
-            {Number(order.platform_fee ?? 0) > 0 && <BillRow label="Platform Fee" value={rupees(order.platform_fee, 2)} />}
+            <FeesBreakdownRow handlingFee={Number(order.handling_fee ?? 0)} platformFee={Number(order.platform_fee ?? 0)} />
             {Number(order.wallet_used_amount ?? 0) > 0 && (
               <BillRow label="Wallet used" value={`−${rupees(order.wallet_used_amount, 2)}`} accent />
             )}

@@ -1,8 +1,8 @@
 import { fallbackToOriginal, imageSrcSet, resizedImage } from '../lib/images';
-import { useEffect, type ReactNode } from 'react';
+import { useEffect, useState, type ReactNode } from 'react';
 import { create } from 'zustand';
 import { useNavigate } from 'react-router-dom';
-import { AlertCircle, ArrowLeft, ArrowRight, Minus, Plus, Utensils, X } from 'lucide-react';
+import { AlertCircle, ArrowLeft, ArrowRight, ChevronDown, Minus, Plus, Utensils, X } from 'lucide-react';
 import { rupees } from '../lib/utils';
 import { usePromoFor, offerPrice, type PromoKind } from '../lib/promo';
 
@@ -317,6 +317,33 @@ export function BillRow({ label, value, bold, accent }: { label: ReactNode; valu
     <div className={`bill-row${bold ? ' bold' : ''}`}>
       <span>{label}</span>
       <span className={accent ? 'text-primary' : ''}>{value}</span>
+    </div>
+  );
+}
+
+/**
+ * Handling Fee + Platform Fee, collapsed behind a "Taxes & Charges" toggle row by default
+ * (their sum shown collapsed) — tap to expand and see each one, like Swiggy/Zomato.
+ */
+export function FeesBreakdownRow({ handlingFee, platformFee }: { handlingFee: number; platformFee?: number | null }) {
+  const [open, setOpen] = useState(false);
+  const pf = platformFee ?? 0;
+  const total = handlingFee + pf;
+  return (
+    <div className="fees-breakdown">
+      <button type="button" className="bill-row fees-toggle" onClick={() => setOpen((v) => !v)}>
+        <span className="fees-toggle-label">
+          Taxes & Charges
+          <ChevronDown size={14} className={`fees-toggle-chevron${open ? ' open' : ''}`} />
+        </span>
+        <span>{rupees(total)}</span>
+      </button>
+      {open && (
+        <div className="fees-breakdown-detail">
+          <BillRow label="Handling Fee" value={rupees(handlingFee)} />
+          {pf > 0 && <BillRow label="Platform Fee" value={rupees(pf)} />}
+        </div>
+      )}
     </div>
   );
 }
