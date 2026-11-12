@@ -1522,6 +1522,7 @@ export default function HomePage() {
       ) : (
         <div className="content-pad">
           {threshold != null && <FreeDeliveryBanner threshold={threshold} />}
+          {!search && banners.length > 0 && <PromoCarousel banners={banners} onOpen={openBanner} />}
           {!search && dishes.length > 0 && (
             <DishRow
               dishes={dishes}
@@ -1532,7 +1533,6 @@ export default function HomePage() {
               }}
             />
           )}
-          {!search && banners.length > 0 && <PromoCarousel banners={banners} onOpen={openBanner} />}
           {!search && <OfferBanner kind="food" />}
           {!search && homeSections.showRecentlyViewed && recentFood.length > 0 && (
             <section className="featured-section section-tint tint-sky">
