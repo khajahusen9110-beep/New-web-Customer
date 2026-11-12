@@ -384,6 +384,7 @@ export default function HotelMenuPage() {
       (a, b) =>
         tier(a) - tier(b) ||
         Number(b.isFeatured) - Number(a.isFeatured) ||
+        a.effectivePrice - b.effectivePrice ||
         a.name.toLowerCase().localeCompare(b.name.toLowerCase()),
     );
   }, [products, hotelOpen, effectiveSlots]);
