@@ -139,8 +139,11 @@ function HomeTopBar({ onRefresh, showBack, onBack }: { onRefresh: () => void; sh
         <span className="deliver-text">
           <span className="label-caps">Deliver to</span>
           <span className="deliver-city">
-            {label ? `${label} • ` : ''}
-            {city?.name ?? 'Select City'} <ChevronDown size={16} className="text-primary" />
+            <span className="deliver-city-name">
+              {label ? `${label} • ` : ''}
+              {city?.name ?? 'Select City'}
+            </span>
+            <ChevronDown size={16} className="text-primary" />
           </span>
         </span>
       </button>

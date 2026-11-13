@@ -799,7 +799,7 @@ h3, .section-title { letter-spacing: -0.015em; }
 .product-card { padding: 8px 8px 10px; gap: 3px; border-radius: 16px; background: var(--surface); }
 .product-card.dimmed { background: var(--surface); }
 .product-img { height: 126px; border-radius: 12px; background: var(--surface-variant); margin-bottom: 6px; }
-.product-name, .product-name.ellipsis { font-size: 13.5px; font-weight: 600; line-height: 1.3; white-space: normal; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; min-height: 2.6em; color: var(--text); }
+.product-name, .product-name.ellipsis { font-size: 13.5px; font-weight: 600; line-height: 1.3; white-space: normal; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; color: var(--text); }
 .price { color: var(--text); font-size: 15px; font-weight: 800; letter-spacing: -0.01em; }
 .offer-price { color: var(--text); }
 .price-from-label { font-size: 11px; font-weight: 600; color: var(--muted); }
@@ -924,3 +924,7 @@ h3, .section-title { letter-spacing: -0.015em; }
   *, *::before, *::after { animation-duration: 0.01ms !important; animation-delay: 0s !important; transition-duration: 0.01ms !important; }
   .order-success { animation: os-out 0.2s ease-in 2.2s forwards !important; }
 }
+
+/* header: a long city/label shortens with "..." instead of being cut mid-letter beside the back arrow */
+.deliver-city-name { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.deliver-city > svg { flex-shrink: 0; }
