@@ -1755,29 +1755,6 @@ const DEFAULT_THEME_COLORS: CityThemeColors = {
   oceanColor: '#3d7ea6',
 };
 
-/** City Admin-configurable accent colors for home page banners/badges. Falls back to the built-in defaults. */
-export function getThemeColors(cityId: string): Promise<CityThemeColors> {
-  return cached(`themeColors:${cityId}`, CACHE_TTL_MS, async () => {
-    const { data, error } = await supabase
-      .from('city_theme_settings')
-      .select(
-        'food_promo_color_start, food_promo_color_end, grocery_banner_color_start, grocery_banner_color_end, sold_badge_color_start, sold_badge_color_end, ocean_color'
-      )
-      .eq('city_id', cityId)
-      .maybeSingle();
-    if (error || !data) return DEFAULT_THEME_COLORS;
-    return {
-      foodPromoColorStart: data.food_promo_color_start,
-      foodPromoColorEnd: data.food_promo_color_end,
-      groceryBannerColorStart: data.grocery_banner_color_start,
-      groceryBannerColorEnd: data.grocery_banner_color_end,
-      soldBadgeColorStart: data.sold_badge_color_start,
-      soldBadgeColorEnd: data.sold_badge_color_end,
-      oceanColor: data.ocean_color,
-    };
-  });
-}
-
 export interface CityBannerImages {
   offerBannerGroceryImageUrl: string | null;
   offerBannerFoodImageUrl: string | null;
@@ -1785,29 +1762,50 @@ export interface CityBannerImages {
   foodPromoBannerImageUrl: string | null;
 }
 
-/** Optional admin-uploaded background photos for the OfferBanner/DealsBanner/FoodPromoBanner cards. */
-export function getBannerImages(cityId: string): Promise<CityBannerImages> {
-  return cached(`bannerImages:${cityId}`, CACHE_TTL_MS, async () => {
-    const empty: CityBannerImages = {
-      offerBannerGroceryImageUrl: null,
-      offerBannerFoodImageUrl: null,
-      dealsBannerImageUrl: null,
-      foodPromoBannerImageUrl: null,
-    };
+const NO_BANNER_IMAGES: CityBannerImages = {
+  offerBannerGroceryImageUrl: null,
+  offerBannerFoodImageUrl: null,
+  dealsBannerImageUrl: null,
+  foodPromoBannerImageUrl: null,
+};
+
+/** Colors and banner photos live in the same row: one request serves both. */
+function getCityTheme(cityId: string): Promise<{ colors: CityThemeColors; images: CityBannerImages }> {
+  return cached(`cityTheme:${cityId}`, STABLE_TTL_MS, async () => {
     const { data, error } = await supabase
       .from('city_theme_settings')
-      .select('offer_banner_grocery_image_url, offer_banner_food_image_url, deals_banner_image_url, food_promo_banner_image_url')
+      .select(
+        'food_promo_color_start, food_promo_color_end, grocery_banner_color_start, grocery_banner_color_end, sold_badge_color_start, sold_badge_color_end, ocean_color, offer_banner_grocery_image_url, offer_banner_food_image_url, deals_banner_image_url, food_promo_banner_image_url'
+      )
       .eq('city_id', cityId)
       .maybeSingle();
-    if (error || !data) return empty;
+    if (error) return { value: { colors: DEFAULT_THEME_COLORS, images: NO_BANNER_IMAGES }, cache: false as const };
+    if (!data) return { colors: DEFAULT_THEME_COLORS, images: NO_BANNER_IMAGES };
     return {
-      offerBannerGroceryImageUrl: data.offer_banner_grocery_image_url ?? null,
-      offerBannerFoodImageUrl: data.offer_banner_food_image_url ?? null,
-      dealsBannerImageUrl: data.deals_banner_image_url ?? null,
-      foodPromoBannerImageUrl: data.food_promo_banner_image_url ?? null,
+      colors: {
+        foodPromoColorStart: data.food_promo_color_start,
+        foodPromoColorEnd: data.food_promo_color_end,
+        groceryBannerColorStart: data.grocery_banner_color_start,
+        groceryBannerColorEnd: data.grocery_banner_color_end,
+        soldBadgeColorStart: data.sold_badge_color_start,
+        soldBadgeColorEnd: data.sold_badge_color_end,
+        oceanColor: data.ocean_color,
+      },
+      images: {
+        offerBannerGroceryImageUrl: data.offer_banner_grocery_image_url ?? null,
+        offerBannerFoodImageUrl: data.offer_banner_food_image_url ?? null,
+        dealsBannerImageUrl: data.deals_banner_image_url ?? null,
+        foodPromoBannerImageUrl: data.food_promo_banner_image_url ?? null,
+      },
     };
   });
 }
+
+/** City Admin-configurable accent colors for home page banners/badges. Falls back to the built-in defaults. */
+export const getThemeColors = (cityId: string): Promise<CityThemeColors> => getCityTheme(cityId).then((t) => t.colors);
+
+/** Optional admin-uploaded background photos for the OfferBanner/DealsBanner/FoodPromoBanner cards. */
+export const getBannerImages = (cityId: string): Promise<CityBannerImages> => getCityTheme(cityId).then((t) => t.images);
 
 export async function getFreeDeliveryThreshold(cityId: string): Promise<number | null> {
   const s = await getCityDeliverySettings(cityId);

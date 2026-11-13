@@ -753,7 +753,7 @@ h3, .section-title { letter-spacing: -0.015em; }
 .alert, .info-strip, .eta-banner, .coupon-applied, .partner-card, .waiting-card { border-radius: 14px; }
 
 /* top bars, search, tabs */
-.home-top, .page-header { background: color-mix(in srgb, var(--surface) 90%, transparent); backdrop-filter: saturate(1.4) blur(12px); }
+.home-top, .page-header { background: var(--surface); backdrop-filter: none; }
 .page-header { border-bottom: 1px solid var(--outline-soft); }
 .page-header-title h1 { font-weight: 800; letter-spacing: -0.02em; }
 .home-controls { background: var(--surface); padding: 6px 16px 12px; border-bottom: 1px solid var(--outline-soft); }
@@ -769,7 +769,7 @@ h3, .section-title { letter-spacing: -0.015em; }
 .free-banner { border-radius: 12px; background: #fff6e5; border: 1px dashed #f5c57a; color: #b45309; padding: 9px 12px; font-size: 12.5px; }
 
 /* bottom navigation */
-.bottom-nav { background: color-mix(in srgb, var(--surface) 94%, transparent); backdrop-filter: saturate(1.4) blur(12px); border-top: 1px solid var(--outline-soft); box-shadow: 0 -6px 18px -12px rgba(23, 22, 28, 0.2); }
+.bottom-nav { background: var(--surface); border-top: 1px solid var(--outline-soft); box-shadow: 0 -6px 18px -12px rgba(23, 22, 28, 0.2); }
 .bottom-link { position: relative; color: var(--muted); }
 .bottom-link .icon-wrap { transition: background 0.2s ease, transform 0.2s cubic-bezier(0.2, 0.9, 0.3, 1.4); }
 .bottom-link.active { color: var(--primary); }
@@ -822,10 +822,9 @@ h3, .section-title { letter-spacing: -0.015em; }
 .hotel-card { border-radius: 18px; }
 .hotel-info { padding: 12px 14px 14px; gap: 5px; }
 .hotel-info strong { font-size: 16px; font-weight: 800; letter-spacing: -0.015em; }
-.hotel-tags .tag { backdrop-filter: blur(4px); }
 .rating-pill { display: inline-flex; align-self: flex-start; align-items: center; gap: 3px; background: var(--green); color: #fff; font-size: 12px; font-weight: 800; padding: 2px 7px; border-radius: 7px; }
 .hotel-hero { border-radius: 18px; box-shadow: var(--shadow-lg); }
-.hotel-cats { background: color-mix(in srgb, var(--surface) 94%, transparent); backdrop-filter: blur(12px); }
+.hotel-cats { background: var(--surface); }
 .hotel-cat-img { border-color: var(--outline-soft); }
 .dish-img { box-shadow: 0 4px 12px -4px rgba(23, 22, 28, 0.25); }
 
@@ -846,7 +845,7 @@ h3, .section-title { letter-spacing: -0.015em; }
 .total-big { color: var(--text); }
 
 /* popups: backdrop fades in, sheet springs up with a grab handle on phones */
-.modal-backdrop { background: rgba(15, 14, 20, 0.5); backdrop-filter: blur(2px); animation: fade-in 0.2s ease-out; }
+.modal-backdrop { background: rgba(15, 14, 20, 0.5); animation: fade-in 0.2s ease-out; }
 .modal { border-radius: 24px 24px 0 0; box-shadow: 0 -12px 40px -12px rgba(15, 14, 20, 0.35); animation: sheet 0.34s cubic-bezier(0.2, 0.9, 0.3, 1.08); position: relative; }
 .modal::before { content: ''; position: absolute; top: 8px; left: 50%; width: 40px; height: 4px; margin-left: -20px; border-radius: 2px; background: var(--outline); }
 .modal-head { padding-top: 22px; }
@@ -858,7 +857,7 @@ h3, .section-title { letter-spacing: -0.015em; }
   .modal-head { padding-top: 16px; }
 }
 @keyframes pop-in { from { transform: scale(0.94); opacity: 0; } }
-.scratch-overlay { backdrop-filter: blur(3px); animation: fade-in 0.2s ease-out; }
+.scratch-overlay { animation: fade-in 0.2s ease-out; }
 .scratch-sheet { border-radius: 24px; animation: pop-in 0.3s cubic-bezier(0.2, 0.9, 0.3, 1.2); }
 .toast { border-radius: 14px; background: #1c1b22; font-weight: 600; box-shadow: var(--shadow-lg); animation: rise 0.28s cubic-bezier(0.2, 0.9, 0.3, 1.2); }
 

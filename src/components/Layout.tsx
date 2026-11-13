@@ -24,7 +24,7 @@ export function TabLayout() {
       <nav className="desktop-nav">
         <div className="desktop-nav-inner">
           <NavLink to="/" className="brand">
-            <img src="/sndmart-icon.jpg" alt="" />
+            <img src="/icon-192.png" alt="" />
             <span>Sndmart</span>
           </NavLink>
           <div className="desktop-links">

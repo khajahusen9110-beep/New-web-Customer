@@ -407,7 +407,7 @@ export function FloatingCartButton({
 export function BrandSplash() {
   return (
     <div className="brand-splash" role="status" aria-label="Loading Sndmart">
-      <img src="/sndmart-icon.jpg" alt="" />
+      <img src="/icon-192.png" alt="" />
       <strong>Sndmart</strong>
       <span className="brand-splash-dots" aria-hidden="true">
         <i />
