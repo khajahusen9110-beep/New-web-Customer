@@ -51,8 +51,11 @@ export interface Vendor {
   default_category_id?: string | null;
   is_featured?: boolean | null;
   /** Auto (median menu price vs. the city threshold) unless a Super Admin overrode it. */
-  effective_price_tier?: 'luxury' | 'medium' | 'low_budget' | null;
+  effective_price_tier?: PriceTier | null;
 }
+
+/** Hotel price tier: from the hotel's median dish price, or set by the City Admin. */
+export type PriceTier = 'luxury' | 'medium' | 'low_budget';
 
 export interface OperatingSlot {
   id: string;

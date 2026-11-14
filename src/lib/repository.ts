@@ -38,6 +38,7 @@ import type {
   WalletUsable,
   PromoBanner,
   LocalAd,
+  PriceTier,
 } from './types';
 import {
   defaultMenuTab,
@@ -375,7 +376,7 @@ export function getHotels(
   /** Only these hotels (e.g. the ones serving a chosen dish). */
   vendorIds?: string[] | null,
   /** Only Premium or only Budget Friendly hotels (the "price tier" home cards). */
-  tier?: 'luxury' | 'medium' | 'low_budget' | null,
+  tier?: PriceTier | null,
 ): Promise<Vendor[]> {
   const q = (searchQuery ?? '').trim().toLowerCase();
   const ids = vendorIds ? Array.from(new Set(vendorIds)).sort() : null;
@@ -409,6 +410,65 @@ export function getHotels(
     },
     forceRefresh,
   );
+}
+
+export interface FoodHomeMeta {
+  /** Median dish price at or below this = Low-budget. */
+  lowThreshold: number;
+  /** Median dish price above this = Luxury; in between = Medium-range. */
+  highThreshold: number;
+  tierCounts: Record<PriceTier, number>;
+  /** Hotels customers order from most (real order counts), best first. */
+  topHotels: { vendorId: string; orders: number }[];
+}
+
+export const peekFoodHomeMeta = (cityId: string) => peek<FoodHomeMeta>(`foodHomeMeta:${cityId}`);
+
+/** Price-tier bands, hotels per tier and the most-ordered-from hotels, in one request. */
+export function getFoodHomeMeta(cityId: string, forceRefresh = false): Promise<FoodHomeMeta | null> {
+  return cached(
+    `foodHomeMeta:${cityId}`,
+    CACHE_TTL_MS,
+    async () => {
+      const { data, error } = await supabase.rpc('get_food_home_meta', { p_city_id: cityId });
+      if (error || !data) return { value: null, cache: false as const };
+      const d = data as {
+        low_threshold?: number;
+        high_threshold?: number;
+        tier_counts?: Partial<Record<PriceTier, number>> | null;
+        top_hotels?: { vendor_id: string; orders: number }[] | null;
+      };
+      const meta: FoodHomeMeta = {
+        lowThreshold: Number(d.low_threshold ?? 100),
+        highThreshold: Number(d.high_threshold ?? 200),
+        tierCounts: {
+          luxury: Number(d.tier_counts?.luxury ?? 0),
+          medium: Number(d.tier_counts?.medium ?? 0),
+          low_budget: Number(d.tier_counts?.low_budget ?? 0),
+        },
+        topHotels: (d.top_hotels ?? []).map((t) => ({ vendorId: t.vendor_id, orders: Number(t.orders) || 0 })),
+      };
+      return meta;
+    },
+    forceRefresh,
+  );
+}
+
+export interface TopHotel {
+  vendor: Vendor;
+  orders: number;
+}
+
+/** The "Top Hotels" row: the most-ordered-from hotels with their card details, best first. */
+export async function getTopHotels(cityId: string, meta: FoodHomeMeta): Promise<TopHotel[]> {
+  const ranked = meta.topHotels.slice(0, 8);
+  if (ranked.length < 3) return [];
+  const vendors = await getHotels(cityId, null, ranked.length, 0, false, ranked.map((r) => r.vendorId));
+  const byId = new Map(vendors.map((v) => [v.id, v]));
+  return ranked.flatMap((r) => {
+    const vendor = byId.get(r.vendorId);
+    return vendor && vendor.is_active !== false ? [{ vendor, orders: r.orders }] : [];
+  });
 }
 
 export function getVendor(vendorId: string, forceRefresh = false): Promise<Vendor | null> {

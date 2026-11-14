@@ -47,6 +47,11 @@ import {
   getGroceryCategories,
   getHotelDishCategories,
   getHotels,
+  getFoodHomeMeta,
+  peekFoodHomeMeta,
+  getTopHotels,
+  type FoodHomeMeta,
+  type TopHotel,
   getHotelsServingDish,
   searchHotelVendorIds,
   smartSearchFoodItems,
@@ -84,7 +89,7 @@ import {
   scratchMyCard,
   type ScratchCard,
 } from '../lib/repository';
-import type { CartItem, Category, Coupon, LocalAd, OperatingSlot, PromoBanner, ResolvedProduct, Vendor } from '../lib/types';
+import type { CartItem, Category, Coupon, LocalAd, OperatingSlot, PriceTier, PromoBanner, ResolvedProduct, Vendor } from '../lib/types';
 import { PromoCarousel } from '../components/PromoCarousel';
 import { ScratchCard as ScratchCardReveal } from '../components/ScratchCard';
 import { Gift } from 'lucide-react';
@@ -274,40 +279,151 @@ function DishRow({
 }
 
 
-const TIER_LABEL: Record<'luxury' | 'medium' | 'low_budget', string> = {
+const TIER_ORDER: PriceTier[] = ['luxury', 'medium', 'low_budget'];
+/** Short names for the narrow tab switcher. */
+const TIER_SHORT: Record<PriceTier, string> = { luxury: 'Luxury', medium: 'Medium', low_budget: 'Low' };
+const TIER_LABEL: Record<PriceTier, string> = {
   luxury: 'Luxury',
   medium: 'Medium-range',
   low_budget: 'Low-budget',
 };
-const TIER_HEADING: Record<'luxury' | 'medium' | 'low_budget', string> = {
-  luxury: '👑 Luxury Restaurants',
-  medium: '🍲 Medium-range Restaurants',
-  low_budget: '👨‍🍳 Low-budget Restaurants',
+const TIER_HEADING: Record<PriceTier, string> = {
+  luxury: 'Luxury Restaurants',
+  medium: 'Medium-range Restaurants',
+  low_budget: 'Low-budget Restaurants',
+};
+const TIER_ICON = { luxury: Crown, medium: Soup, low_budget: ChefHat } as const;
+const TIER_CLASS: Record<PriceTier, string> = {
+  luxury: 'tier-luxury',
+  medium: 'tier-medium',
+  low_budget: 'tier-low-budget',
 };
 
-/** Three cards that narrow the hotel list to one price tier (auto-computed per hotel from its menu). */
-function PriceTierCards({ onSelect }: { onSelect: (tier: 'luxury' | 'medium' | 'low_budget') => void }) {
+/** The tier's real price band, from the city's thresholds (a hotel's tier follows its median dish price). */
+function tierBand(tier: PriceTier, meta: FoodHomeMeta | null): string {
+  const low = Math.trunc(meta?.lowThreshold ?? 100);
+  const high = Math.trunc(meta?.highThreshold ?? 200);
+  if (tier === 'luxury') return `Dishes mostly above ₹${high}`;
+  if (tier === 'medium') return `Dishes mostly ₹${low}–₹${high}`;
+  return `Dishes mostly up to ₹${low}`;
+}
+
+/** Three cards that narrow the hotel list to one price tier. */
+function PriceTierCards({ meta, onSelect }: { meta: FoodHomeMeta | null; onSelect: (tier: PriceTier) => void }) {
   return (
-    <div className="price-tier-cards">
-      <button className="price-tier-card tier-luxury" onClick={() => onSelect('luxury')}>
-        <Crown size={24} className="tier-icon" />
-        <div className="tier-title">Luxury Restaurants</div>
-        <div className="tier-sub">Fine dining</div>
-        <span className="tier-cta">Explore <ChevronRight size={13} /></span>
-      </button>
-      <button className="price-tier-card tier-medium" onClick={() => onSelect('medium')}>
-        <Soup size={24} className="tier-icon" />
-        <div className="tier-title">Medium-range Restaurants</div>
-        <div className="tier-sub">Everyday favourites</div>
-        <span className="tier-cta">Explore <ChevronRight size={13} /></span>
-      </button>
-      <button className="price-tier-card tier-low-budget" onClick={() => onSelect('low_budget')}>
-        <ChefHat size={24} className="tier-icon" />
-        <div className="tier-title">Low-budget Restaurants</div>
-        <div className="tier-sub">Tasty food, great value</div>
-        <span className="tier-cta">Explore <ChevronRight size={13} /></span>
-      </button>
+    <section className="tier-section">
+      <h3 className="section-title">Restaurants for every budget</h3>
+      <div className="price-tier-cards">
+        {TIER_ORDER.map((t) => {
+          const Icon = TIER_ICON[t];
+          const count = meta ? meta.tierCounts[t] : null;
+          const empty = count === 0;
+          return (
+            <button key={t} className={`price-tier-card ${TIER_CLASS[t]}`} disabled={empty} onClick={() => onSelect(t)}>
+              <span className="tier-icon-wrap">
+                <Icon size={18} />
+              </span>
+              <div className="tier-title">{TIER_LABEL[t]}</div>
+              <div className="tier-sub">{tierBand(t, meta)}</div>
+              <span className="tier-cta">
+                {count == null ? 'Explore' : empty ? 'None yet' : `${count} ${count === 1 ? 'place' : 'places'}`}
+                {!empty && <ChevronRight size={12} />}
+              </span>
+            </button>
+          );
+        })}
+      </div>
+    </section>
+  );
+}
+
+/** While one tier is showing: a compact switcher between the three (tap the active one to clear). */
+function TierTabs({
+  active,
+  meta,
+  onSelect,
+}: {
+  active: PriceTier;
+  meta: FoodHomeMeta | null;
+  onSelect: (tier: PriceTier | null) => void;
+}) {
+  return (
+    <div className="tier-tabs" role="tablist" aria-label="Restaurant price tier">
+      {TIER_ORDER.map((t) => {
+        const Icon = TIER_ICON[t];
+        const on = t === active;
+        return (
+          <button
+            key={t}
+            role="tab"
+            aria-selected={on}
+            className={`tier-tab${on ? ` active ${TIER_CLASS[t]}` : ''}`}
+            onClick={() => onSelect(on ? null : t)}
+          >
+            <Icon size={14} />
+            <span>{TIER_SHORT[t]}</span>
+            {meta && <span className="tier-tab-count">{meta.tierCounts[t]}</span>}
+          </button>
+        );
+      })}
     </div>
+  );
+}
+
+interface TopHotelEntry extends TopHotel {
+  slots?: OperatingSlot[];
+  rating: number;
+}
+
+/** "Top Hotels": the hotels this city orders from most (real order counts), best first. */
+function TopHotelsRow({
+  hotels,
+  onOpen,
+  onIntent,
+}: {
+  hotels: TopHotelEntry[];
+  onOpen: (v: Vendor) => void;
+  onIntent: (v: Vendor) => void;
+}) {
+  const city = useSession((s) => s.selectedCity);
+  if (hotels.length < 3) return null;
+  return (
+    <section className="featured-section top-hotels">
+      <div className="top-hotels-head">
+        <h3 className="section-title">Top Hotels</h3>
+        <span className="muted small">Most ordered{city?.name ? ` in ${city.name}` : ''}</span>
+      </div>
+      <div className="featured-row">
+        {hotels.map((h, i) => {
+          const open = isVendorOpenNow(h.vendor, h.slots, city);
+          return (
+            <button
+              key={h.vendor.id}
+              className={`card top-hotel-card${open ? '' : ' dimmed'}`}
+              onClick={() => onOpen(h.vendor)}
+              onPointerDown={() => onIntent(h.vendor)}
+            >
+              <div className="top-hotel-img">
+                <ProductImage url={h.vendor.banner_url} alt={h.vendor.name} grayscale={!open} width={320} />
+                <span className="top-hotel-rank">#{i + 1}</span>
+                {!open && <span className="tag tag-grey top-hotel-closed">CLOSED</span>}
+              </div>
+              <div className="top-hotel-info">
+                <strong className="ellipsis">{h.vendor.name}</strong>
+                <div className="top-hotel-meta">
+                  {h.rating > 0 && (
+                    <span className="rating-pill">
+                      <Star size={10} fill="currentColor" /> {h.rating.toFixed(1)}
+                    </span>
+                  )}
+                  <span className="muted small">{h.orders} orders</span>
+                </div>
+              </div>
+            </button>
+          );
+        })}
+      </div>
+    </section>
   );
 }
 
@@ -741,14 +857,19 @@ export default function HomePage() {
   // "Luxury" / "Medium-range" / "Low-budget" home cards narrow the hotel list to one price
   // tier; tapping the header's "X" clears it back to all hotels.
   const tierParam = params.get('tier');
-  const tier: 'luxury' | 'medium' | 'low_budget' | null =
+  const tier: PriceTier | null =
     tierParam === 'luxury' || tierParam === 'medium' || tierParam === 'low_budget' ? tierParam : null;
-  const setTier = (t: 'luxury' | 'medium' | 'low_budget' | null) => {
+  const setTier = (t: PriceTier | null) => {
     const next = new URLSearchParams(params);
     next.set('mode', 'hotels');
     if (t) next.set('tier', t);
     else next.delete('tier');
     setParams(next);
+    if (t) {
+      // One filter at a time: a tier replaces a chosen dish, and its list starts at the top.
+      setDishKeySel(null);
+      window.scrollTo({ top: 0 });
+    }
   };
 
   const userId = useSession((s) => s.userId);
@@ -815,6 +936,8 @@ export default function HomePage() {
   const [topSelling, setTopSelling] = useState<ResolvedProduct[]>([]);
   const [topFood, setTopFood] = useState<ResolvedProduct[]>([]);
   const [budgetFood, setBudgetFood] = useState<ResolvedProduct[]>([]);
+  const [foodMeta, setFoodMeta] = useState<FoodHomeMeta | null>(null);
+  const [topHotels, setTopHotels] = useState<TopHotelEntry[]>([]);
   const [recentGrocery, setRecentGrocery] = useState<ResolvedProduct[]>([]);
   const [recentFood, setRecentFood] = useState<ResolvedProduct[]>([]);
   const [dishes, setDishes] = useState<DishCategory[]>([]);
@@ -1182,6 +1305,19 @@ export default function HomePage() {
     getBudgetFoodProducts(cityId)
       .then((list) => !cancelled && setBudgetFood(list))
       .catch(() => !cancelled && setBudgetFood([]));
+    // Price-tier bands + counts, and the "Top Hotels" row (real order counts).
+    setFoodMeta(peekFoodHomeMeta(cityId));
+    setTopHotels([]);
+    getFoodHomeMeta(cityId)
+      .then(async (meta) => {
+        if (cancelled || !meta) return;
+        setFoodMeta(meta);
+        const top = await getTopHotels(cityId, meta);
+        if (cancelled) return;
+        const extras = peekHotelExtras(top.map((t) => t.vendor.id));
+        setTopHotels(top.map((t) => ({ ...t, slots: extras.slots[t.vendor.id], rating: extras.ratings[t.vendor.id] ?? 0 })));
+      })
+      .catch(() => undefined);
     return () => {
       cancelled = true;
     };
@@ -1599,104 +1735,125 @@ export default function HomePage() {
       ) : (
         <div className="content-pad">
           {threshold != null && <FreeDeliveryBanner threshold={threshold} />}
-          {(() => {
-            const banner = !search && banners.length > 0 && <PromoCarousel banners={banners} onOpen={openBanner} />;
-            const dishRow = !search && dishes.length > 0 && (
-              <DishRow
-                dishes={dishes}
-                selectedKey={dishKeySel}
-                onSelect={(k) => {
-                  setDishKeySel(k);
-                  if (k) hotelsListRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' });
-                }}
-              />
-            );
-            return homeSections.foodBannerBeforeCategories ? (
-              <>
-                {banner}
-                {dishRow}
-              </>
-            ) : (
-              <>
-                {dishRow}
-                {banner}
-              </>
-            );
-          })()}
-          {!search && <OfferBanner kind="food" />}
-          {!search && !tier && !selectedDish && <PriceTierCards onSelect={setTier} />}
-          {!search && homeSections.showRecentlyViewed && recentFood.length > 0 && (
-            <section className="featured-section section-tint tint-sky">
-              <h3 className="section-title">👀 Recently Viewed</h3>
-              <div className="featured-row">
-                {recentFood.map((p) => (
-                  <button
-                    key={p.id}
-                    className="card product-card food-order-card"
-                    onClick={() => navigate(`/hotel/${p.vendorId}?name=${encodeURIComponent(p.vendorName ?? '')}`)}
-                  >
-                    <div className="product-img">
-                      <ProductImage url={p.imageUrl} alt={p.name} width={200} />
-                    </div>
-                    <div className="product-name" title={p.name}>{p.name}</div>
-                    <div className="muted small ellipsis">{p.vendorName}</div>
-                    <div className="price"><OfferInline price={p.effectivePrice} kind="food" /></div>
-                  </button>
-                ))}
-              </div>
-            </section>
-          )}
-          {!search && homeSections.showMostSelling && topFood.length > 0 && (
-            <section className="featured-section section-tint tint-peach">
-              <h3 className="section-title">🔥 Most Ordered</h3>
-              <div className="featured-row">
-                {topFood.map((p) => (
-                  <button
-                    key={p.id}
-                    className="card product-card food-order-card"
-                    onClick={() => navigate(`/hotel/${p.vendorId}?name=${encodeURIComponent(p.vendorName ?? '')}`)}
-                  >
-                    <div className="product-img">
-                      <ProductImage url={p.imageUrl} alt={p.name} width={200} />
-                      {(p.soldCount ?? 0) > 0 && <span className="sold-badge">🔥 {p.soldCount} sold</span>}
-                    </div>
-                    <div className="product-name" title={p.name}>{p.name}</div>
-                    <div className="muted small ellipsis">{p.vendorName}</div>
-                    <div className="price"><OfferInline price={p.effectivePrice} kind="food" /></div>
-                  </button>
-                ))}
-              </div>
-            </section>
-          )}
-          {!search && budgetFood.length > 0 && (
-            <section className="featured-section section-tint tint-mint">
-              <h3 className="section-title">💸 99 Store</h3>
-              <div className="featured-row">
-                {budgetFood.map((p) => (
-                  <button
-                    key={p.id}
-                    className="card product-card food-order-card"
-                    onClick={() => addDishToCart(p, 1)}
-                  >
-                    <div className="product-img">
-                      <ProductImage url={p.imageUrl} alt={p.name} width={200} />
-                    </div>
-                    <div className="product-name" title={p.name}>{p.name}</div>
-                    <div className="muted small ellipsis">{p.vendorName}</div>
-                    <div className="price"><OfferInline price={p.effectivePrice} kind="food" /></div>
-                  </button>
-                ))}
-              </div>
-            </section>
-          )}
-          {!search && !banners.length && (
-            <FoodPromoBanner
-              coupon={promoCoupon}
-              threshold={threshold}
-              imageUrl={bannerImages.foodPromoBannerImageUrl ?? dishes.find((d) => d.key === 'biryani')?.imageUrl ?? dishes[0]?.imageUrl ?? null}
-              onOrder={() => hotelsListRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' })}
-            />
-          )}
+          {tier ? (
+            <TierTabs active={tier} meta={foodMeta} onSelect={setTier} />
+          ) : !search ? (
+            <>
+              {(() => {
+                // Always a banner on top: the admin's own banners, else the built-in food promo.
+                const banner =
+                  banners.length > 0 ? (
+                    <PromoCarousel banners={banners} onOpen={openBanner} />
+                  ) : (
+                    <FoodPromoBanner
+                      coupon={promoCoupon}
+                      threshold={threshold}
+                      imageUrl={bannerImages.foodPromoBannerImageUrl ?? dishes.find((d) => d.key === 'biryani')?.imageUrl ?? dishes[0]?.imageUrl ?? null}
+                      onOrder={() => hotelsListRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' })}
+                    />
+                  );
+                const dishRow = dishes.length > 0 && (
+                  <DishRow
+                    dishes={dishes}
+                    selectedKey={dishKeySel}
+                    onSelect={(k) => {
+                      setDishKeySel(k);
+                      if (k) hotelsListRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+                    }}
+                  />
+                );
+                // Budget tiers -> Top Hotels -> special offer, straight after the banner.
+                const hotelPicks = (
+                  <>
+                    <PriceTierCards meta={foodMeta} onSelect={setTier} />
+                    <TopHotelsRow
+                      hotels={topHotels}
+                      onOpen={(v) => navigate(`/hotel/${v.id}?name=${encodeURIComponent(v.name)}`)}
+                      onIntent={(v) => cityId && prefetchHotelMenu(v.id, cityId)}
+                    />
+                    <OfferBanner kind="food" />
+                  </>
+                );
+                return homeSections.foodBannerBeforeCategories ? (
+                  <>
+                    {banner}
+                    {hotelPicks}
+                    {dishRow}
+                  </>
+                ) : (
+                  <>
+                    {dishRow}
+                    {banner}
+                    {hotelPicks}
+                  </>
+                );
+              })()}
+              {!search && homeSections.showMostSelling && topFood.length > 0 && (
+                <section className="featured-section section-tint tint-peach">
+                  <h3 className="section-title">🔥 Most Ordered</h3>
+                  <div className="featured-row">
+                    {topFood.map((p) => (
+                      <button
+                        key={p.id}
+                        className="card product-card food-order-card"
+                        onClick={() => navigate(`/hotel/${p.vendorId}?name=${encodeURIComponent(p.vendorName ?? '')}`)}
+                      >
+                        <div className="product-img">
+                          <ProductImage url={p.imageUrl} alt={p.name} width={200} />
+                          {(p.soldCount ?? 0) > 0 && <span className="sold-badge">🔥 {p.soldCount} sold</span>}
+                        </div>
+                        <div className="product-name" title={p.name}>{p.name}</div>
+                        <div className="muted small ellipsis">{p.vendorName}</div>
+                        <div className="price"><OfferInline price={p.effectivePrice} kind="food" /></div>
+                      </button>
+                    ))}
+                  </div>
+                </section>
+              )}
+              {!search && budgetFood.length > 0 && (
+                <section className="featured-section section-tint tint-mint">
+                  <h3 className="section-title">💸 99 Store</h3>
+                  <div className="featured-row">
+                    {budgetFood.map((p) => (
+                      <button
+                        key={p.id}
+                        className="card product-card food-order-card"
+                        onClick={() => addDishToCart(p, 1)}
+                      >
+                        <div className="product-img">
+                          <ProductImage url={p.imageUrl} alt={p.name} width={200} />
+                        </div>
+                        <div className="product-name" title={p.name}>{p.name}</div>
+                        <div className="muted small ellipsis">{p.vendorName}</div>
+                        <div className="price"><OfferInline price={p.effectivePrice} kind="food" /></div>
+                      </button>
+                    ))}
+                  </div>
+                </section>
+              )}
+              {!search && homeSections.showRecentlyViewed && recentFood.length > 0 && (
+                <section className="featured-section section-tint tint-sky">
+                  <h3 className="section-title">👀 Recently Viewed</h3>
+                  <div className="featured-row">
+                    {recentFood.map((p) => (
+                      <button
+                        key={p.id}
+                        className="card product-card food-order-card"
+                        onClick={() => navigate(`/hotel/${p.vendorId}?name=${encodeURIComponent(p.vendorName ?? '')}`)}
+                      >
+                        <div className="product-img">
+                          <ProductImage url={p.imageUrl} alt={p.name} width={200} />
+                        </div>
+                        <div className="product-name" title={p.name}>{p.name}</div>
+                        <div className="muted small ellipsis">{p.vendorName}</div>
+                        <div className="price"><OfferInline price={p.effectivePrice} kind="food" /></div>
+                      </button>
+                    ))}
+                  </div>
+                </section>
+              )}
+            </>
+          ) : null}
           {search && (
             <section className="dish-results">
               <div className="row between dish-results-head">
@@ -1778,11 +1935,6 @@ export default function HomePage() {
                     ? 'Restaurants'
                     : 'All hotels & restaurants'}
             </h3>
-            {tier && (
-              <button className="chip-clear" onClick={() => setTier(null)} aria-label="Clear price-tier filter">
-                {TIER_LABEL[tier]} <X size={14} />
-              </button>
-            )}
             {!tier && selectedDish && (
               <button className="chip-clear" onClick={() => setDishKeySel(null)} aria-label="Clear dish filter">
                 {selectedDish.name} <X size={14} />
