@@ -115,7 +115,6 @@ import {
 } from '../lib/utils';
 import { shouldShowRatingPopup, useSession } from '../store/session';
 import { cartCount, useCart } from '../store/cart';
-import { addRecentFoodSearch, getRecentFoodSearches } from '../lib/recentSearches';
 import { trackEvent } from '../lib/analytics';
 import { useBannerImages } from '../lib/theme';
 
@@ -127,7 +126,17 @@ let couponShownThisSession = false;
 const sortGrocery = sortGroceryProducts;
 
 
-function HomeTopBar({ onRefresh, showBack, onBack }: { onRefresh: () => void; showBack: boolean; onBack: () => void }) {
+function HomeTopBar({
+  onRefresh,
+  showBack,
+  backLabel,
+  onBack,
+}: {
+  onRefresh: () => void;
+  showBack: boolean;
+  backLabel: string;
+  onBack: () => void;
+}) {
   const navigate = useNavigate();
   const city = useSession((s) => s.selectedCity);
   const label = useSession((s) => s.defaultAddressLabel);
@@ -136,7 +145,7 @@ function HomeTopBar({ onRefresh, showBack, onBack }: { onRefresh: () => void; sh
   return (
     <header className="home-top">
       {showBack && (
-        <button className="icon-btn" aria-label="Back to groceries" onClick={onBack}>
+        <button className="icon-btn" aria-label={backLabel} onClick={onBack}>
           <ArrowLeft size={22} />
         </button>
       )}
@@ -891,7 +900,6 @@ export default function HomePage() {
   const [foodOffersOnly, setFoodOffersOnly] = useState(false);
   const [showFoodFilters, setShowFoodFilters] = useState(false);
   const [trendingSearches, setTrendingSearches] = useState<string[]>([]);
-  const [recentSearches, setRecentSearches] = useState<string[]>([]);
   const loggedQueryRef = useRef<string>('');
 
   const [search, setSearch] = useState('');
@@ -1137,8 +1145,6 @@ export default function HomePage() {
         if (loggedQueryRef.current !== query) {
           loggedQueryRef.current = query;
           logFoodSearch(cityId, query, items.length);
-          addRecentFoodSearch(query);
-          setRecentSearches(getRecentFoodSearches());
         }
       })
       .catch(() => {
@@ -1154,9 +1160,17 @@ export default function HomePage() {
 
   // Trending searches (server) + Recent searches (this device) — shown before the customer
   // has typed anything, so they always have a one-tap starting point.
+  // Search history is no longer kept: clear what older versions saved on this device.
+  useEffect(() => {
+    try {
+      localStorage.removeItem('sndmart-recent-food-searches');
+    } catch {
+      // storage blocked: nothing saved to clear
+    }
+  }, []);
+
   useEffect(() => {
     if (!cityId) return;
-    setRecentSearches(getRecentFoodSearches());
     getTrendingFoodSearches(cityId).then(setTrendingSearches).catch(() => setTrendingSearches([]));
   }, [cityId]);
 
@@ -1516,7 +1530,16 @@ export default function HomePage() {
 
   return (
     <div className="page home-page">
-      <HomeTopBar onRefresh={refresh} showBack={isHotels && serviceMode !== 'food_only'} onBack={() => setMode('grocery')} />
+      <HomeTopBar
+        onRefresh={refresh}
+        showBack={isHotels && (serviceMode !== 'food_only' || tier != null || selectedDish != null)}
+        backLabel={tier != null || selectedDish != null ? 'Back to food home' : 'Back to groceries'}
+        onBack={() => {
+          if (tier != null) setTier(null);
+          else if (selectedDish != null) setDishKeySel(null);
+          else setMode('grocery');
+        }}
+      />
 
       <div className="home-controls">
         <div className="search-bar">
@@ -1553,22 +1576,8 @@ export default function HomePage() {
         </div>
       </div>
 
-      {isHotels && !search && (recentSearches.length > 0 || trendingSearches.length > 0) && (
+      {isHotels && !search && trendingSearches.length > 0 && (
         <div className="search-suggest-row">
-          {recentSearches.length > 0 && (
-            <div className="search-suggest-group">
-              <span className="search-suggest-label">
-                <Clock size={12} /> Recent
-              </span>
-              <div className="search-suggest-pills">
-                {recentSearches.slice(0, 5).map((q) => (
-                  <button key={`recent-${q}`} className="search-pill" onClick={() => setSearch(q)}>
-                    {q}
-                  </button>
-                ))}
-              </div>
-            </div>
-          )}
           {trendingSearches.length > 0 && (
             <div className="search-suggest-group">
               <span className="search-suggest-label">
