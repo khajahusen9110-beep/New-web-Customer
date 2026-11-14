@@ -50,6 +50,8 @@ export interface Vendor {
   /** Menu tab selected first when it has items available (set by the City Admin). */
   default_category_id?: string | null;
   is_featured?: boolean | null;
+  /** Auto (median menu price vs. the city threshold) unless a Super Admin overrode it. */
+  effective_price_tier?: 'premium' | 'budget' | null;
 }
 
 export interface OperatingSlot {

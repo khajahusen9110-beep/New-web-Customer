@@ -3,10 +3,12 @@ import { useNavigate, useSearchParams } from 'react-router-dom';
 import {
   ArrowLeft,
   Bell,
+  ChefHat,
   ChevronDown,
   ChevronRight,
   Clock,
   Copy,
+  Crown,
   Flame,
   MapPin,
   Percent,
@@ -270,6 +272,26 @@ function DishRow({
   );
 }
 
+
+/** Two cards that narrow the hotel list to one price tier (auto-computed per hotel from its menu). */
+function PriceTierCards({ onSelect }: { onSelect: (tier: 'premium' | 'budget') => void }) {
+  return (
+    <div className="price-tier-cards">
+      <button className="price-tier-card tier-premium" onClick={() => onSelect('premium')}>
+        <Crown size={28} className="tier-icon" />
+        <div className="tier-title">Premium Restaurants</div>
+        <div className="tier-sub">Luxury dining, premium food</div>
+        <span className="tier-cta">Explore <ChevronRight size={14} /></span>
+      </button>
+      <button className="price-tier-card tier-budget" onClick={() => onSelect('budget')}>
+        <ChefHat size={28} className="tier-icon" />
+        <div className="tier-title">Budget Friendly Restaurants</div>
+        <div className="tier-sub">Tasty food, great value</div>
+        <span className="tier-cta">Explore <ChevronRight size={14} /></span>
+      </button>
+    </div>
+  );
+}
 
 /**
  * Always-visible food promotion banner. Shows only real offers: the city's active coupon, else
@@ -698,6 +720,18 @@ export default function HomePage() {
   const setMode = (m: 'grocery' | 'hotels') =>
     m === 'hotels' ? setParams({ mode: 'hotels' }) : setParams({ mode: 'grocery' }, { replace: false });
 
+  // "Premium Restaurants" / "Budget Friendly Restaurants" home cards narrow the hotel list to
+  // one price tier; tapping the header's "X" clears it back to all hotels.
+  const tierParam = params.get('tier');
+  const tier: 'premium' | 'budget' | null = tierParam === 'premium' || tierParam === 'budget' ? tierParam : null;
+  const setTier = (t: 'premium' | 'budget' | null) => {
+    const next = new URLSearchParams(params);
+    next.set('mode', 'hotels');
+    if (t) next.set('tier', t);
+    else next.delete('tier');
+    setParams(next);
+  };
+
   const userId = useSession((s) => s.userId);
   const cityId = city?.id ?? null;
   const groceryCart = useCart((s) => s.groceryCart);
@@ -897,7 +931,7 @@ export default function HomePage() {
           nameFilter = null; // ids already encode name + dish matches — don't AND a name filter
         }
         const list =
-          ids && !ids.length ? [] : await getHotels(cityId, nameFilter, HOTEL_PAGE, offset, force, ids);
+          ids && !ids.length ? [] : await getHotels(cityId, nameFilter, HOTEL_PAGE, offset, force, ids, tier);
         if (id !== reqId.current) return;
         setHotels((cur) => {
           if (reset) return list;
@@ -917,7 +951,7 @@ export default function HomePage() {
         }
       }
     },
-    [cityId, query, hotels.length, dishServing],
+    [cityId, query, hotels.length, dishServing, tier],
   );
 
   useEffect(() => {
@@ -929,7 +963,7 @@ export default function HomePage() {
     if (mode === 'grocery') void loadProducts(true);
     else void loadHotels(true);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [mode, cityId, categoryId, query, dishServing]);
+  }, [mode, cityId, categoryId, query, dishServing, tier]);
 
   // Smart Food Search: fetch matching dishes directly (shown above the hotels list) —
   // typo-tolerant + partial-word matched + ranked server-side, with Veg/Budget/Rating/Offers
@@ -1571,6 +1605,7 @@ export default function HomePage() {
             );
           })()}
           {!search && <OfferBanner kind="food" />}
+          {!search && !tier && !selectedDish && <PriceTierCards onSelect={setTier} />}
           {!search && homeSections.showRecentlyViewed && recentFood.length > 0 && (
             <section className="featured-section section-tint tint-sky">
               <h3 className="section-title">👀 Recently Viewed</h3>
@@ -1716,9 +1751,22 @@ export default function HomePage() {
           )}
           <div ref={hotelsListRef} className="row between hotels-heading">
             <h3 className="section-title">
-              {selectedDish ? `Hotels serving ${selectedDish.name}` : search ? 'Restaurants' : 'All hotels & restaurants'}
+              {tier === 'premium'
+                ? '👑 Premium Restaurants'
+                : tier === 'budget'
+                  ? '👨‍🍳 Budget Friendly Restaurants'
+                  : selectedDish
+                    ? `Hotels serving ${selectedDish.name}`
+                    : search
+                      ? 'Restaurants'
+                      : 'All hotels & restaurants'}
             </h3>
-            {selectedDish && (
+            {tier && (
+              <button className="chip-clear" onClick={() => setTier(null)} aria-label="Clear price-tier filter">
+                {tier === 'premium' ? 'Premium' : 'Budget Friendly'} <X size={14} />
+              </button>
+            )}
+            {!tier && selectedDish && (
               <button className="chip-clear" onClick={() => setDishKeySel(null)} aria-label="Clear dish filter">
                 {selectedDish.name} <X size={14} />
               </button>
@@ -1730,7 +1778,11 @@ export default function HomePage() {
             <ErrorCard message={hotelsError} onRetry={() => void loadHotels(true, true)} />
           ) : hotels.length === 0 ? (
             <p className="muted center-pad">
-              {selectedDish ? `No hotels serve ${selectedDish.name} right now.` : 'No hotels or restaurants available in this city.'}
+              {tier
+                ? `No ${tier === 'premium' ? 'premium' : 'budget friendly'} restaurants in this city yet.`
+                : selectedDish
+                  ? `No hotels serve ${selectedDish.name} right now.`
+                  : 'No hotels or restaurants available in this city.'}
             </p>
           ) : (
             <>

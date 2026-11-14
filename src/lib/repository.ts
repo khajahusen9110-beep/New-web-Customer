@@ -361,7 +361,7 @@ export function getGroceryCategories(forceRefresh = false): Promise<Category[]> 
 }
 
 const VENDOR_COLS =
-  'id,name,banner_url,is_active,is_featured,is_open,address,latitude,longitude,opening_time,closing_time,default_category_id';
+  'id,name,banner_url,is_active,is_featured,is_open,address,latitude,longitude,opening_time,closing_time,default_category_id,effective_price_tier';
 
 /** Last-seen first page of hotels (no search/dish filter), shown while the fresh one loads. */
 export const peekHotels = (cityId: string, limit: number) => peek<Vendor[]>(`hotels:${cityId}::0:${limit}:*`);
@@ -374,12 +374,14 @@ export function getHotels(
   forceRefresh = false,
   /** Only these hotels (e.g. the ones serving a chosen dish). */
   vendorIds?: string[] | null,
+  /** Only Premium or only Budget Friendly hotels (the "price tier" home cards). */
+  tier?: 'premium' | 'budget' | null,
 ): Promise<Vendor[]> {
   const q = (searchQuery ?? '').trim().toLowerCase();
   const ids = vendorIds ? Array.from(new Set(vendorIds)).sort() : null;
   if (ids && !ids.length) return Promise.resolve([]);
   return cached(
-    `hotels:${cityId}:${q}:${offset}:${limit}:${ids ? ids.join(',') : '*'}`,
+    `hotels:${cityId}:${q}:${offset}:${limit}:${ids ? ids.join(',') : '*'}:${tier ?? '*'}`,
     CACHE_TTL_MS,
     async () => {
       let query = supabase
@@ -393,6 +395,7 @@ export function getHotels(
         .range(offset, offset + limit - 1);
       if (q) query = query.ilike('name', `%${q}%`);
       if (ids) query = query.in('id', ids);
+      if (tier) query = query.eq('effective_price_tier', tier);
       const { data, error } = await query;
       if (error) fail(error, 'Could not fetch hotels');
       // Server order (featured, name) keeps paging stable; the page orders by open-now + featured
