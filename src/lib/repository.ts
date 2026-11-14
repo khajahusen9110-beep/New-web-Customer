@@ -375,7 +375,7 @@ export function getHotels(
   /** Only these hotels (e.g. the ones serving a chosen dish). */
   vendorIds?: string[] | null,
   /** Only Premium or only Budget Friendly hotels (the "price tier" home cards). */
-  tier?: 'premium' | 'budget' | null,
+  tier?: 'luxury' | 'medium' | 'low_budget' | null,
 ): Promise<Vendor[]> {
   const q = (searchQuery ?? '').trim().toLowerCase();
   const ids = vendorIds ? Array.from(new Set(vendorIds)).sort() : null;

@@ -16,6 +16,7 @@ import {
   Search,
   ShoppingCart,
   SlidersHorizontal,
+  Soup,
   Star,
   Store,
   Tag,
@@ -273,21 +274,38 @@ function DishRow({
 }
 
 
-/** Two cards that narrow the hotel list to one price tier (auto-computed per hotel from its menu). */
-function PriceTierCards({ onSelect }: { onSelect: (tier: 'premium' | 'budget') => void }) {
+const TIER_LABEL: Record<'luxury' | 'medium' | 'low_budget', string> = {
+  luxury: 'Luxury',
+  medium: 'Medium-range',
+  low_budget: 'Low-budget',
+};
+const TIER_HEADING: Record<'luxury' | 'medium' | 'low_budget', string> = {
+  luxury: '👑 Luxury Restaurants',
+  medium: '🍲 Medium-range Restaurants',
+  low_budget: '👨‍🍳 Low-budget Restaurants',
+};
+
+/** Three cards that narrow the hotel list to one price tier (auto-computed per hotel from its menu). */
+function PriceTierCards({ onSelect }: { onSelect: (tier: 'luxury' | 'medium' | 'low_budget') => void }) {
   return (
     <div className="price-tier-cards">
-      <button className="price-tier-card tier-premium" onClick={() => onSelect('premium')}>
-        <Crown size={28} className="tier-icon" />
-        <div className="tier-title">Premium Restaurants</div>
-        <div className="tier-sub">Luxury dining, premium food</div>
-        <span className="tier-cta">Explore <ChevronRight size={14} /></span>
+      <button className="price-tier-card tier-luxury" onClick={() => onSelect('luxury')}>
+        <Crown size={24} className="tier-icon" />
+        <div className="tier-title">Luxury Restaurants</div>
+        <div className="tier-sub">Fine dining</div>
+        <span className="tier-cta">Explore <ChevronRight size={13} /></span>
       </button>
-      <button className="price-tier-card tier-budget" onClick={() => onSelect('budget')}>
-        <ChefHat size={28} className="tier-icon" />
-        <div className="tier-title">Budget Friendly Restaurants</div>
+      <button className="price-tier-card tier-medium" onClick={() => onSelect('medium')}>
+        <Soup size={24} className="tier-icon" />
+        <div className="tier-title">Medium-range Restaurants</div>
+        <div className="tier-sub">Everyday favourites</div>
+        <span className="tier-cta">Explore <ChevronRight size={13} /></span>
+      </button>
+      <button className="price-tier-card tier-low-budget" onClick={() => onSelect('low_budget')}>
+        <ChefHat size={24} className="tier-icon" />
+        <div className="tier-title">Low-budget Restaurants</div>
         <div className="tier-sub">Tasty food, great value</div>
-        <span className="tier-cta">Explore <ChevronRight size={14} /></span>
+        <span className="tier-cta">Explore <ChevronRight size={13} /></span>
       </button>
     </div>
   );
@@ -720,11 +738,12 @@ export default function HomePage() {
   const setMode = (m: 'grocery' | 'hotels') =>
     m === 'hotels' ? setParams({ mode: 'hotels' }) : setParams({ mode: 'grocery' }, { replace: false });
 
-  // "Premium Restaurants" / "Budget Friendly Restaurants" home cards narrow the hotel list to
-  // one price tier; tapping the header's "X" clears it back to all hotels.
+  // "Luxury" / "Medium-range" / "Low-budget" home cards narrow the hotel list to one price
+  // tier; tapping the header's "X" clears it back to all hotels.
   const tierParam = params.get('tier');
-  const tier: 'premium' | 'budget' | null = tierParam === 'premium' || tierParam === 'budget' ? tierParam : null;
-  const setTier = (t: 'premium' | 'budget' | null) => {
+  const tier: 'luxury' | 'medium' | 'low_budget' | null =
+    tierParam === 'luxury' || tierParam === 'medium' || tierParam === 'low_budget' ? tierParam : null;
+  const setTier = (t: 'luxury' | 'medium' | 'low_budget' | null) => {
     const next = new URLSearchParams(params);
     next.set('mode', 'hotels');
     if (t) next.set('tier', t);
@@ -1751,19 +1770,17 @@ export default function HomePage() {
           )}
           <div ref={hotelsListRef} className="row between hotels-heading">
             <h3 className="section-title">
-              {tier === 'premium'
-                ? '👑 Premium Restaurants'
-                : tier === 'budget'
-                  ? '👨‍🍳 Budget Friendly Restaurants'
-                  : selectedDish
-                    ? `Hotels serving ${selectedDish.name}`
-                    : search
-                      ? 'Restaurants'
-                      : 'All hotels & restaurants'}
+              {tier
+                ? TIER_HEADING[tier]
+                : selectedDish
+                  ? `Hotels serving ${selectedDish.name}`
+                  : search
+                    ? 'Restaurants'
+                    : 'All hotels & restaurants'}
             </h3>
             {tier && (
               <button className="chip-clear" onClick={() => setTier(null)} aria-label="Clear price-tier filter">
-                {tier === 'premium' ? 'Premium' : 'Budget Friendly'} <X size={14} />
+                {TIER_LABEL[tier]} <X size={14} />
               </button>
             )}
             {!tier && selectedDish && (
@@ -1779,7 +1796,7 @@ export default function HomePage() {
           ) : hotels.length === 0 ? (
             <p className="muted center-pad">
               {tier
-                ? `No ${tier === 'premium' ? 'premium' : 'budget friendly'} restaurants in this city yet.`
+                ? `No ${TIER_LABEL[tier].toLowerCase()} restaurants in this city yet.`
                 : selectedDish
                   ? `No hotels serve ${selectedDish.name} right now.`
                   : 'No hotels or restaurants available in this city.'}
