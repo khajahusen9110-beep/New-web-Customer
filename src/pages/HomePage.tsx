@@ -116,6 +116,7 @@ import {
 import { shouldShowRatingPopup, useSession } from '../store/session';
 import { cartCount, useCart } from '../store/cart';
 import { trackEvent } from '../lib/analytics';
+import { getTiffinConfig } from '../lib/tiffin';
 import { useBannerImages } from '../lib/theme';
 
 const GROCERY_PAGE = 30;
@@ -945,6 +946,16 @@ export default function HomePage() {
   const [topFood, setTopFood] = useState<ResolvedProduct[]>([]);
   const [budgetFood, setBudgetFood] = useState<ResolvedProduct[]>([]);
   const [foodMeta, setFoodMeta] = useState<FoodHomeMeta | null>(null);
+  // Third section: shown only where the City Admin has switched Tiffin Pickup on.
+  const [tiffinOn, setTiffinOn] = useState(false);
+  useEffect(() => {
+    if (!cityId) return;
+    let cancelled = false;
+    getTiffinConfig(cityId).then((c) => !cancelled && setTiffinOn(c?.enabled === true));
+    return () => {
+      cancelled = true;
+    };
+  }, [cityId]);
   const [topHotels, setTopHotels] = useState<TopHotelEntry[]>([]);
   const [recentGrocery, setRecentGrocery] = useState<ResolvedProduct[]>([]);
   const [recentFood, setRecentFood] = useState<ResolvedProduct[]>([]);
@@ -1556,13 +1567,13 @@ export default function HomePage() {
             </button>
           )}
         </div>
-        <div className="mode-toggle">
+        <div className={`mode-toggle${tiffinOn ? ' three' : ''}`}>
           <button
             className={!isHotels ? 'active' : ''}
             disabled={serviceMode === 'food_only'}
             onClick={() => setMode('grocery')}
           >
-            Fresh Groceries &amp; Fruits
+            {tiffinOn ? 'Groceries' : <>Fresh Groceries &amp; Fruits</>}
             {serviceMode === 'food_only' && <span className="soon-badge">Coming Soon</span>}
           </button>
           <button
@@ -1570,9 +1581,10 @@ export default function HomePage() {
             disabled={serviceMode === 'grocery_only'}
             onClick={() => setMode('hotels')}
           >
-            Hotel Food &amp; Dining
+            {tiffinOn ? 'Hotel Food' : <>Hotel Food &amp; Dining</>}
             {serviceMode === 'grocery_only' && <span className="soon-badge">Coming Soon</span>}
           </button>
+          {tiffinOn && <button onClick={() => navigate('/tiffin')}>Tiffin Pickup</button>}
         </div>
       </div>
 

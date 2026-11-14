@@ -43,6 +43,7 @@ const OrderDetailPage = lazy(() => import('./pages/OrderDetailPage'));
 const ProfilePage = lazy(() => import('./pages/ProfilePage'));
 const NotificationsPage = lazy(() => import('./pages/NotificationsPage'));
 const WalletPage = lazy(() => import('./pages/WalletPage'));
+const TiffinPage = lazy(() => import('./pages/TiffinPage'));
 const ReferEarnPage = lazy(() => import('./pages/ReferEarnPage'));
 const AgentCodePage = lazy(() => import('./pages/AgentCodePage'));
 const MyReviewsPage = lazy(() => import('./pages/MyReviewsPage'));
@@ -323,6 +324,7 @@ export default function App() {
             <Route path="/orders/:orderId" element={<OrderDetailPage />} />
             <Route path="/notifications" element={<NotificationsPage />} />
             <Route path="/wallet" element={<WalletPage />} />
+            <Route path="/tiffin" element={<TiffinPage />} />
             <Route path="/refer" element={<ReferEarnPage />} />
             <Route path="/agent-code" element={<AgentCodePage />} />
             <Route path="/reviews" element={<MyReviewsPage />} />

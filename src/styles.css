@@ -981,3 +981,57 @@ h3, .section-title { letter-spacing: -0.015em; }
 /* header: a long city/label shortens with "..." instead of being cut mid-letter beside the back arrow */
 .deliver-city-name { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .deliver-city > svg { flex-shrink: 0; }
+
+/* ---------- Tiffin Pickup ---------- */
+.mode-toggle.three button { font-size: 12.5px; padding: 10px 4px; white-space: nowrap; }
+.tiffin-page .content-pad { display: flex; flex-direction: column; gap: 14px; max-width: 720px; margin: 0 auto; width: 100%; }
+.tiffin-hero { border-radius: 18px; padding: 18px; color: #fff; background: linear-gradient(140deg, #0f766e 0%, #134e4a 100%); box-shadow: var(--shadow); }
+.tiffin-hero-title { font-size: 20px; font-weight: 800; line-height: 1.2; letter-spacing: -0.01em; }
+.tiffin-hero-sub { font-size: 13.5px; opacity: 0.92; margin-top: 6px; line-height: 1.4; }
+.tiffin-hero-steps { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 12px; }
+.tiffin-hero-steps span { display: inline-flex; align-items: center; gap: 5px; font-size: 12px; font-weight: 700; padding: 5px 10px; border-radius: 999px; background: rgba(255, 255, 255, 0.16); }
+.tiffin-card { padding: 16px; display: flex; flex-direction: column; gap: 12px; }
+.tiffin-card:hover { transform: none; }
+.tiffin-card-title { font-size: 16px; font-weight: 800; }
+.tiffin-new-btn { height: 48px; gap: 6px; }
+.tiffin-plan-who { display: flex; align-items: center; gap: 10px; min-width: 0; }
+.tiffin-kind-icon { width: 36px; height: 36px; border-radius: 12px; display: grid; place-items: center; flex: none; background: #ccfbf1; color: #0f766e; }
+.tiffin-badge { flex: none; font-size: 11px; font-weight: 800; padding: 4px 9px; border-radius: 999px; white-space: nowrap; }
+.tiffin-badge-ok { background: #dcfce7; color: #166534; }
+.tiffin-badge-warn { background: #fef3c7; color: #92400e; }
+.tiffin-badge-muted { background: var(--surface-variant); color: var(--text-2); }
+.tiffin-route { display: flex; flex-direction: column; gap: 6px; font-size: 13.5px; color: var(--text-2); }
+.tiffin-route > div { display: flex; gap: 8px; align-items: flex-start; }
+.tiffin-route svg { flex: none; margin-top: 3px; color: #0f766e; }
+.tiffin-note { font-size: 13.5px; line-height: 1.45; padding: 12px; border-radius: 12px; background: var(--surface-variant); color: var(--text-2); }
+.tiffin-note-warn { background: #fffbeb; color: #78350f; border: 1px solid #fde68a; }
+.tiffin-stats { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 8px; }
+.tiffin-stats > div { display: flex; flex-direction: column; gap: 2px; padding: 10px; border-radius: 12px; background: var(--surface-variant); text-align: center; min-width: 0; }
+.tiffin-stats strong { font-size: 15px; font-weight: 800; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.tiffin-stats span { font-size: 11px; color: var(--text-2); }
+.tiffin-partner { display: flex; align-items: center; justify-content: space-between; gap: 8px; font-size: 13.5px; }
+.tiffin-today { display: flex; flex-direction: column; gap: 6px; padding: 12px; border-radius: 12px; background: #f0fdfa; border: 1px solid #99f6e4; }
+.tiffin-today-row { display: flex; align-items: center; justify-content: space-between; gap: 8px; font-size: 13.5px; font-weight: 600; }
+.tiffin-days { display: flex; flex-direction: column; gap: 8px; }
+.tiffin-day-chips { display: flex; flex-wrap: wrap; gap: 6px; }
+.tiffin-day-chip { display: inline-flex; flex-direction: column; align-items: center; gap: 1px; min-width: 86px; padding: 7px 10px; border-radius: 12px; border: 1px solid var(--outline-soft); background: var(--surface); font-size: 12.5px; font-weight: 700; cursor: pointer; }
+.tiffin-day-chip span { font-size: 10px; font-weight: 800; color: #b45309; }
+.tiffin-day-chip.skipped { background: #fffbeb; border-color: #fde68a; color: var(--text-2); text-decoration: line-through; text-decoration-color: #d97706; }
+.tiffin-day-chip.skipped span { text-decoration: none; display: inline-block; }
+.tiffin-day-chip:disabled { opacity: 0.6; cursor: default; }
+.tiffin-form select.input { width: 100%; appearance: auto; padding: 12px; background: var(--surface); }
+.tiffin-kinds { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 6px; padding: 4px; border-radius: 14px; background: var(--surface-variant); }
+.tiffin-kinds button { display: inline-flex; align-items: center; justify-content: center; gap: 6px; padding: 10px 4px; border-radius: 11px; border: none; background: transparent; font-size: 13px; font-weight: 700; color: var(--text-2); cursor: pointer; }
+.tiffin-kinds button.active { background: var(--surface); color: #0f766e; box-shadow: 0 1px 2px rgba(23, 22, 28, 0.08), 0 4px 10px -4px rgba(23, 22, 28, 0.18); }
+.tiffin-weekdays { display: grid; grid-template-columns: repeat(7, minmax(0, 1fr)); gap: 5px; }
+.tiffin-weekdays button { padding: 9px 0; border-radius: 10px; border: 1px solid var(--outline-soft); background: var(--surface); font-size: 12px; font-weight: 700; color: var(--text-2); cursor: pointer; }
+.tiffin-weekdays button.active { background: #0f766e; border-color: #0f766e; color: #fff; }
+.tiffin-two { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px; }
+.tiffin-two input { width: 100%; min-width: 0; }
+.tiffin-check { display: flex; align-items: flex-start; gap: 10px; padding: 12px; border-radius: 12px; border: 1px solid var(--outline-soft); cursor: pointer; font-size: 14px; }
+.tiffin-check input { width: 18px; height: 18px; margin-top: 2px; accent-color: #0f766e; flex: none; }
+.tiffin-add-address { align-self: flex-start; gap: 4px; margin-top: -6px; }
+.tiffin-quote { display: flex; flex-direction: column; gap: 6px; padding: 12px; border-radius: 12px; background: var(--surface-variant); font-size: 14px; min-height: 44px; justify-content: center; }
+.tiffin-quote-total { padding-top: 8px; border-top: 1px dashed var(--outline); font-size: 16px; }
+.tiffin-price-rows { display: flex; flex-direction: column; }
+.tiffin-price-row { display: flex; justify-content: space-between; gap: 10px; padding: 9px 0; border-top: 1px solid var(--outline-soft); font-size: 14px; }
