@@ -214,13 +214,26 @@ export default function TiffinPage() {
 
             {enabled && config?.trial_enabled && !usedTrial && (
               <div>
-                <button className="tiffin-trial-img" onClick={() => go({ name: 'create' })}>
-                  <img
-                    src={config.trial_banner_image_url || '/tiffin/trial-banner.jpg'}
-                    alt={ctx.tx('trialAlt', config.trial_days ?? 7, rupees(config.trial_price ?? 0))}
-                  />
-                </button>
-                <div className="muted small tiffin-trial-caption">{ctx.tx('trialCaption')}</div>
+                {config.trial_banner_image_url ? (
+                  <button className="tiffin-trial-img" onClick={() => go({ name: 'create' })}>
+                    <img src={config.trial_banner_image_url} alt={ctx.tx('trialAlt', config.trial_days ?? 7, rupees(config.trial_price ?? 0))} />
+                  </button>
+                ) : (
+                  <button className="tiffin-offer" onClick={() => go({ name: 'create' })}>
+                    <span className="tiffin-offer-kicker">{ctx.tx('offerKicker')}</span>
+                    <span className="tiffin-offer-days">{ctx.tx('offerDays', config.trial_days ?? 7)}</span>
+                    <span className="tiffin-offer-for">{ctx.tx('offerFor')}</span>
+                    <span className="tiffin-offer-price">
+                      {config.slabs?.[0] && config.full_month_trips > 0 && (
+                        <s className="tiffin-offer-was">{rupees(Math.round((config.slabs[0].price * (config.trial_days ?? 7)) / config.full_month_trips))}</s>
+                      )}
+                      {rupees(config.trial_price ?? 0)}
+                    </span>
+                    <span className="tiffin-offer-cancel">✓ {ctx.tx('offerCancel')}</span>
+                    <span className="tiffin-offer-cta">{ctx.tx('offerBtn', config.trial_days ?? 7)} →</span>
+                  </button>
+                )}
+                <div className="muted small tiffin-trial-caption">{ctx.tx('offerThen', rupees(config.slabs?.[0]?.price ?? 0))}</div>
               </div>
             )}
 

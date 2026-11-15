@@ -6,7 +6,6 @@ import {
   Clock,
   CreditCard,
   LocateFixed,
-  Mail,
   Hourglass,
   Map as MapIcon,
   MessageCircle,
@@ -49,9 +48,8 @@ import { useSession } from '../store/session';
 const ACTIVE = ['pending', 'confirmed', 'preparing', 'ready', 'out_for_delivery'];
 const POLL_MS = 18_000;
 const PAYMENT_POLL_MS = 20_000;
-const SUPPORT_PHONE = '+919353461742';
-const SUPPORT_WHATSAPP = '919110604033';
-const SUPPORT_EMAIL = 'sndmartt@gmail.com';
+// Sndmart's WhatsApp Business number: its bot answers with the order details and help options.
+const SUPPORT_BOT_WHATSAPP = '917899787976';
 
 const STEPS: [string, string][] = [
   ['pending', 'Order Placed'],
@@ -643,25 +641,15 @@ export default function OrderDetailPage() {
 
           <section className="card pad">
             <h3>Need Help with this Order?</h3>
-            <div className="help-row">
-              <a className="btn btn-outline btn-sm" href={`tel:${SUPPORT_PHONE}`}>
-                <Phone size={15} /> Call
-              </a>
-              <a
-                className="btn btn-outline btn-sm"
-                target="_blank"
-                rel="noreferrer"
-                href={`https://wa.me/${SUPPORT_WHATSAPP}?text=${encodeURIComponent(`I need help with order ${order.order_number}`)}`}
-              >
-                <MessageCircle size={15} /> WhatsApp
-              </a>
-              <a
-                className="btn btn-outline btn-sm"
-                href={`mailto:${SUPPORT_EMAIL}?subject=${encodeURIComponent(`Help with Order ${order.order_number}`)}`}
-              >
-                <Mail size={15} /> Email
-              </a>
-            </div>
+            <p className="muted small" style={{ margin: '4px 0 10px' }}>Chat with the Sndmart assistant on WhatsApp. It will show this order and help you.</p>
+            <a
+              className="btn btn-outline btn-sm"
+              target="_blank"
+              rel="noreferrer"
+              href={`https://wa.me/${SUPPORT_BOT_WHATSAPP}?text=${encodeURIComponent(`Hi, I need help with my order ${order.order_number}`)}`}
+            >
+              <MessageCircle size={15} /> Chat on WhatsApp
+            </a>
           </section>
 
           {order.status.toLowerCase() === 'delivered' && !hasReviewed && (
