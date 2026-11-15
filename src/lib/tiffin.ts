@@ -186,8 +186,14 @@ export function isoWeekday(date: string): number {
   return d === 0 ? 7 : d;
 }
 
+// Weekday and month names follow the language chosen on the Tiffin page.
+let dateLocale = 'en-IN';
+export function setTiffinDateLocale(lang: 'en' | 'kn') {
+  dateLocale = lang === 'kn' ? 'kn-IN' : 'en-IN';
+}
+
 export function dayLabel(date: string): string {
-  return new Date(`${date}T00:00:00Z`).toLocaleDateString('en-IN', { weekday: 'short', day: 'numeric', month: 'short', timeZone: 'UTC' });
+  return new Date(`${date}T00:00:00Z`).toLocaleDateString(dateLocale, { weekday: 'short', day: 'numeric', month: 'short', timeZone: 'UTC' });
 }
 
 /** "07:30:00" or "07:30" -> "7:30 AM". */
