@@ -59,6 +59,10 @@ const TRIP_STATUS: Record<TiffinTrip['status'], string> = {
   cancelled: 'Cancelled',
 };
 
+/** "23 Dec": short enough for the small stat tiles. */
+const shortDate = (date: string) =>
+  new Date(`${date}T00:00:00Z`).toLocaleDateString('en-IN', { day: 'numeric', month: 'short', timeZone: 'UTC' });
+
 const addressText = (a: CustomerAddress) => `${a.label || 'Address'} — ${a.address_line}`;
 
 export default function TiffinPage() {
@@ -271,7 +275,7 @@ function PlanCard({ plan, cutoffHour, onChanged }: { plan: TiffinSubscription; c
               <span>days in plan</span>
             </div>
             <div>
-              <strong>{dayLabel(plan.end_date)}</strong>
+              <strong>{shortDate(plan.end_date)}</strong>
               <span>use before</span>
             </div>
           </div>

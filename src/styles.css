@@ -1024,7 +1024,7 @@ h3, .section-title { letter-spacing: -0.015em; }
 .tiffin-kinds button { display: inline-flex; align-items: center; justify-content: center; gap: 6px; padding: 10px 4px; border-radius: 11px; border: none; background: transparent; font-size: 13px; font-weight: 700; color: var(--text-2); cursor: pointer; }
 .tiffin-kinds button.active { background: var(--surface); color: #0f766e; box-shadow: 0 1px 2px rgba(23, 22, 28, 0.08), 0 4px 10px -4px rgba(23, 22, 28, 0.18); }
 .tiffin-weekdays { display: grid; grid-template-columns: repeat(7, minmax(0, 1fr)); gap: 5px; }
-.tiffin-weekdays button { padding: 9px 0; border-radius: 10px; border: 1px solid var(--outline-soft); background: var(--surface); font-size: 12px; font-weight: 700; color: var(--text-2); cursor: pointer; }
+.tiffin-weekdays button { display: grid; place-items: center; padding: 9px 0; border-radius: 10px; border: 1px solid var(--outline-soft); background: var(--surface); font-size: 12px; font-weight: 700; color: var(--text-2); cursor: pointer; }
 .tiffin-weekdays button.active { background: #0f766e; border-color: #0f766e; color: #fff; }
 .tiffin-two { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px; }
 .tiffin-two input { width: 100%; min-width: 0; }
