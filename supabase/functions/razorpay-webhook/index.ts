@@ -6,6 +6,7 @@ import { createClient } from "jsr:@supabase/supabase-js@2";
 // order.paid and qr_code.credited; set the same secret in Supabase secret RAZORPAY_WEBHOOK_SECRET.
 //   payment.captured / order.paid : customer checkout (razorpay order_...).
 //   qr_code.credited              : a delivery partner's door-step scan-to-pay QR (qr_...).
+//   subscription.*                : Tiffin Pickup monthly auto-pay.
 
 async function hmacHex(secret: string, body: string): Promise<string> {
   const key = await crypto.subtle.importKey("raw", new TextEncoder().encode(secret), { name: "HMAC", hash: "SHA-256" }, false, ["sign"]);
