@@ -1152,3 +1152,12 @@ h3, .section-title { letter-spacing: -0.015em; }
 .tiffin-offer-was{font-size:24px;font-weight:700;opacity:.75;text-decoration-thickness:3px}
 .tiffin-offer-cancel{font-size:15px;font-weight:800;margin-top:6px;background:rgba(255,255,255,.18);padding:6px 14px;border-radius:999px}
 .tiffin-offer-cta{margin-top:12px;background:#fff;color:#5b2fd0;font-weight:900;font-size:15px;padding:12px 22px;border-radius:14px}
+
+/* Cart bar: stands clear of the page behind it (soft fade + stronger shadow + tinted strip) so the
+   "add more for FREE delivery" strip and the Checkout button read as one card, not as page content. */
+.floating-cart-wrap { padding-top: 22px; background: linear-gradient(to top, var(--bg) 62%, transparent); }
+.floating-cart-box { border: 1px solid color-mix(in srgb, var(--primary) 22%, white); box-shadow: 0 14px 32px -8px rgba(23, 22, 28, 0.38); }
+.fd-progress { background: #fff8e6; border-bottom: 1px solid #fde7b0; color: #7a4a00; }
+.fd-progress strong { color: #5c3500; }
+.fd-progress.done { background: #ecfdf3; border-bottom-color: #bbf0d0; }
+.fd-progress-bar { background: rgba(0, 0, 0, 0.1); height: 6px; }
