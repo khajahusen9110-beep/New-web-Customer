@@ -1,6 +1,6 @@
 import { createContext, useCallback, useContext, useEffect, useMemo, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { ArrowLeft, ArrowRight, Bike, Briefcase, CalendarCheck, CalendarDays, Camera, Check, CheckCircle2, Clock, GraduationCap, Home, IndianRupee, Lightbulb, MapPin, Package, Pause, Phone, Play, Plus, Repeat, School, ShieldCheck, User } from 'lucide-react';
+import { ArrowLeft, ArrowRight, Bike, ChevronRight, Crown, HelpCircle, ListChecks, PackageCheck, Smile, Briefcase, CalendarCheck, CalendarDays, Camera, Check, CheckCircle2, Clock, GraduationCap, Home, IndianRupee, Lightbulb, MapPin, Package, Pause, Phone, Play, Plus, Repeat, School, ShieldCheck, User } from 'lucide-react';
 import { ErrorCard, ListSkeleton, PageHeader, Spinner, toast } from '../components/ui';
 import { PromoCarousel } from '../components/PromoCarousel';
 import { getAddresses, getPromoBanners, peekPromoBanners } from '../lib/repository';
@@ -18,6 +18,7 @@ import {
   getTiffinPhotoUrl,
   getTiffinQuote,
   indiaToday,
+  isoWeekday,
   setTiffinDaySkipped,
   setTiffinPaused,
   timeLabel,
@@ -80,7 +81,6 @@ export default function TiffinPage() {
   const [addresses, setAddresses] = useState<CustomerAddress[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
-  const [showForm, setShowForm] = useState(false);
   const [banners, setBanners] = useState<PromoBanner[]>(() => (city?.id ? peekPromoBanners(city.id, 'tiffin') ?? [] : []));
   const [lang, setLangState] = useState<TiffinLang>(initialTiffinLang);
   setTiffinDateLocale(lang);
@@ -137,19 +137,51 @@ export default function TiffinPage() {
     else if (b.link_type === 'category') navigate('/');
   };
 
+  // ---- which screen is showing ----
+  type View = { name: 'home' } | { name: 'plans' } | { name: 'help' } | { name: 'create' } | { name: 'manage'; id: string } | { name: 'ready'; id: string; paid: boolean };
+  const [view, setViewState] = useState<View>({ name: 'home' });
+  const go = (v: View) => {
+    setViewState(v);
+    window.scrollTo({ top: 0 });
+  };
+  const today = indiaToday();
+  const groups = useMemo(() => groupPlans(plans, today), [plans, today]);
+  const current = groups.active[0] ?? groups.upcoming[0] ?? groups.paused[0] ?? groups.pending[0] ?? null;
+  const usedTrial = plans.some((p) => p.is_trial && p.status !== 'pending_payment' && p.status !== 'cancelled');
+  const tab = view.name === 'plans' || view.name === 'manage' ? 'plans' : view.name === 'help' ? 'help' : 'home';
+  const managed = view.name === 'manage' || view.name === 'ready' ? plans.find((p) => p.id === view.id) ?? null : null;
+  const back = () => {
+    if (view.name === 'manage') go({ name: 'plans' });
+    else if (view.name === 'home') navigate('/');
+    else go({ name: 'home' });
+  };
+
   return (
     <TxContext.Provider value={ctx}>
     <div className="page tiffin-page">
-      <PageHeader title={ctx.tx('title')} subtitle={ctx.tx('subtitle')} onBack={() => navigate('/')} />
+      <PageHeader title={ctx.tx(view.name === 'manage' ? 'managePlan' : 'title')} subtitle={ctx.tx('subtitle')} onBack={back} />
+      {view.name !== 'create' && view.name !== 'ready' && (
+        <div className="tiffin-tabs" role="tablist">
+          <button role="tab" aria-selected={tab === 'home'} className={tab === 'home' ? 'active' : ''} onClick={() => go({ name: 'home' })}>
+            <Home size={16} /> {ctx.tx('tabHome')}
+          </button>
+          <button role="tab" aria-selected={tab === 'plans'} className={tab === 'plans' ? 'active' : ''} onClick={() => go({ name: 'plans' })}>
+            <ListChecks size={16} /> {ctx.tx('tabPlans')}
+            {plans.length > 0 && <em>{groups.active.length + groups.upcoming.length + groups.paused.length + groups.pending.length}</em>}
+          </button>
+          <button role="tab" aria-selected={tab === 'help'} className={tab === 'help' ? 'active' : ''} onClick={() => go({ name: 'help' })}>
+            <HelpCircle size={16} /> {ctx.tx('tabHelp')}
+          </button>
+        </div>
+      )}
       <div className="content-pad">
         {loading ? (
           <ListSkeleton count={3} height={120} />
         ) : error ? (
           <ErrorCard message={error} onRetry={() => void load()} />
-        ) : (
+        ) : view.name === 'home' ? (
           <>
-            {banners.length > 0 && <PromoCarousel banners={banners} onOpen={openBanner} />}
-            <section className="tiffin-hero">
+            <div className="tiffin-lang-row">
               <div className="tiffin-lang" role="group" aria-label="Language">
                 <button className={lang === 'en' ? 'active' : ''} aria-pressed={lang === 'en'} onClick={() => setLang('en')}>
                   English
@@ -158,70 +190,285 @@ export default function TiffinPage() {
                   ಕನ್ನಡ
                 </button>
               </div>
-              <div className="tiffin-hero-kicker">{ctx.tx('title')}</div>
-              <div className="tiffin-hero-title">{ctx.tx('heroTitle')}</div>
-              <div className="tiffin-hero-sub">{ctx.tx('heroSub')}</div>
+            </div>
+            <section className="tiffin-hero-img">
+              <img src={config?.hero_image_url || '/tiffin/hero.jpg'} alt={`${ctx.tx('title')} — ${ctx.tx('heroTitle')}`} />
             </section>
 
-            <div className="tiffin-tiles">
-              <div className="tiffin-tile t1">
-                <Home size={26} />
+            <div className="tiffin-feature-row">
+              <div>
+                <Home size={24} />
                 <span>{ctx.tx('stepPickup')}</span>
               </div>
-              <div className="tiffin-tile t2">
-                <CalendarCheck size={26} />
+              <div>
+                <CalendarCheck size={24} />
                 <span>{ctx.tx('tileDays')}</span>
               </div>
-              <div className="tiffin-tile t3">
-                <Bike size={26} />
+              <div>
+                <Bike size={24} />
                 <span>{ctx.tx('tileDeliver')}</span>
               </div>
             </div>
 
-            {!enabled && plans.length === 0 && (
-              <p className="muted center-pad">{ctx.tx('notAvailable', city?.name ?? '—')}</p>
+            {!enabled && <p className="muted center-pad">{ctx.tx('notAvailable', city?.name ?? '—')}</p>}
+
+            {enabled && config?.trial_enabled && !usedTrial && (
+              <div>
+                <button className="tiffin-trial-img" onClick={() => go({ name: 'create' })}>
+                  <img
+                    src={config.trial_banner_image_url || '/tiffin/trial-banner.jpg'}
+                    alt={ctx.tx('trialAlt', config.trial_days ?? 7, rupees(config.trial_price ?? 0))}
+                  />
+                </button>
+                <div className="muted small tiffin-trial-caption">{ctx.tx('trialCaption')}</div>
+              </div>
             )}
 
-            {plans.map((p) => (
-              <PlanCard key={p.id} plan={p} cutoffHour={config?.skip_cutoff_hour ?? 21} onChanged={load} />
-            ))}
+            <button className="card tiffin-active-card" onClick={() => go(current ? { name: 'manage', id: current.id } : enabled ? { name: 'create' } : { name: 'plans' })}>
+              <span className="tiffin-active-icon">
+                <Crown size={24} />
+              </span>
+              <span className="tiffin-active-text">
+                <strong>{ctx.tx('yourActivePlan')}</strong>
+                {current ? (
+                  <>
+                    <span>
+                      {current.recipient_name} · {ctx.tx(STATUS[current.status].label)}
+                    </span>
+                    <span className="muted small">
+                      {ctx.tx('pickupAt', timeLabel(current.pickup_time), WEEKDAYS.filter((d) => current.days.includes(d.n)).map((d) => ctx.tx(d.key)).join(', '))}
+                    </span>
+                  </>
+                ) : (
+                  <>
+                    <span>{ctx.tx('noActivePlan')}</span>
+                    <span className="muted small">{ctx.tx('noActivePlanSub')}</span>
+                  </>
+                )}
+              </span>
+              <ChevronRight size={20} />
+            </button>
+
+            {banners.length > 0 && <PromoCarousel banners={banners} onOpen={openBanner} />}
+
+            <div className="tiffin-heading">
+              <span>{ctx.tx('guideTitle')}</span>
+            </div>
+            <div className="tiffin-how">
+              {[
+                { key: 'hw1', Icon: Home },
+                { key: 'hw2', Icon: CalendarDays },
+                { key: 'hw3', Icon: PackageCheck },
+                { key: 'hw4', Icon: Smile },
+              ].map(({ key, Icon }, i) => (
+                <div key={key}>
+                  <em>{i + 1}</em>
+                  <Icon size={26} />
+                  <span>{ctx.tx(key)}</span>
+                </div>
+              ))}
+            </div>
+
+            <div className="tiffin-heading">
+              <span>{ctx.tx('ourFeatures')}</span>
+            </div>
+            <div className="tiffin-features">
+              {[
+                { Icon: Home, cls: 'f1', title: 'stepPickup', sub: 'featPickupSub' },
+                { Icon: CalendarCheck, cls: 'f2', title: 'tileDays', sub: 'featDaysSub' },
+                { Icon: Bike, cls: 'f3', title: 'tileDeliver', sub: 'featDeliverSub' },
+                { Icon: Repeat, cls: 'f4', title: 'featBox', sub: 'featBoxSub' },
+              ].map((f) => (
+                <div key={f.title} className="card">
+                  <span className={`tiffin-feature-icon ${f.cls}`}>
+                    <f.Icon size={22} />
+                  </span>
+                  <span>
+                    <strong>{ctx.tx(f.title)}</strong>
+                    <span className="muted small">{ctx.tx(f.sub)}</span>
+                  </span>
+                </div>
+              ))}
+            </div>
 
             {enabled && config && (
               <>
-                {!showForm ? (
-                  <>
-                    <TiffinGuide config={config} />
-                    <button
-                      className="btn btn-primary w-full tiffin-cta"
-                      onClick={() => {
-                        setShowForm(true);
-                        window.scrollTo({ top: 0 });
-                      }}
-                    >
-                      {ctx.tx('createPlan')} <ArrowRight size={18} />
-                    </button>
-                  </>
-                ) : (
-                  <NewPlanForm
-                    config={config}
-                    addresses={addresses}
-                    canClose={plans.length > 0}
-                    onClose={() => setShowForm(false)}
-                    onCreated={async () => {
-                      setShowForm(false);
-                      await load();
-                      window.scrollTo({ top: 0 });
-                    }}
-                  />
-                )}
                 <PriceTable config={config} />
+                <button className="btn btn-primary w-full tiffin-cta" onClick={() => go({ name: 'create' })}>
+                  {ctx.tx('createPlan')} <ArrowRight size={18} />
+                </button>
               </>
             )}
+          </>
+        ) : view.name === 'plans' ? (
+          <>
+            {plans.length === 0 && <p className="muted center-pad">{ctx.tx('noPlans')}</p>}
+            {(
+              [
+                ['secPending', groups.pending],
+                ['secActive', groups.active],
+                ['secUpcoming', groups.upcoming],
+                ['secPaused', groups.paused],
+                ['secExpired', groups.expired],
+              ] as const
+            ).map(([title, list]) =>
+              list.length === 0 ? null : (
+                <section key={title} className="tiffin-plan-group">
+                  <div className="label-caps">
+                    {ctx.tx(title)} ({list.length})
+                  </div>
+                  {list.map((p) => (
+                    <PlanRow key={p.id} plan={p} onOpen={() => go({ name: 'manage', id: p.id })} />
+                  ))}
+                </section>
+              ),
+            )}
+            {enabled && (
+              <button className="btn btn-primary w-full tiffin-cta" onClick={() => go({ name: 'create' })}>
+                <Plus size={18} /> {ctx.tx('createPlan')}
+              </button>
+            )}
+          </>
+        ) : view.name === 'manage' ? (
+          managed ? (
+            <>
+              <PlanCard plan={managed} cutoffHour={config?.skip_cutoff_hour ?? 21} onChanged={load} />
+              <PaymentDetails plan={managed} />
+            </>
+          ) : (
+            <p className="muted center-pad">{ctx.tx('noPlans')}</p>
+          )
+        ) : view.name === 'create' ? (
+          enabled && config ? (
+            <NewPlanForm
+              config={config}
+              addresses={addresses}
+              canClose
+              onClose={() => go({ name: 'home' })}
+              onCreated={async (id, paid) => {
+                await load();
+                go({ name: 'ready', id, paid });
+              }}
+            />
+          ) : (
+            <p className="muted center-pad">{ctx.tx('notAvailable', city?.name ?? '—')}</p>
+          )
+        ) : view.name === 'ready' ? (
+          <section className="tiffin-ready">
+            <span className={`tiffin-ready-icon${view.paid ? '' : ' pending'}`}>
+              <Check size={34} />
+            </span>
+            <h2>{ctx.tx(view.paid ? 'readyTitle' : 'savedTitle')}</h2>
+            <p className="muted">{ctx.tx(view.paid ? 'readySub' : 'savedSub')}</p>
+            {managed && <PaymentDetails plan={managed} title="planDetails" />}
+            <button className="btn btn-primary w-full tiffin-cta" onClick={() => go({ name: 'manage', id: view.id })}>
+              {ctx.tx('viewMyPlan')} <ArrowRight size={18} />
+            </button>
+          </section>
+        ) : (
+          <>
+            {config && <TiffinGuide config={config} />}
+            {config && (
+              <div className="card tiffin-card">
+                <TiffinTerms config={config} />
+              </div>
+            )}
+            <button className="btn btn-outline w-full" onClick={() => navigate('/help')}>
+              <HelpCircle size={18} /> {ctx.tx('helpSupport')}
+            </button>
           </>
         )}
       </div>
     </div>
     </TxContext.Provider>
+  );
+}
+
+/** Splits a customer's plans the way the "My Plans" screen shows them. */
+function groupPlans(plans: TiffinSubscription[], today: string) {
+  const out = { pending: [] as TiffinSubscription[], active: [] as TiffinSubscription[], upcoming: [] as TiffinSubscription[], paused: [] as TiffinSubscription[], expired: [] as TiffinSubscription[] };
+  for (const p of plans) {
+    if (p.status === 'pending_payment') out.pending.push(p);
+    else if (p.status === 'paused') out.paused.push(p);
+    else if (p.status === 'active') (p.start_date > today ? out.upcoming : out.active).push(p);
+    else out.expired.push(p);
+  }
+  return out;
+}
+
+/** One plan in the "My Plans" list: who, where, and the one fact that matters for its state. */
+function PlanRow({ plan, onOpen }: { plan: TiffinSubscription; onOpen: () => void }) {
+  const { tx } = useTx();
+  const today = indiaToday();
+  const kind = KINDS.find((k) => k.key === plan.kind) ?? KINDS[0];
+  const next = plan.status === 'active' ? [today, ...upcomingPlanDays(plan, 3)].find((d) => d >= plan.start_date && d <= plan.end_date && plan.days.includes(isoWeekday(d)) && !plan.skips.includes(d)) : undefined;
+  const fact =
+    plan.status === 'pending_payment'
+      ? plan.is_trial
+        ? tx('payTrialBtn', rupees(plan.trial_fee))
+        : tx('btnPay', rupees(plan.total_amount))
+      : plan.status === 'active' && plan.start_date > today
+        ? tx('startsOnDate', dayLabel(plan.start_date))
+        : plan.status === 'active' && next
+          ? `${tx('nextPickup')}: ${dayLabel(next)}, ${timeLabel(plan.pickup_time)}`
+          : plan.status === 'completed' || plan.status === 'cancelled'
+            ? tx('endedOn', dayLabel(plan.end_date))
+            : tx(STATUS[plan.status].label);
+  return (
+    <button className="card tiffin-plan-row" onClick={onOpen}>
+      <span className="tiffin-kind-icon">
+        <kind.Icon size={18} />
+      </span>
+      <span className="tiffin-active-text">
+        <strong>{plan.recipient_name}</strong>
+        <span className="muted small">{plan.drop_label || plan.drop_address}</span>
+        <span className="small">{fact}</span>
+      </span>
+      <span className={`tiffin-badge ${STATUS[plan.status].cls}`}>{tx(STATUS[plan.status].label)}</span>
+      <ChevronRight size={18} />
+    </button>
+  );
+}
+
+/** Money facts of one plan: monthly price, trial, months paid, next charge. */
+function PaymentDetails({ plan, title = 'paymentDetails' }: { plan: TiffinSubscription; title?: string }) {
+  const { tx } = useTx();
+  const live = isAutopayLive(plan.autopay_status);
+  return (
+    <section className="card tiffin-card tiffin-pay-details">
+      <div className="tiffin-card-title">{tx(title)}</div>
+      <div>
+        <span>{tx('distanceLbl')}</span>
+        <strong>{tx('kmValue', plan.distance_km)}</strong>
+      </div>
+      <div>
+        <span>{tx('monthlyPriceLbl')}</span>
+        <strong>{rupees(plan.total_amount)}</strong>
+      </div>
+      {plan.is_trial && (
+        <div>
+          <span>{tx('trialLbl')}</span>
+          <strong>{tx('trialValue', plan.trial_days, rupees(plan.trial_fee))}</strong>
+        </div>
+      )}
+      {plan.autopay_status !== 'none' && (
+        <div>
+          <span>{tx('autopayLbl')}</span>
+          <strong>{live ? tx('autopayOn') : tx('autopayOff')}</strong>
+        </div>
+      )}
+      {plan.billing_cycles_paid > 0 && (
+        <div>
+          <span>{tx('monthsPaid')}</span>
+          <strong>{plan.billing_cycles_paid}</strong>
+        </div>
+      )}
+      {live && plan.next_charge_date && (
+        <div>
+          <span>{tx('nextPay', rupees(plan.total_amount), dayLabel(plan.next_charge_date))}</span>
+        </div>
+      )}
+    </section>
   );
 }
 
@@ -511,7 +758,7 @@ function NewPlanForm({
   addresses: CustomerAddress[];
   canClose: boolean;
   onClose: () => void;
-  onCreated: () => Promise<void> | void;
+  onCreated: (planId: string, paid: boolean) => Promise<void> | void;
 }) {
   const navigate = useNavigate();
   const { tx } = useTx();
@@ -586,13 +833,13 @@ function NewPlanForm({
         returnPickupTime: returnTime,
         startDate,
       });
+      let paid = false;
       try {
-        const r = await payTiffinPlan(id, userPhone, userEmail);
-        toast(r === 'paid' ? tx(quote.trial_available ? 'toastTrialStarted' : 'toastPlanStarted') : tx('toastPlanSaved'));
+        paid = (await payTiffinPlan(id, userPhone, userEmail)) === 'paid';
       } catch (e) {
         toast(errorMessage(e));
       }
-      await onCreated();
+      await onCreated(id, paid);
     } catch (e) {
       setFormError(errorMessage(e));
     } finally {

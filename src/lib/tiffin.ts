@@ -19,6 +19,9 @@ export interface TiffinConfig {
   trial_enabled?: boolean;
   trial_days?: number;
   trial_price?: number;
+  /** Set by the City Admin; the app's built-in pictures are used when empty. */
+  hero_image_url?: string | null;
+  trial_banner_image_url?: string | null;
 }
 
 export interface TiffinQuote {

@@ -1097,3 +1097,48 @@ h3, .section-title { letter-spacing: -0.015em; }
 .tiffin-sum-days em{font-style:normal;font-size:12.5px;font-weight:700;padding:3px 10px;border-radius:999px;background:#ece9ff;color:#2a1470}
 .tiffin-trial-banner{display:flex;justify-content:space-between;align-items:center;gap:10px;padding:12px;border-radius:12px;background:#ece9ff;color:#2a1470;font-size:14px}
 .tiffin-trial-banner span{font-weight:800;white-space:nowrap}
+
+/* Tiffin Pickup: tabs, picture hero, trial banner, feature rows, My Plans, payment details */
+.tiffin-tabs{position:sticky;top:0;z-index:20;display:grid;grid-template-columns:repeat(3,1fr);gap:4px;padding:6px 12px;background:var(--surface,#fff);border-bottom:1px solid var(--outline-soft,#ebeaf0)}
+.tiffin-tabs button{display:inline-flex;align-items:center;justify-content:center;gap:6px;padding:9px 4px;border:0;border-radius:12px;background:transparent;font:inherit;font-size:13.5px;font-weight:700;color:var(--text-2,#4a4853);cursor:pointer}
+.tiffin-tabs button.active{background:#ece9ff;color:#4a22b5}
+.tiffin-tabs em{font-style:normal;font-size:11px;min-width:18px;padding:1px 5px;border-radius:999px;background:var(--primary,#6236d9);color:#fff}
+.tiffin-hero-img{position:relative;border-radius:20px;overflow:hidden;box-shadow:var(--shadow);background:#4a22b5;aspect-ratio:1210/748}
+.tiffin-hero-img img{display:block;width:100%;height:100%;object-fit:cover}
+.tiffin-lang-row{display:flex;justify-content:flex-end}
+.tiffin-lang-row .tiffin-lang{margin:0;background:#ece9ff;color:#2a1470}
+.tiffin-feature-row{display:grid;grid-template-columns:repeat(3,1fr);border-radius:16px;background:var(--surface,#fff);box-shadow:var(--shadow)}
+.tiffin-feature-row>div{display:flex;flex-direction:column;align-items:center;gap:6px;padding:14px 6px;text-align:center;font-size:12.5px;font-weight:700;line-height:1.25}
+.tiffin-feature-row>div+div{border-left:1px solid var(--outline-soft,#ebeaf0)}
+.tiffin-feature-row svg{color:#4a22b5}
+.tiffin-trial-img{display:block;width:100%;padding:0;border:0;background:#f7d44a;border-radius:18px;overflow:hidden;cursor:pointer;box-shadow:var(--shadow);aspect-ratio:1212/333}
+.tiffin-trial-img img{display:block;width:100%;height:100%;object-fit:cover}
+.tiffin-trial-caption{margin-top:6px;text-align:center}
+.tiffin-active-card,.tiffin-plan-row{display:grid;grid-template-columns:auto 1fr auto;align-items:center;gap:12px;width:100%;padding:14px;text-align:left;font:inherit;color:inherit;cursor:pointer}
+.tiffin-plan-row{grid-template-columns:auto 1fr auto auto;margin-top:8px}
+.tiffin-active-icon{display:grid;place-items:center;width:52px;height:52px;border-radius:16px;background:#ece9ff;color:#4a22b5}
+.tiffin-active-text{display:grid;gap:2px;min-width:0}
+.tiffin-active-text strong{font-size:15.5px}
+.tiffin-active-text span{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.tiffin-heading{display:flex;align-items:center;gap:10px;justify-content:center;margin-top:4px}
+.tiffin-heading::before,.tiffin-heading::after{content:"";flex:1;height:1px;background:linear-gradient(90deg,transparent,#c9bdf5)}
+.tiffin-heading::after{background:linear-gradient(270deg,transparent,#c9bdf5)}
+.tiffin-heading span{padding:6px 16px;border-radius:999px;background:#ece9ff;color:#2a1470;font-size:15.5px;font-weight:800}
+.tiffin-how{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:8px}
+.tiffin-how>div{position:relative;display:flex;flex-direction:column;align-items:center;gap:8px;padding:18px 4px 12px;border-radius:14px;background:var(--surface,#fff);box-shadow:var(--shadow);text-align:center;font-size:12px;font-weight:700;line-height:1.25}
+.tiffin-how svg{color:#4a22b5}
+.tiffin-how em{position:absolute;top:-10px;display:grid;place-items:center;width:22px;height:22px;border-radius:50%;background:var(--primary,#6236d9);color:#fff;font-style:normal;font-size:12px;font-weight:800}
+.tiffin-features{display:grid;gap:8px}
+.tiffin-features>div{display:grid;grid-template-columns:auto 1fr;align-items:center;gap:12px;padding:12px 14px}
+.tiffin-features strong{display:block;font-size:15px}
+.tiffin-feature-icon{display:grid;place-items:center;width:46px;height:46px;border-radius:14px}
+.tiffin-feature-icon.f1{background:#ffe7ef;color:#c2255c}.tiffin-feature-icon.f2{background:#e7edff;color:#2f4fd0}
+.tiffin-feature-icon.f3{background:#e3f6ec;color:#12805a}.tiffin-feature-icon.f4{background:#fff0df;color:#d9650b}
+.tiffin-plan-group{margin-top:6px}
+.tiffin-pay-details>div:not(.tiffin-card-title){display:flex;justify-content:space-between;gap:12px;font-size:14px;padding:4px 0}
+.tiffin-ready{display:grid;gap:12px;justify-items:center;text-align:center;padding-top:16px}
+.tiffin-ready h2{margin:0;font-size:21px}
+.tiffin-ready p{margin:0}
+.tiffin-ready .tiffin-card{width:100%;text-align:left}
+.tiffin-ready-icon{display:grid;place-items:center;width:68px;height:68px;border-radius:50%;background:#1a8a3f;color:#fff}
+.tiffin-ready-icon.pending{background:#e8a020}
