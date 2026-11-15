@@ -5,6 +5,7 @@ import { createClient } from "jsr:@supabase/supabase-js@2";
 //   create       customer: starts auto-pay for a plan that is waiting for payment. Returns what checkout needs.
 //   verify       customer: after checkout, confirms the payment signature and activates the plan right away
 //                (the webhook does the same later; both are safe to run twice).
+//   sync         customer: re-checks with Razorpay what happened to a payment and applies it.
 //   stop         customer: stops future monthly charges. Days already paid for keep running.
 //   admin_cancel city admin: stops auto-pay at the bank, then cancels the plan.
 // The Razorpay Key Secret never leaves this function; every amount comes from the database.
@@ -78,6 +79,32 @@ Deno.serve(async (req) => {
       console.error("tiffin-autopay: cancel failed", r.status, desc);
       return "Could not stop auto-pay right now. Please try again.";
     };
+
+    // ---------------------------------------------------------------- sync
+    // Safety net for "money was taken but the plan did not start": asks Razorpay what really happened
+    // to this plan's subscription and applies it (safe to run any number of times).
+    if (action === "sync") {
+      if (sub.customer_id !== userId) return reply({ error: "Plan not found." }, 404);
+      if (!sub.razorpay_subscription_id) return reply({ ok: true, synced: false });
+      const rs = await rzp("GET", `/subscriptions/${sub.razorpay_subscription_id}`);
+      if (!rs.ok || !rs.json) return reply({ ok: true, synced: false });
+      let applied = 0;
+      const inv = await rzp("GET", `/invoices?subscription_id=${sub.razorpay_subscription_id}`);
+      for (const i of (inv.json?.items ?? []) as any[]) {
+        if (i?.status !== "paid" || typeof i.payment_id !== "string") continue;
+        const { error: chargeErr } = await admin.rpc("tiffin_autopay_charged", {
+          p_razorpay_subscription_id: sub.razorpay_subscription_id, p_payment_id: i.payment_id,
+          p_amount_paise: Number(i.amount_paid ?? i.amount),
+          p_raw: { invoice: i.id, status: i.status, amount: i.amount_paid ?? i.amount, via: "sync" },
+        });
+        if (!chargeErr) applied++;
+      }
+      const st = String(rs.json.status ?? "");
+      if (["authenticated", "active", "pending", "halted", "cancelled", "completed"].includes(st)) {
+        await admin.rpc("tiffin_autopay_event", { p_razorpay_subscription_id: sub.razorpay_subscription_id, p_event: st });
+      }
+      return reply({ ok: true, synced: true, razorpay_status: st, payments_applied: applied });
+    }
 
     // ---------------------------------------------------------------- create
     if (action === "create") {

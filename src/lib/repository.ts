@@ -635,10 +635,10 @@ const liveBanners = (list: PromoBanner[]) => {
   return list.filter((b) => (!b.starts_at || Date.parse(b.starts_at) <= now) && (!b.ends_at || Date.parse(b.ends_at) > now));
 };
 
-const bannerKey = (cityId: string, placement: 'grocery' | 'food') => `banners:${cityId}:${placement}`;
+const bannerKey = (cityId: string, placement: 'grocery' | 'food' | 'tiffin') => `banners:${cityId}:${placement}`;
 
 /** Last-seen banners (instant first paint); fresh ones come from getPromoBanners. */
-export const peekPromoBanners = (cityId: string, placement: 'grocery' | 'food') => {
+export const peekPromoBanners = (cityId: string, placement: 'grocery' | 'food' | 'tiffin') => {
   const seen = peek<PromoBanner[]>(bannerKey(cityId, placement));
   return seen ? liveBanners(seen) : null;
 };
@@ -647,7 +647,7 @@ export const peekPromoBanners = (cityId: string, placement: 'grocery' | 'food') 
  * Banners for this city (or all cities) on the grocery home or the food tab. The database only
  * returns banners that are switched on and inside their start/end time. Cached for 5 minutes.
  */
-export async function getPromoBanners(cityId: string, placement: 'grocery' | 'food', forceRefresh = false): Promise<PromoBanner[]> {
+export async function getPromoBanners(cityId: string, placement: 'grocery' | 'food' | 'tiffin', forceRefresh = false): Promise<PromoBanner[]> {
   const list = await cached(
     bannerKey(cityId, placement),
     CACHE_TTL_MS,
@@ -655,7 +655,7 @@ export async function getPromoBanners(cityId: string, placement: 'grocery' | 'fo
       const { data, error } = await supabase
         .from('promo_banners')
         .select(BANNER_COLS)
-        .in('placement', [placement, 'both'])
+        .in('placement', placement === 'tiffin' ? ['tiffin'] : [placement, 'both'])
         .or(`city_id.is.null,city_id.eq.${cityId}`)
         .order('sort_order', { ascending: true })
         .limit(MAX_BANNERS);

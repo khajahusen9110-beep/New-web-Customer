@@ -263,3 +263,15 @@ export async function payTiffinPlan(subscriptionId: string, phone?: string | nul
 export async function stopTiffinAutopay(subscriptionId: string): Promise<void> {
   await callAutopay({ action: 'stop', subscription_id: subscriptionId });
 }
+
+/**
+ * Asks the server to re-check a plan's payment with Razorpay and apply it. Safe to call any time;
+ * it rescues "money was taken but the plan did not start". Never throws.
+ */
+export async function syncTiffinPlan(subscriptionId: string): Promise<void> {
+  try {
+    await callAutopay({ action: 'sync', subscription_id: subscriptionId });
+  } catch {
+    /* best effort */
+  }
+}

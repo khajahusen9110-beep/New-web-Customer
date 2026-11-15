@@ -1,8 +1,9 @@
 import { createContext, useCallback, useContext, useEffect, useMemo, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { Briefcase, CalendarDays, Camera, CheckCircle2, Clock, GraduationCap, Home, MapPin, Package, Pause, Phone, Play, Plus, Repeat } from 'lucide-react';
+import { ArrowLeft, ArrowRight, Bike, Briefcase, CalendarCheck, CalendarDays, Camera, Check, CheckCircle2, Clock, GraduationCap, Home, IndianRupee, Lightbulb, MapPin, Package, Pause, Phone, Play, Plus, Repeat, School, ShieldCheck, User } from 'lucide-react';
 import { ErrorCard, ListSkeleton, PageHeader, Spinner, toast } from '../components/ui';
-import { getAddresses } from '../lib/repository';
+import { PromoCarousel } from '../components/PromoCarousel';
+import { getAddresses, getPromoBanners, peekPromoBanners } from '../lib/repository';
 import {
   addDays,
   cancelTiffinRequest,
@@ -10,6 +11,7 @@ import {
   isAutopayLive,
   payTiffinPlan,
   stopTiffinAutopay,
+  syncTiffinPlan,
   dayLabel,
   getMyTiffinPlans,
   getTiffinConfig,
@@ -28,7 +30,7 @@ import {
   setTiffinDateLocale,
 } from '../lib/tiffin';
 import { initialTiffinLang, saveTiffinLang, tt, type TiffinLang } from '../lib/tiffinI18n';
-import type { CustomerAddress } from '../lib/types';
+import type { CustomerAddress, PromoBanner } from '../lib/types';
 import { errorMessage, rupees } from '../lib/utils';
 import { useSession } from '../store/session';
 
@@ -79,6 +81,7 @@ export default function TiffinPage() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [showForm, setShowForm] = useState(false);
+  const [banners, setBanners] = useState<PromoBanner[]>(() => (city?.id ? peekPromoBanners(city.id, 'tiffin') ?? [] : []));
   const [lang, setLangState] = useState<TiffinLang>(initialTiffinLang);
   setTiffinDateLocale(lang);
   const ctx = useMemo(() => ({ lang, tx: (key: string, ...args: (string | number | null | undefined)[]) => tt(lang, key, ...args) }), [lang]);
@@ -91,11 +94,17 @@ export default function TiffinPage() {
     if (!userId || !city?.id) return;
     setError(null);
     try {
-      const [cfg, mine, addr] = await Promise.all([getTiffinConfig(city.id), getMyTiffinPlans().catch(() => []), getAddresses(userId, true)]);
+      let [cfg, mine, addr] = await Promise.all([getTiffinConfig(city.id), getMyTiffinPlans().catch(() => []), getAddresses(userId, true)]);
+      // A plan that is still "waiting for payment" with auto-pay set up may have been paid after the payment
+      // screen closed (slow UPI, closed app): ask Razorpay and fix it before showing the plan.
+      const unpaid = mine.filter((p) => p.status === 'pending_payment' && p.autopay_status === 'created');
+      if (unpaid.length > 0) {
+        await Promise.all(unpaid.map((p) => syncTiffinPlan(p.id)));
+        mine = await getMyTiffinPlans().catch(() => mine);
+      }
       setConfig(cfg);
       setPlans(mine);
       setAddresses(addr);
-      setShowForm((cur) => cur || mine.length === 0);
     } catch (e) {
       setError(errorMessage(e, 'Could not load Tiffin Pickup'));
     } finally {
@@ -109,6 +118,25 @@ export default function TiffinPage() {
 
   const enabled = config?.enabled === true;
 
+  // Banners the City Admin or Super Admin set for the "Tiffin Pickup page" placement.
+  useEffect(() => {
+    if (!city?.id) return;
+    let cancelled = false;
+    getPromoBanners(city.id, 'tiffin')
+      .then((b) => !cancelled && setBanners(b))
+      .catch(() => undefined);
+    return () => {
+      cancelled = true;
+    };
+  }, [city?.id]);
+
+  const openBanner = (b: PromoBanner) => {
+    if (!b.link_value) return;
+    if (b.link_type === 'hotel') navigate(`/hotel/${b.link_value}`);
+    else if (b.link_type === 'url' && /^https:\/\//.test(b.link_value)) window.open(b.link_value, '_blank', 'noopener,noreferrer');
+    else if (b.link_type === 'category') navigate('/');
+  };
+
   return (
     <TxContext.Provider value={ctx}>
     <div className="page tiffin-page">
@@ -120,6 +148,7 @@ export default function TiffinPage() {
           <ErrorCard message={error} onRetry={() => void load()} />
         ) : (
           <>
+            {banners.length > 0 && <PromoCarousel banners={banners} onOpen={openBanner} />}
             <section className="tiffin-hero">
               <div className="tiffin-lang" role="group" aria-label="Language">
                 <button className={lang === 'en' ? 'active' : ''} aria-pressed={lang === 'en'} onClick={() => setLang('en')}>
@@ -129,22 +158,25 @@ export default function TiffinPage() {
                   ಕನ್ನಡ
                 </button>
               </div>
+              <div className="tiffin-hero-kicker">{ctx.tx('title')}</div>
               <div className="tiffin-hero-title">{ctx.tx('heroTitle')}</div>
               <div className="tiffin-hero-sub">{ctx.tx('heroSub')}</div>
-              <div className="tiffin-hero-steps">
-                <span>
-                  <Home size={14} /> {ctx.tx('stepPickup')}
-                </span>
-                <span>
-                  <Camera size={14} /> {ctx.tx('stepPhoto')}
-                </span>
-                <span>
-                  <CalendarDays size={14} /> {ctx.tx('stepSkip')}
-                </span>
-              </div>
             </section>
 
-            {enabled && config && <TiffinGuide config={config} />}
+            <div className="tiffin-tiles">
+              <div className="tiffin-tile t1">
+                <Home size={26} />
+                <span>{ctx.tx('stepPickup')}</span>
+              </div>
+              <div className="tiffin-tile t2">
+                <CalendarCheck size={26} />
+                <span>{ctx.tx('tileDays')}</span>
+              </div>
+              <div className="tiffin-tile t3">
+                <Bike size={26} />
+                <span>{ctx.tx('tileDeliver')}</span>
+              </div>
+            </div>
 
             {!enabled && plans.length === 0 && (
               <p className="muted center-pad">{ctx.tx('notAvailable', city?.name ?? '—')}</p>
@@ -157,9 +189,18 @@ export default function TiffinPage() {
             {enabled && config && (
               <>
                 {!showForm ? (
-                  <button className="btn btn-outline w-full tiffin-new-btn" onClick={() => setShowForm(true)}>
-                    <Plus size={18} /> {ctx.tx('newPlan')}
-                  </button>
+                  <>
+                    <TiffinGuide config={config} />
+                    <button
+                      className="btn btn-primary w-full tiffin-cta"
+                      onClick={() => {
+                        setShowForm(true);
+                        window.scrollTo({ top: 0 });
+                      }}
+                    >
+                      {ctx.tx('createPlan')} <ArrowRight size={18} />
+                    </button>
+                  </>
                 ) : (
                   <NewPlanForm
                     config={config}
@@ -493,6 +534,7 @@ function NewPlanForm({
   const [saving, setSaving] = useState(false);
   const [formError, setFormError] = useState<string | null>(null);
   const [accepted, setAccepted] = useState(false);
+  const [step, setStep] = useState<1 | 2>(1);
   const meta = KINDS.find((k) => k.key === kind) ?? KINDS[0];
 
   // Live price from the server whenever the route, days or return choice change.
@@ -513,6 +555,15 @@ function NewPlanForm({
   }, [pickupId, dropId, days, returnTrip, startDate]);
 
   const toggleDay = (n: number) => setDays((cur) => (cur.includes(n) ? cur.filter((d) => d !== n) : [...cur, n].sort()));
+
+  const goReview = () => {
+    setFormError(null);
+    if (!name.trim()) return setFormError(tx('errName', tx(meta.who).toLowerCase()));
+    if (!pickupId || !dropId) return setFormError(tx('errAddr'));
+    if (!quote?.ok) return setFormError(quote?.message ?? tx('quoteHint'));
+    setStep(2);
+    window.scrollTo({ top: 0 });
+  };
 
   const submit = async () => {
     setFormError(null);
@@ -549,132 +600,115 @@ function NewPlanForm({
     }
   };
 
-  return (
-    <section className="card tiffin-card tiffin-form">
-      <div className="row between">
-        <div className="tiffin-card-title">{tx('planFormTitle')}</div>
-        {canClose && (
-          <button className="btn btn-sm btn-text" onClick={onClose}>
-            {tx('close')}
+  const addr = (id: string) => usable.find((a) => a.id === id);
+  const secTitle = kind === 'school' ? 'secSchool' : kind === 'office' ? 'secOffice' : 'secOther';
+  const DropIcon = kind === 'school' ? School : kind === 'office' ? Briefcase : Package;
+  const payLabel = quote?.ok && quote.trial_available ? tx('btnTrial', quote.trial_days, rupees(quote.trial_price)) : quote?.ok ? tx('btnPay', rupees(quote.total)) : tx('btnStart');
+
+  const stepper = (
+    <div className="tiffin-stepper" aria-hidden="true">
+      {(['stepDetails', 'stepReview', 'stepConfirm'] as const).map((k, i) => (
+        <div key={k} className={`tiffin-stepper-item${i + 1 < step ? ' done' : i + 1 === step ? ' current' : ''}`}>
+          <span>{i + 1 < step ? <Check size={14} /> : i + 1}</span>
+          {tx(k)}
+        </div>
+      ))}
+    </div>
+  );
+
+  if (step === 2 && quote?.ok) {
+    return (
+      <section className="tiffin-wizard">
+        <div className="tiffin-wizard-head">
+          <button className="icon-btn" aria-label={tx('editDetails')} onClick={() => setStep(1)}>
+            <ArrowLeft size={20} />
           </button>
-        )}
-      </div>
+          <strong>{tx('summaryTitle')}</strong>
+          <span />
+        </div>
+        {stepper}
 
-      <div className="tiffin-kinds" role="radiogroup" aria-label="Where does the tiffin go?">
-        {KINDS.map((k) => (
-          <button key={k.key} role="radio" aria-checked={kind === k.key} className={kind === k.key ? 'active' : ''} onClick={() => setKind(k.key)}>
-            <k.Icon size={18} /> {tx(k.label)}
-          </button>
-        ))}
-      </div>
-
-      <label className="field">
-        {tx(meta.who)}
-        <input value={name} onChange={(e) => setName(e.target.value)} maxLength={80} placeholder={tx('phName')} />
-      </label>
-      <label className="field">
-        {tx(meta.detail)}
-        <input value={detail} onChange={(e) => setDetail(e.target.value)} maxLength={120} placeholder={kind === 'school' ? tx('phClass') : ''} />
-      </label>
-
-      {usable.length < 2 && (
-        <div className="tiffin-note">
-          {tx('needTwoAddr', tx(meta.dropWord))}
-          <div className="mt-8">
-            <button className="btn btn-sm btn-outline" onClick={() => navigate('/addresses')}>
-              <Plus size={14} /> {tx('addAddress')}
-            </button>
+        <div className="card tiffin-card">
+          <div className="tiffin-sum-title">
+            <CalendarDays size={18} /> {tx('yourPlan')}
+          </div>
+          <div className="tiffin-sum-who">
+            <span className="tiffin-avatar">
+              <meta.Icon size={26} />
+            </span>
+            <div>
+              <div className="muted small">{tx(meta.who)}</div>
+              <strong>{name.trim()}</strong>
+              {detail.trim() && <div className="muted small">{detail.trim()}</div>}
+            </div>
+          </div>
+          <div className="tiffin-sum-rows">
+            <div>
+              <Home size={18} />
+              <div>
+                <strong>{tx('lblPickup')}</strong>
+                <span>{addr(pickupId) ? addressText(addr(pickupId)!) : ''}</span>
+              </div>
+            </div>
+            <div>
+              <DropIcon size={18} />
+              <div>
+                <strong>{tx('lblDrop')}</strong>
+                <span>{addr(dropId) ? addressText(addr(dropId)!) : ''}</span>
+              </div>
+            </div>
+            <div>
+              <CalendarCheck size={18} />
+              <div>
+                <strong>{tx('lblDays')}</strong>
+                <span className="tiffin-sum-days">
+                  {WEEKDAYS.filter((d) => days.includes(d.n)).map((d) => (
+                    <em key={d.n}>{tx(d.key)}</em>
+                  ))}
+                </span>
+              </div>
+            </div>
+            <div>
+              <Clock size={18} />
+              <div>
+                <strong>{tx('lblTime')}</strong>
+                <span>
+                  {timeLabel(pickupTime)} · {tx('lblStart')} {dayLabel(startDate)}
+                </span>
+              </div>
+            </div>
+            {returnTrip && (
+              <div>
+                <Repeat size={18} />
+                <div>
+                  <strong>{tx('lblReturn')}</strong>
+                  <span>{timeLabel(returnTime)}</span>
+                </div>
+              </div>
+            )}
+            {note.trim() && (
+              <div>
+                <ShieldCheck size={18} />
+                <div>
+                  <strong>{tx('lblNote')}</strong>
+                  <span>{note.trim()}</span>
+                </div>
+              </div>
+            )}
           </div>
         </div>
-      )}
 
-      <label className="field">
-        {tx('pickupFrom')}
-        <select className="input" value={pickupId} onChange={(e) => setPickupId(e.target.value)}>
-          <option value="">{tx('chooseAddr')}</option>
-          {usable.map((a) => (
-            <option key={a.id} value={a.id!}>
-              {addressText(a)}
-            </option>
-          ))}
-        </select>
-      </label>
-      <label className="field">
-        {tx('dropAt', tx(meta.dropWord))}
-        <select className="input" value={dropId} onChange={(e) => setDropId(e.target.value)}>
-          <option value="">{tx('chooseAddr')}</option>
-          {usable
-            .filter((a) => a.id !== pickupId)
-            .map((a) => (
-              <option key={a.id} value={a.id!}>
-                {addressText(a)}
-              </option>
-            ))}
-        </select>
-      </label>
-      {usable.length >= 2 && (
-        <button className="btn btn-sm btn-text tiffin-add-address" onClick={() => navigate('/addresses')}>
-          <Plus size={14} /> {tx('addAnother')}
-        </button>
-      )}
-
-      <div className="field">
-        {tx('days')}
-        <div className="tiffin-weekdays">
-          {WEEKDAYS.map((d) => (
-            <button key={d.n} aria-pressed={days.includes(d.n)} className={days.includes(d.n) ? 'active' : ''} onClick={() => toggleDay(d.n)}>
-              {tx(d.key)}
-            </button>
-          ))}
-        </div>
-      </div>
-
-      <div className="tiffin-two">
-        <label className="field">
-          {tx('pickupTimeHome')}
-          <input type="time" value={pickupTime} min={config.earliest_pickup} max={config.latest_pickup} onChange={(e) => setPickupTime(e.target.value)} />
-        </label>
-        <label className="field">
-          {tx('startDate')}
-          <input type="date" value={startDate} min={tomorrow} max={addDays(tomorrow, 13)} onChange={(e) => setStartDate(e.target.value || tomorrow)} />
-        </label>
-      </div>
-      <div className="muted small">{tx('pickupWindow', timeLabel(config.earliest_pickup), timeLabel(config.latest_pickup))}</div>
-
-      <label className="tiffin-check">
-        <input type="checkbox" checked={returnTrip} onChange={(e) => setReturnTrip(e.target.checked)} />
-        <span>
-          <strong>{tx('returnTrip')}</strong>
-          <span className="muted small"> {tx('extraCharge')}</span>
-        </span>
-      </label>
-      {returnTrip && (
-        <label className="field">
-          {tx('returnAt')}
-          <input type="time" value={returnTime} max={config.latest_return_pickup} onChange={(e) => setReturnTime(e.target.value)} />
-        </label>
-      )}
-
-      <label className="field">
-        {tx('handoverNote')}
-        <textarea
-          value={note}
-          onChange={(e) => setNote(e.target.value)}
-          maxLength={240}
-          rows={2}
-          placeholder={kind === 'school' ? tx('phNoteSchool') : tx('phNoteOther')}
-        />
-      </label>
-
-      <div className="tiffin-quote">
-        {quoting ? (
-          <Spinner size={18} />
-        ) : !quote ? (
-          <span className="muted small">{tx('quoteHint')}</span>
-        ) : !quote.ok ? (
-          <span className="text-danger small">{quote.message}</span>
-        ) : (
-          <>
+        <div className="card tiffin-card">
+          <div className="tiffin-sum-title">
+            <IndianRupee size={18} /> {tx('yourPrice')}
+          </div>
+          {quote.trial_available && (
+            <div className="tiffin-trial-banner">
+              <strong>{tx('trialLine', quote.trial_days, quote.trial_trips)}</strong>
+              <span>{tx('payToday', rupees(quote.trial_price))}</span>
+            </div>
+          )}
+          <div className="tiffin-quote">
             <div className="row between">
               <span>{tx('quoteDrop', quote.trips, quote.distance_km)}</span>
               <strong>{rupees(quote.price_one_way)}</strong>
@@ -689,62 +723,239 @@ function NewPlanForm({
               <span>{quote.trial_available ? tx('everyMonthAfter') : tx('everyMonth')}</span>
               <strong>{rupees(quote.total)}</strong>
             </div>
-            {quote.trial_available && (
-              <div className="tiffin-trial-line">
-                <span>
-                  <strong>{tx('trialLine', quote.trial_days, quote.trial_trips)}</strong>
-                </span>
-                <strong>{tx('payToday', rupees(quote.trial_price))}</strong>
-              </div>
-            )}
-          </>
-        )}
-      </div>
+          </div>
+          <div className="muted small">
+            {quote.trial_available
+              ? tx('trialNote', rupees(quote.trial_price), dayLabel(quote.first_charge_date ?? startDate), rupees(quote.total))
+              : tx('payNote')}
+          </div>
+        </div>
 
-      <TiffinTerms config={config} />
-      <label className="tiffin-check tiffin-accept">
-        <input type="checkbox" checked={accepted} onChange={(e) => setAccepted(e.target.checked)} />
-        <span>{tx('accept')}</span>
-      </label>
+        <TiffinTerms config={config} />
+        <label className="tiffin-check tiffin-accept">
+          <input type="checkbox" checked={accepted} onChange={(e) => setAccepted(e.target.checked)} />
+          <span>{tx('accept')}</span>
+        </label>
+
+        {formError && <div className="alert alert-danger">{formError}</div>}
+
+        <button className="btn btn-primary w-full tiffin-cta" disabled={saving || !accepted} onClick={() => void submit()}>
+          {saving ? (
+            <Spinner size={18} light />
+          ) : (
+            <>
+              {payLabel} <ArrowRight size={18} />
+            </>
+          )}
+        </button>
+      </section>
+    );
+  }
+
+  return (
+    <section className="tiffin-wizard">
+      <div className="tiffin-wizard-head">
+        {canClose ? (
+          <button className="icon-btn" aria-label={tx('close')} onClick={onClose}>
+            <ArrowLeft size={20} />
+          </button>
+        ) : (
+          <span />
+        )}
+        <strong>{tx('planFormTitle')}</strong>
+        <span />
+      </div>
+      {stepper}
+
+      <div className="card tiffin-card tiffin-form">
+        <div className="tiffin-kinds" role="radiogroup" aria-label="Where does the tiffin go?">
+          {KINDS.map((k) => (
+            <button key={k.key} role="radio" aria-checked={kind === k.key} className={kind === k.key ? 'active' : ''} onClick={() => setKind(k.key)}>
+              <k.Icon size={18} /> {tx(k.label)}
+            </button>
+          ))}
+        </div>
+
+        <div className="tiffin-sec">
+          <span className="tiffin-num">1</span> {tx(secTitle)}
+        </div>
+        <div className="tiffin-who-row">
+          <span className="tiffin-avatar">
+            <User size={30} />
+          </span>
+          <div className="tiffin-who-fields">
+            <label className="field">
+              {tx(meta.who)}
+              <input value={name} onChange={(e) => setName(e.target.value)} maxLength={80} placeholder={tx('phName')} />
+            </label>
+            <label className="field">
+              {tx(meta.detail)}
+              <input value={detail} onChange={(e) => setDetail(e.target.value)} maxLength={120} placeholder={kind === 'school' ? tx('phClass') : ''} />
+            </label>
+          </div>
+        </div>
+
+        {usable.length < 2 && (
+          <div className="tiffin-note">
+            {tx('needTwoAddr', tx(meta.dropWord))}
+            <div className="mt-8">
+              <button className="btn btn-sm btn-outline" onClick={() => navigate('/addresses')}>
+                <Plus size={14} /> {tx('addAddress')}
+              </button>
+            </div>
+          </div>
+        )}
+
+        <div className="tiffin-sec">
+          <span className="tiffin-num">2</span> {tx('secPickup')}
+        </div>
+        <div className="tiffin-addr">
+          <span className="tiffin-addr-icon">
+            <Home size={22} />
+          </span>
+          <select className="input" aria-label={tx('secPickup')} value={pickupId} onChange={(e) => setPickupId(e.target.value)}>
+            <option value="">{tx('chooseAddr')}</option>
+            {usable.map((a) => (
+              <option key={a.id} value={a.id!}>
+                {addressText(a)}
+              </option>
+            ))}
+          </select>
+        </div>
+
+        <div className="tiffin-sec">
+          <span className="tiffin-num">3</span> {tx('secDrop', tx(meta.dropWord))}
+        </div>
+        <div className="tiffin-addr">
+          <span className="tiffin-addr-icon drop">
+            <DropIcon size={22} />
+          </span>
+          <select className="input" aria-label={tx('secDrop', tx(meta.dropWord))} value={dropId} onChange={(e) => setDropId(e.target.value)}>
+            <option value="">{tx('chooseAddr')}</option>
+            {usable
+              .filter((a) => a.id !== pickupId)
+              .map((a) => (
+                <option key={a.id} value={a.id!}>
+                  {addressText(a)}
+                </option>
+              ))}
+          </select>
+        </div>
+        {usable.length >= 2 && (
+          <button className="btn btn-sm btn-text tiffin-add-address" onClick={() => navigate('/addresses')}>
+            <Plus size={14} /> {tx('addAnother')}
+          </button>
+        )}
+
+        <div className="tiffin-sec">
+          <span className="tiffin-num">4</span> {tx('secDays')}
+        </div>
+        <div className="tiffin-weekdays">
+          {WEEKDAYS.map((d) => (
+            <button key={d.n} aria-pressed={days.includes(d.n)} className={days.includes(d.n) ? 'active' : ''} onClick={() => toggleDay(d.n)}>
+              {tx(d.key)}
+            </button>
+          ))}
+        </div>
+
+        <div className="tiffin-sec">
+          <span className="tiffin-num">5</span> {tx('secTime')}
+        </div>
+        <div className="tiffin-two">
+          <label className="field">
+            {tx('pickupTimeHome')}
+            <input type="time" value={pickupTime} min={config.earliest_pickup} max={config.latest_pickup} onChange={(e) => setPickupTime(e.target.value)} />
+          </label>
+          <label className="field">
+            {tx('startDate')}
+            <input type="date" value={startDate} min={tomorrow} max={addDays(tomorrow, 13)} onChange={(e) => setStartDate(e.target.value || tomorrow)} />
+          </label>
+        </div>
+        <div className="tiffin-info">{tx('pickupWindow', timeLabel(config.earliest_pickup), timeLabel(config.latest_pickup))}</div>
+
+        <label className="tiffin-check">
+          <input type="checkbox" checked={returnTrip} onChange={(e) => setReturnTrip(e.target.checked)} />
+          <span>
+            <strong>{tx('returnTrip')}</strong>
+            <span className="muted small"> {tx('extraCharge')}</span>
+          </span>
+        </label>
+        {returnTrip && (
+          <label className="field">
+            {tx('returnAt')}
+            <input type="time" value={returnTime} max={config.latest_return_pickup} onChange={(e) => setReturnTime(e.target.value)} />
+          </label>
+        )}
+
+        <label className="field">
+          <span className="row gap-8">
+            <ShieldCheck size={16} /> {tx('handoverNote')}
+          </span>
+          <textarea
+            value={note}
+            onChange={(e) => setNote(e.target.value)}
+            maxLength={240}
+            rows={2}
+            placeholder={kind === 'school' ? tx('phNoteSchool') : tx('phNoteOther')}
+          />
+        </label>
+
+        <div className="tiffin-quote">
+          {quoting ? (
+            <Spinner size={18} />
+          ) : !quote ? (
+            <span className="muted small">{tx('quoteHint')}</span>
+          ) : !quote.ok ? (
+            <span className="text-danger small">{quote.message}</span>
+          ) : (
+            <div className="row between tiffin-quote-total">
+              <span>{quote.trial_available ? tx('everyMonthAfter') : tx('everyMonth')}</span>
+              <strong>{rupees(quote.total)}</strong>
+            </div>
+          )}
+        </div>
+      </div>
 
       {formError && <div className="alert alert-danger">{formError}</div>}
 
-      <button className="btn btn-primary w-full" disabled={saving || quoting || !quote?.ok || !accepted} onClick={() => void submit()}>
-        {saving ? (
-          <Spinner size={18} light />
-        ) : quote?.ok && quote.trial_available ? (
-          tx('btnTrial', quote.trial_days, rupees(quote.trial_price))
-        ) : quote?.ok ? (
-          tx('btnPay', rupees(quote.total))
-        ) : (
-          tx('btnStart')
-        )}
+      <button className="btn btn-primary w-full tiffin-cta" disabled={quoting || !quote?.ok} onClick={goReview}>
+        {tx('next')} <ArrowRight size={18} />
       </button>
-      <div className="muted small">
-        {quote?.ok && quote.trial_available
-          ? tx('trialNote', rupees(quote.trial_price), dayLabel(quote.first_charge_date ?? startDate), rupees(quote.total))
-          : tx('payNote')}
-      </div>
     </section>
   );
 }
 
-/** "How it works": six short steps, in the customer's language. */
+/** "How it works": numbered steps with icons, in the customer's language. */
 function TiffinGuide({ config }: { config: TiffinConfig }) {
   const { tx } = useTx();
-  const steps = ['g1', ...(config.trial_enabled ? ['g2'] : []), 'g3', 'g4', 'g5', 'g6'];
+  const steps: { key: string; Icon: typeof Home }[] = [
+    { key: 'g1', Icon: Home },
+    ...(config.trial_enabled ? [{ key: 'g2', Icon: IndianRupee }] : []),
+    { key: 'g3', Icon: Clock },
+    { key: 'g4', Icon: Bike },
+    { key: 'g5', Icon: Repeat },
+    { key: 'g6', Icon: CheckCircle2 },
+  ];
   return (
-    <section className="card tiffin-card tiffin-guide">
-      <div className="tiffin-card-title">{tx('guideTitle')}</div>
+    <section className="tiffin-guide">
+      <div className="tiffin-guide-head">
+        <Lightbulb size={20} /> {tx('guideTitle')}
+      </div>
       <ol>
-        {steps.map((k) => {
-          const text = k === 'g2' ? tx('g2', config.trial_days ?? 7, rupees(config.trial_price ?? 0)) : tx(k);
+        {steps.map(({ key, Icon }, i) => {
+          const text = key === 'g2' ? tx('g2', config.trial_days ?? 7, rupees(config.trial_price ?? 0)) : tx(key);
           const cut = text.indexOf('.');
           // The first sentence of each step is its heading.
           return (
-            <li key={k}>
-              <strong>{text.slice(0, cut + 1)}</strong>
-              {text.slice(cut + 1)}
+            <li key={key}>
+              <span className="tiffin-num">{i + 1}</span>
+              <span className="tiffin-guide-icon">
+                <Icon size={24} />
+              </span>
+              <div>
+                <strong>{text.slice(0, cut)}</strong>
+                <p>{text.slice(cut + 1).trim()}</p>
+              </div>
             </li>
           );
         })}
