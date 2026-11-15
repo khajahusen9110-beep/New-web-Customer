@@ -7,6 +7,9 @@ import {
   addDays,
   cancelTiffinRequest,
   createTiffinPlan,
+  isAutopayLive,
+  payTiffinPlan,
+  stopTiffinAutopay,
   dayLabel,
   getMyTiffinPlans,
   getTiffinConfig,
@@ -170,6 +173,11 @@ function PriceTable({ config }: { config: TiffinConfig }) {
       <div className="muted small">
         For a full month ({config.full_month_trips} days). Fewer days cost less. Distance is measured straight from home to the drop point.
       </div>
+      {config.trial_enabled && (
+        <div className="tiffin-note">
+          Try it first: <strong>{config.trial_days} days for just {rupees(config.trial_price ?? 0)}</strong>, then monthly auto-pay.
+        </div>
+      )}
       <div className="tiffin-price-rows">
         {config.slabs.map((s, i) => (
           <div key={i} className="tiffin-price-row">
@@ -185,8 +193,61 @@ function PriceTable({ config }: { config: TiffinConfig }) {
   );
 }
 
+function AutopayInfo({
+  plan,
+  busy,
+  run,
+}: {
+  plan: TiffinSubscription;
+  busy: string | null;
+  run: (key: string, fn: () => Promise<void>, done?: string) => Promise<void>;
+}) {
+  const [confirming, setConfirming] = useState(false);
+  const live = isAutopayLive(plan.autopay_status);
+  if (plan.autopay_status === 'none' && !plan.is_trial) return null;
+  return (
+    <div className="tiffin-note">
+      {plan.is_trial && plan.billing_cycles_paid === 0 && plan.trial_end_date && (
+        <div>
+          Trial runs until <strong>{dayLabel(plan.trial_end_date)}</strong>.
+        </div>
+      )}
+      {live && plan.next_charge_date && (
+        <div>
+          Next auto-pay: <strong>{rupees(plan.total_amount)}</strong> on {dayLabel(plan.next_charge_date)}.
+        </div>
+      )}
+      {plan.autopay_status === 'pending' && <div className="text-danger">The last payment did not go through. We will retry.</div>}
+      {plan.autopay_status === 'halted' && <div className="text-danger">Auto-pay failed. The plan ends on {dayLabel(plan.end_date)}.</div>}
+      {plan.autopay_status === 'cancelled' && <div>Auto-pay is stopped. Your plan runs until {dayLabel(plan.end_date)}.</div>}
+      {live &&
+        (confirming ? (
+          <div className="mt-8 row gap-8">
+            <button
+              className="btn btn-sm btn-danger"
+              disabled={busy !== null}
+              onClick={() => run('stop', () => stopTiffinAutopay(plan.id), 'Auto-pay stopped')}
+            >
+              {busy === 'stop' ? <Spinner size={16} light /> : 'Yes, stop auto-pay'}
+            </button>
+            <button className="btn btn-sm btn-text" onClick={() => setConfirming(false)}>
+              Keep it
+            </button>
+          </div>
+        ) : (
+          <div className="mt-8">
+            <button className="btn btn-sm btn-outline" onClick={() => setConfirming(true)}>
+              Stop auto-pay
+            </button>
+          </div>
+        ))}
+    </div>
+  );
+}
+
 function PlanCard({ plan, cutoffHour, onChanged }: { plan: TiffinSubscription; cutoffHour: number; onChanged: () => Promise<void> | void }) {
   const [busy, setBusy] = useState<string | null>(null);
+  const { userPhone, userEmail } = useSession();
   const today = indiaToday();
   const todays = plan.trips.filter((t) => t.trip_date === today);
   const running = plan.status === 'active' || plan.status === 'paused';
@@ -249,9 +310,29 @@ function PlanCard({ plan, cutoffHour, onChanged }: { plan: TiffinSubscription; c
 
       {plan.status === 'pending_payment' && (
         <div className="tiffin-note tiffin-note-warn">
-          <strong>{rupees(plan.total_amount)}</strong> for {plan.trips_total} days, starting {dayLabel(plan.start_date)}. Our team will
-          contact you to collect the payment, and the plan starts after that.
-          <div className="mt-8">
+          {plan.is_trial ? (
+            <>
+              Pay <strong>{rupees(plan.trial_fee)}</strong> to start your {plan.trial_days}-day trial on {dayLabel(plan.start_date)}. After the
+              trial, <strong>{rupees(plan.total_amount)}</strong> is charged every month by UPI auto-pay. Stop it any time.
+            </>
+          ) : (
+            <>
+              <strong>{rupees(plan.total_amount)}</strong> a month, starting {dayLabel(plan.start_date)}. Paid by UPI auto-pay, stop it any time.
+            </>
+          )}
+          <div className="mt-8 row gap-8">
+            <button
+              className="btn btn-sm btn-primary"
+              disabled={busy !== null}
+              onClick={() =>
+                run('pay', async () => {
+                  const r = await payTiffinPlan(plan.id, userPhone, userEmail);
+                  if (r === 'paid') toast(plan.is_trial ? 'Trial started. Thank you!' : 'Plan started. Thank you!');
+                })
+              }
+            >
+              {busy === 'pay' ? <Spinner size={16} light /> : plan.is_trial ? `Pay ${rupees(plan.trial_fee)} & start trial` : `Pay ${rupees(plan.total_amount)} & start`}
+            </button>
             <button
               className="btn btn-sm btn-outline"
               disabled={busy !== null}
@@ -265,6 +346,7 @@ function PlanCard({ plan, cutoffHour, onChanged }: { plan: TiffinSubscription; c
 
       {running && (
         <>
+          <AutopayInfo plan={plan} busy={busy} run={run} />
           <div className="tiffin-stats">
             <div>
               <strong>{plan.trips_remaining}</strong>
@@ -382,6 +464,7 @@ function NewPlanForm({
   onCreated: () => Promise<void> | void;
 }) {
   const navigate = useNavigate();
+  const { userPhone, userEmail } = useSession();
   const usable = addresses.filter((a) => a.id);
   const tomorrow = addDays(indiaToday(), 1);
   const [kind, setKind] = useState<TiffinKind>('school');
@@ -427,7 +510,7 @@ function NewPlanForm({
     if (!quote?.ok) return setFormError(quote?.message ?? 'Choose the addresses and days to see the price.');
     setSaving(true);
     try {
-      await createTiffinPlan({
+      const id = await createTiffinPlan({
         pickupAddressId: pickupId,
         dropAddressId: dropId,
         kind,
@@ -440,7 +523,12 @@ function NewPlanForm({
         returnPickupTime: returnTime,
         startDate,
       });
-      toast('Request sent. We will contact you for payment.');
+      try {
+        const r = await payTiffinPlan(id, userPhone, userEmail);
+        toast(r === 'paid' ? (quote.trial_available ? 'Trial started. Thank you!' : 'Plan started. Thank you!') : 'Plan saved. Pay from the plan card to start it.');
+      } catch (e) {
+        toast(errorMessage(e));
+      }
       await onCreated();
     } catch (e) {
       setFormError(errorMessage(e));
@@ -590,9 +678,17 @@ function NewPlanForm({
               </div>
             )}
             <div className="row between tiffin-quote-total">
-              <span>Total for this plan</span>
+              <span>{quote.trial_available ? 'Every month after the trial' : 'Every month'}</span>
               <strong>{rupees(quote.total)}</strong>
             </div>
+            {quote.trial_available && (
+              <div className="tiffin-trial-line">
+                <span>
+                  <strong>{quote.trial_days}-day trial</strong> with full service ({quote.trial_trips} pickups)
+                </span>
+                <strong>{rupees(quote.trial_price)} today</strong>
+              </div>
+            )}
           </>
         )}
       </div>
@@ -600,10 +696,20 @@ function NewPlanForm({
       {formError && <div className="alert alert-danger">{formError}</div>}
 
       <button className="btn btn-primary w-full" disabled={saving || quoting || !quote?.ok} onClick={() => void submit()}>
-        {saving ? <Spinner size={18} light /> : 'Request this plan'}
+        {saving ? (
+          <Spinner size={18} light />
+        ) : quote?.ok && quote.trial_available ? (
+          `Start ${quote.trial_days}-day trial · ${rupees(quote.trial_price)}`
+        ) : quote?.ok ? (
+          `Pay ${rupees(quote.total)} & start`
+        ) : (
+          'Start plan'
+        )}
       </button>
       <div className="muted small">
-        No payment now. Our team will contact you to collect the payment, and the plan starts after that.
+        {quote?.ok && quote.trial_available
+          ? `Pay ${rupees(quote.trial_price)} now and set up UPI auto-pay. From ${dayLabel(quote.first_charge_date ?? startDate)} ${rupees(quote.total)} is charged every month. Stop auto-pay any time before that and nothing more is charged.`
+          : 'Paid by UPI auto-pay every month. You can stop it any time; the days you have paid for keep running.'}
       </div>
     </section>
   );

@@ -2,8 +2,10 @@
 // day and drops it at a school or office (optionally bringing the empty box back). The server
 // computes every price and enforces every rule; this file only calls it.
 import { supabase } from './supabase';
+import { openSubscriptionCheckout } from './razorpay';
 
 export type TiffinKind = 'school' | 'office' | 'other';
+export type AutopayStatus = 'none' | 'created' | 'authenticated' | 'active' | 'pending' | 'halted' | 'cancelled' | 'completed';
 export type TiffinStatus = 'pending_payment' | 'active' | 'paused' | 'completed' | 'cancelled';
 
 export interface TiffinConfig {
@@ -14,6 +16,9 @@ export interface TiffinConfig {
   latest_pickup: string;
   latest_return_pickup: string;
   skip_cutoff_hour: number;
+  trial_enabled?: boolean;
+  trial_days?: number;
+  trial_price?: number;
 }
 
 export interface TiffinQuote {
@@ -24,6 +29,11 @@ export interface TiffinQuote {
   price_one_way?: number;
   price_return?: number;
   total?: number;
+  trial_available?: boolean;
+  trial_days?: number;
+  trial_price?: number;
+  trial_trips?: number;
+  first_charge_date?: string;
 }
 
 export interface TiffinTrip {
@@ -57,6 +67,13 @@ export interface TiffinSubscription {
   start_date: string;
   end_date: string;
   status: TiffinStatus;
+  is_trial: boolean;
+  trial_days: number | null;
+  trial_fee: number;
+  trial_end_date: string | null;
+  autopay_status: AutopayStatus;
+  billing_cycles_paid: number;
+  next_charge_date: string | null;
   partner: { name: string; phone: string | null } | null;
   skips: string[];
   trips: TiffinTrip[];
@@ -105,8 +122,8 @@ export async function getTiffinQuote(
   return data as TiffinQuote;
 }
 
-export async function createTiffinPlan(input: TiffinPlanInput): Promise<void> {
-  const { error } = await supabase.rpc('tiffin_subscribe', {
+export async function createTiffinPlan(input: TiffinPlanInput): Promise<string> {
+  const { data, error } = await supabase.rpc('tiffin_subscribe', {
     p_pickup_address_id: input.pickupAddressId,
     p_drop_address_id: input.dropAddressId,
     p_kind: input.kind,
@@ -120,6 +137,7 @@ export async function createTiffinPlan(input: TiffinPlanInput): Promise<void> {
     p_start_date: input.startDate,
   });
   if (error) fail(error, 'Could not create the plan');
+  return (data as { id: string }).id;
 }
 
 export async function getMyTiffinPlans(): Promise<TiffinSubscription[]> {
@@ -189,4 +207,53 @@ export function upcomingPlanDays(plan: Pick<TiffinSubscription, 'days' | 'start_
     if (plan.days.includes(isoWeekday(d))) out.push(d);
   }
   return out;
+}
+
+// ---- monthly auto-pay (trial fee now, then the monthly price) ----
+
+export const isAutopayLive = (s: AutopayStatus) => s === 'authenticated' || s === 'active' || s === 'pending';
+
+async function callAutopay(body: Record<string, unknown>): Promise<Record<string, unknown>> {
+  const { data, error } = await supabase.functions.invoke('tiffin-autopay', { body });
+  if (error) {
+    // The function answers with a readable { error } body on a refusal.
+    let msg = 'Could not complete this. Please try again.';
+    try {
+      const ctx = (error as { context?: Response }).context;
+      const j = ctx ? await ctx.json() : null;
+      if (j?.error) msg = String(j.error);
+    } catch {
+      /* keep the generic message */
+    }
+    throw new Error(msg);
+  }
+  return (data ?? {}) as Record<string, unknown>;
+}
+
+export type AutopayOutcome = 'paid' | 'cancelled';
+
+/** Opens the payment screen for a plan that is waiting for payment and activates it once paid. */
+export async function payTiffinPlan(subscriptionId: string, phone?: string | null, email?: string | null): Promise<AutopayOutcome> {
+  const r = await callAutopay({ action: 'create', subscription_id: subscriptionId });
+  const result = await openSubscriptionCheckout({
+    keyId: String(r.key_id),
+    subscriptionId: String(r.razorpay_subscription_id),
+    description: r.is_trial ? 'Tiffin Pickup trial, then monthly auto-pay' : 'Tiffin Pickup monthly plan',
+    phone,
+    email,
+  });
+  if (result.kind === 'cancelled') return 'cancelled';
+  if (result.kind === 'error') throw new Error(result.message);
+  await callAutopay({
+    action: 'verify',
+    subscription_id: subscriptionId,
+    razorpay_payment_id: result.paymentId,
+    razorpay_subscription_id: result.subscriptionId,
+    razorpay_signature: result.signature,
+  });
+  return 'paid';
+}
+
+export async function stopTiffinAutopay(subscriptionId: string): Promise<void> {
+  await callAutopay({ action: 'stop', subscription_id: subscriptionId });
 }

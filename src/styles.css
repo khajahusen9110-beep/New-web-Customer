@@ -1035,3 +1035,5 @@ h3, .section-title { letter-spacing: -0.015em; }
 .tiffin-quote-total { padding-top: 8px; border-top: 1px dashed var(--outline); font-size: 16px; }
 .tiffin-price-rows { display: flex; flex-direction: column; }
 .tiffin-price-row { display: flex; justify-content: space-between; gap: 10px; padding: 9px 0; border-top: 1px solid var(--outline-soft); font-size: 14px; }
+
+.tiffin-trial-line{display:flex;justify-content:space-between;gap:12px;align-items:center;margin-top:8px;padding:8px 10px;border-radius:10px;background:var(--success-container,#d1fae5);color:var(--on-success-container,#064e3b);font-size:.9rem}

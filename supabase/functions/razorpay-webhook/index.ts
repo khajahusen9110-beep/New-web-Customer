@@ -35,6 +35,32 @@ Deno.serve(async (req) => {
   const payment = evt?.payload?.payment?.entity;
   const admin = createClient(Deno.env.get("SUPABASE_URL")!, Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!, { auth: { persistSession: false } });
 
+  // ---- Tiffin Pickup monthly auto-pay (Razorpay Subscriptions) ------------------
+  // Enable these events on the same webhook: subscription.authenticated, subscription.activated,
+  // subscription.charged, subscription.pending, subscription.halted, subscription.cancelled, subscription.completed.
+  if (typeof event === "string" && event.startsWith("subscription.")) {
+    const sub = evt?.payload?.subscription?.entity;
+    const rzpSubId = String(sub?.id ?? "");
+    if (!rzpSubId.startsWith("sub_")) return new Response("no subscription id", { status: 200 });
+    // Only subscriptions this system created for a tiffin plan; anything else is ignored.
+    if (sub?.notes?.kind !== "tiffin_pickup") return new Response("ignored", { status: 200 });
+    if (event === "subscription.charged") {
+      if (!payment || !["captured", "authorized"].includes(payment.status)) return new Response("not captured", { status: 200 });
+      const { data, error } = await admin.rpc("tiffin_autopay_charged", {
+        p_razorpay_subscription_id: rzpSubId, p_payment_id: String(payment.id), p_amount_paise: payment.amount,
+        p_raw: { id: payment.id, status: payment.status, method: payment.method, amount: payment.amount, via: "webhook" },
+      });
+      // A failure here must be retried by Razorpay: answer with an error so it redelivers.
+      if (error) { console.error("razorpay-webhook: tiffin charged failed", error.code); return new Response("retry", { status: 500 }); }
+      if (data && data.ok === false) console.warn("razorpay-webhook: tiffin charged not applied:", data.reason);
+      return new Response("ok", { status: 200 });
+    }
+    const kind = event.slice("subscription.".length);
+    const { error } = await admin.rpc("tiffin_autopay_event", { p_razorpay_subscription_id: rzpSubId, p_event: kind });
+    if (error) { console.error("razorpay-webhook: tiffin event failed", error.code); return new Response("retry", { status: 500 }); }
+    return new Response("ok", { status: 200 });
+  }
+
   // ---- Door-step QR paid (delivery partner collected online) --------------------
   if (event === "qr_code.credited") {
     const qr = evt?.payload?.qr_code?.entity;

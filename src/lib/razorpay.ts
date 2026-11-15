@@ -91,3 +91,52 @@ export async function openUpiCheckout(p: {
     rzp.open();
   });
 }
+
+export type RazorpaySubscriptionResult =
+  | { kind: 'success'; paymentId: string; subscriptionId: string; signature: string }
+  | { kind: 'cancelled' }
+  | { kind: 'error'; message: string };
+
+/** Opens Razorpay Checkout for a monthly auto-pay subscription (UPI AutoPay / card mandate). */
+export async function openSubscriptionCheckout(p: {
+  keyId: string;
+  subscriptionId: string;
+  description: string;
+  phone?: string | null;
+  email?: string | null;
+}): Promise<RazorpaySubscriptionResult> {
+  await loadCheckoutScript();
+  const Razorpay = window.Razorpay;
+  if (!Razorpay) return { kind: 'error', message: 'Unable to open payment screen. Please try again.' };
+
+  return new Promise((resolve) => {
+    let settled = false;
+    const done = (r: RazorpaySubscriptionResult) => {
+      if (!settled) {
+        settled = true;
+        resolve(r);
+      }
+    };
+    const prefill: Record<string, string> = {};
+    if (p.phone) prefill.contact = p.phone;
+    if (p.email) prefill.email = p.email;
+    const rzp = new Razorpay({
+      key: p.keyId,
+      subscription_id: p.subscriptionId,
+      name: 'Sndmart',
+      description: p.description,
+      prefill,
+      theme: { color: '#6750A4' },
+      handler: (resp: { razorpay_payment_id: string; razorpay_subscription_id: string; razorpay_signature: string }) =>
+        done({
+          kind: 'success',
+          paymentId: resp.razorpay_payment_id,
+          subscriptionId: resp.razorpay_subscription_id || p.subscriptionId,
+          signature: resp.razorpay_signature,
+        }),
+      modal: { ondismiss: () => done({ kind: 'cancelled' }) },
+    });
+    rzp.on('payment.failed', (resp) => done({ kind: 'error', message: resp.error?.description || 'Payment could not be completed.' }));
+    rzp.open();
+  });
+}
