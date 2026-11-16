@@ -1188,3 +1188,7 @@ h3, .section-title { letter-spacing: -0.015em; }
 .tour-dots{display:flex;justify-content:center;gap:6px}
 .tour-dots i{width:7px;height:7px;border-radius:50%;background:#d9d6e6}
 .tour-dots i.on{width:20px;border-radius:4px;background:var(--primary)}
+
+/* WhatsApp offers tick box (checkout, My Account) */
+.offers-check { display: flex; align-items: flex-start; gap: 10px; padding: 8px 2px 10px; cursor: pointer; }
+.offers-check input { width: 20px; height: 20px; margin-top: 2px; accent-color: var(--primary); flex-shrink: 0; }

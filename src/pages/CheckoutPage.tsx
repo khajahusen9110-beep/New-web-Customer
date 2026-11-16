@@ -1,4 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { WhatsAppOffersCheck } from '../components/WhatsAppOffersCheck';
+import { fetchOffersChoice, saveOffersChoice } from '../lib/offersChoice';
 import { Navigate, useLocation, useNavigate, useParams } from 'react-router-dom';
 import { AlertTriangle, CalendarDays, CheckCircle2, Info, LocateFixed, MapPin, Navigation, Plus, Wallet as WalletIcon, Zap } from 'lucide-react';
 import { AddressPickerModal } from '../components/AddressPickerModal';
@@ -124,6 +126,8 @@ export default function CheckoutPage() {
   // Cooking (shown to the vendor) + delivery (shown to the delivery partner) instructions.
   const [cookingInstructions, setCookingInstructions] = useState('');
   const [deliveryInstructions, setDeliveryInstructions] = useState('');
+  const [offersOn, setOffersOn] = useState(true);
+  const offersTouched = useRef(false);
   const [placing, setPlacing] = useState(false);
   const [placingMsg, setPlacingMsg] = useState('Placing Order...');
   const [placementError, setPlacementError] = useState<string | null>(null);
@@ -355,6 +359,12 @@ export default function CheckoutPage() {
     navigate(`/orders/${orderId}`, { replace: true });
   }
 
+  // The WhatsApp offers box starts ticked; it shows unticked only if this customer already said STOP / unticked it before.
+  useEffect(() => {
+    if (!isLoggedIn) return;
+    void fetchOffersChoice().then((c) => { if (!offersTouched.current) setOffersOn(c.checked); });
+  }, [isLoggedIn]);
+
   async function onPlaceOrder() {
     if (!isLoggedIn || !userId) return navigate('/auth');
     if (hotelClosed) return toast(hotelClosed);
@@ -389,6 +399,7 @@ export default function CheckoutPage() {
         cookingInstructions,
         deliveryInstructions,
       });
+      void saveOffersChoice(offersOn, 'checkout_web');
       // Fired only here — after the server has genuinely created the order row — never on the
       // button click itself (a click can fail validation, payment, or server errors below).
       trackEvent('order_placed', {
@@ -836,6 +847,7 @@ export default function CheckoutPage() {
           </section>
           <div className="checkout-cta">
             {bottomNotice && <p className="text-danger small bold">{bottomNotice}</p>}
+            <WhatsAppOffersCheck checked={offersOn} onChange={(on) => { offersTouched.current = true; setOffersOn(on); }} />
             <button className="btn btn-primary btn-lg w-full" disabled={disabled} onClick={() => void onPlaceOrder()}>
               {placing || loadingDelivery ? (
                 <>

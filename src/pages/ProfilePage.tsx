@@ -1,4 +1,6 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
+import { WhatsAppOffersCheck } from '../components/WhatsAppOffersCheck';
+import { fetchOffersChoice, saveOffersChoice } from '../lib/offersChoice';
 import { OPEN_TOUR_EVENT } from '../components/AppTour';
 import { useNavigate } from 'react-router-dom';
 import { Bell, Briefcase, Building2, ChevronRight, CircleHelp, Gift, LogOut, MapPin, Star, User, UserRound, Sparkles, Wallet } from 'lucide-react';
@@ -15,6 +17,8 @@ export default function ProfilePage() {
   const navigate = useNavigate();
   const { userName, userEmail, userPhone, selectedCity, unreadNotificationCount, logout } = useSession();
   const [confirmLogout, setConfirmLogout] = useState(false);
+  const [offersOn, setOffersOn] = useState(true);
+  useEffect(() => { void fetchOffersChoice().then((c) => setOffersOn(c.checked)); }, []);
 
   const items = [
     { Icon: User, title: 'Edit Profile', sub: 'Update your name and phone number', go: () => navigate('/profile/edit') },
@@ -81,6 +85,9 @@ export default function ProfilePage() {
               <ChevronRight size={18} className="muted" />
             </button>
           ))}
+        </div>
+        <div className="card pad">
+          <WhatsAppOffersCheck checked={offersOn} onChange={(on) => { setOffersOn(on); void saveOffersChoice(on, 'profile_web'); }} />
         </div>
         <button className="btn btn-danger-soft btn-lg w-full" onClick={() => setConfirmLogout(true)}>
           <LogOut size={20} /> Log Out
