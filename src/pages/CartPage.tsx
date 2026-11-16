@@ -336,7 +336,7 @@ export default function CartPage() {
               </div>
               <button className="btn btn-primary btn-lg" disabled={!!hotelClosed || !allChecked} onClick={proceed}>
                 {hotelClosed ? (
-                  'Hotel is closed'
+                  'Closed right now'
                 ) : unavailableCount > 0 ? (
                   'Remove unavailable items & continue'
                 ) : (

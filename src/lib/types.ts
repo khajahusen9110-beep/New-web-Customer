@@ -15,6 +15,8 @@ export interface City {
   close_time?: string | null;
   /** City Admin's Emergency Close switch — instantly stops every vendor from taking new orders. */
   emergency_closed?: boolean;
+  /** Why the City Admin closed the city (shown to customers); only set while emergency_closed. */
+  emergency_reason?: string | null;
 }
 
 export interface CityLocationResult {

@@ -842,7 +842,7 @@ export default function CheckoutPage() {
                   <Spinner size={20} light /> {placing ? placingMsg : 'Loading Options...'}
                 </>
               ) : hotelClosed ? (
-                'Hotel is closed'
+                'Closed right now'
               ) : unavailable.length ? (
                 'Remove unavailable items & continue'
               ) : (

@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import type { CartItem, CartItemUi, MyWallet, OperatingSlot, ResolvedProduct, Vendor } from './types';
 import { buildCartLines, getLiveCartProducts, getMyWallet, getVendor, getVendorOperatingSlots } from './repository';
-import { cartTotal, checkCartLine, hotelClosedMessage, isVendorOpenNow, type CartLineCheck } from './utils';
+import { cartTotal, checkCartLine, cityClosure, hotelClosedMessage, isVendorOpenNow, type CartLineCheck } from './utils';
 import { useCart } from '../store/cart';
 import { useSession } from '../store/session';
 
@@ -157,7 +157,13 @@ export function useCartCheck(rawItems: CartItem[], cityId: string | null | undef
 
   const city = useSession((s) => s.selectedCity);
   const hotelOpen = !hotel?.vendor || isVendorOpenNow(hotel.vendor, hotel.slots, city);
-  const hotelClosed = isHotel && !!hotel && !hotelOpen ? hotelClosedMessage(hotel.vendor, hotel.slots, city) : null;
+  // The whole city being closed (daily timings or Emergency Close) blocks every cart, grocery or hotel.
+  const closure = cityClosure(city);
+  const hotelClosed = closure
+    ? `${closure.title}. ${closure.message}`
+    : isHotel && !!hotel && !hotelOpen
+      ? hotelClosedMessage(hotel.vendor, hotel.slots, city)
+      : null;
   const available = checked.filter((l) => l.state === 'ok');
   const unavailable = checked.filter((l) => l.state !== 'ok');
   // Lines not in `fresh` yet (still loading) are neither; never order before every line is checked.

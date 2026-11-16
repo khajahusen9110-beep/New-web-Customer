@@ -109,6 +109,42 @@ export function isCityOpenNow(city?: Pick<City, 'open_time' | 'close_time' | 'em
   return isWithinOperatingHours(city.open_time, city.close_time);
 }
 
+/** "09:00" -> "9:00 AM" */
+export function clock12(t?: string | null): string {
+  if (!t) return '';
+  const [h, m] = t.split(':');
+  const hh = Number(h);
+  if (Number.isNaN(hh)) return t;
+  return `${hh % 12 === 0 ? 12 : hh % 12}:${(m ?? '00').slice(0, 2)} ${hh >= 12 ? 'PM' : 'AM'}`;
+}
+
+export interface CityClosure {
+  /** 'emergency' = City Admin closed it now (reason written by them); 'hours' = outside the daily timings. */
+  kind: 'emergency' | 'hours';
+  title: string;
+  message: string;
+}
+
+/** Why Sndmart is closed in this city right now, or null when it is open. One wording for the whole site. */
+export function cityClosure(
+  city?: Pick<City, 'open_time' | 'close_time' | 'emergency_closed' | 'emergency_reason'> | null,
+): CityClosure | null {
+  if (!city || isCityOpenNow(city)) return null;
+  if (city.emergency_closed) {
+    const why = (city.emergency_reason ?? '').trim();
+    return {
+      kind: 'emergency',
+      title: 'Sndmart is closed for now',
+      message: why || 'We are temporarily closed. Please check back shortly.',
+    };
+  }
+  return {
+    kind: 'hours',
+    title: 'Sndmart is closed right now',
+    message: `We are closed outside our timings. We take orders from ${clock12(city.open_time)} to ${clock12(city.close_time)}. See you at ${clock12(city.open_time)}!`,
+  };
+}
+
 export const shortTime = (t?: string | null) => {
   if (!t) return '';
   return t.length >= 8 && t.split(':').length === 3 ? t.slice(0, 5) : t;
@@ -190,14 +226,10 @@ export function checkCartLine(line: CartItemUi, isHotel: boolean): CartLineCheck
 export function hotelClosedMessage(
   v: Vendor | null,
   slots: OperatingSlot[],
-  city?: Pick<City, 'open_time' | 'close_time' | 'emergency_closed'> | null,
+  city?: Pick<City, 'open_time' | 'close_time' | 'emergency_closed' | 'emergency_reason'> | null,
 ): string {
-  if (city?.emergency_closed) {
-    return 'This city is temporarily closed for orders. Please check back shortly.';
-  }
-  if (!isCityOpenNow(city)) {
-    return `Ordering is closed for now (city hours ${shortTime(city?.open_time)}–${shortTime(city?.close_time)}).`;
-  }
+  const closure = cityClosure(city);
+  if (closure) return `${closure.title}. ${closure.message}`;
   const hours = v ? vendorHours(v, slots) : slots;
   if (!isWithinAnySlot(hours)) {
     if (slots.length) {

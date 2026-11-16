@@ -4,6 +4,7 @@ import { CenterSpinner } from './ui';
 import { ReceiptText, ShoppingCart, Store, User } from 'lucide-react';
 import { useCart, cartCount } from '../store/cart';
 import { OfferRibbon } from './OfferBanner';
+import { CityClosedBanner } from './CityClosedBanner';
 
 const TABS = [
   { to: '/', label: 'Home', Icon: Store, end: true },
@@ -41,6 +42,7 @@ export function TabLayout() {
         </div>
       </nav>
       <main className="tab-content">
+        <CityClosedBanner />
         <OfferRibbon />
         <Suspense fallback={<CenterSpinner />}>
           <Outlet />
@@ -65,6 +67,7 @@ export function TabLayout() {
 export function PlainLayout() {
   return (
     <main className="plain-content">
+      <CityClosedBanner />
       <OfferRibbon />
       <Suspense fallback={<CenterSpinner />}>
           <Outlet />

@@ -205,10 +205,27 @@ export function getActiveCities(forceRefresh = false): Promise<City[]> {
         .eq('status', 'active')
         .order('name', { ascending: true });
       if (error) fail(error, 'Unable to load cities from backend');
-      return (data ?? []) as City[];
+      return withClosedReason((data ?? []) as City[]);
     },
     forceRefresh,
   );
+}
+
+/**
+ * The reason text the City Admin wrote for an Emergency Close. Fetched separately and tolerantly so
+ * the city list still loads if that column is missing.
+ */
+async function withClosedReason(cities: City[]): Promise<City[]> {
+  const closed = cities.filter((c) => c.emergency_closed).map((c) => c.id);
+  if (!closed.length) return cities;
+  try {
+    const { data, error } = await supabase.from('cities').select('id,emergency_reason').in('id', closed);
+    if (error || !data) return cities;
+    const reasons = new Map((data as { id: string; emergency_reason: string | null }[]).map((r) => [r.id, r.emergency_reason]));
+    return cities.map((c) => (reasons.has(c.id) ? { ...c, emergency_reason: reasons.get(c.id) ?? null } : c));
+  } catch {
+    return cities;
+  }
 }
 
 export async function findCityForLocation(lat: number, lng: number): Promise<CityLocationResult | null> {
@@ -223,7 +240,8 @@ export async function getCity(cityId: string, forceRefresh = false): Promise<Cit
   const hit = cities.find((c) => c.id === cityId);
   if (hit) return hit;
   const { data } = await supabase.from('cities').select(CITY_COLS).eq('id', cityId).limit(1);
-  return ((data ?? [])[0] as City) ?? null;
+  const one = ((data ?? [])[0] as City) ?? null;
+  return one ? (await withClosedReason([one]))[0] : null;
 }
 
 // ---------- PROFILE / AUTH ----------

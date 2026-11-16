@@ -106,6 +106,7 @@ import {
   errorMessage,
   isCashbackCoupon,
   isHotelItemAvailable,
+  isCityOpenNow,
   isInStockAndActive,
   isVendorOpenNow,
   rupees,
@@ -545,7 +546,7 @@ function GroceryProductCard({
         )}
         {!inStock && (
           <div className="img-overlay">
-            <span className="tag tag-red">OUT OF STOCK</span>
+            <span className="tag tag-red">{isCityOpenNow(city) ? 'OUT OF STOCK' : 'CLOSED'}</span>
           </div>
         )}
       </div>
@@ -561,7 +562,7 @@ function GroceryProductCard({
       )}
       <div className="product-action">
         {!inStock ? (
-          <div className="oos-pill">Out of Stock</div>
+          <div className="oos-pill">{isCityOpenNow(city) ? 'Out of Stock' : 'Closed now'}</div>
         ) : hasVariants ? (
           <button className={`btn btn-sm w-full stepper-add${quantity > 0 ? ' has-qty' : ''}`} onClick={onSelectSize}>
             {quantity > 0 ? `${quantity} in cart` : 'ADD'} <ChevronDown size={15} strokeWidth={3} />

@@ -1161,3 +1161,10 @@ h3, .section-title { letter-spacing: -0.015em; }
 .fd-progress strong { color: #5c3500; }
 .fd-progress.done { background: #ecfdf3; border-bottom-color: #bbf0d0; }
 .fd-progress-bar { background: rgba(0, 0, 0, 0.1); height: 6px; }
+
+/* City closed (timings or emergency): one banner on every page */
+.city-closed-banner{display:flex;align-items:flex-start;gap:10px;margin:10px 16px 0;padding:12px 14px;border-radius:14px;font-size:13px;line-height:1.35;border:1px solid}
+.city-closed-banner strong{display:block;font-size:14px;font-weight:800;margin-bottom:2px}
+.city-closed-banner svg{flex:0 0 auto;margin-top:1px}
+.city-closed-banner.hours{background:#fff7e6;border-color:#fde0a6;color:#7a4a00}
+.city-closed-banner.emergency{background:#fff0f0;border-color:#f6b8b8;color:#8a1111}
