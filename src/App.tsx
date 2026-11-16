@@ -50,6 +50,7 @@ const MyReviewsPage = lazy(() => import('./pages/MyReviewsPage'));
 const AddressBookPage = lazy(() => import('./pages/AddressBookPage'));
 const EditProfilePage = lazy(() => import('./pages/EditProfilePage'));
 const HelpSupportPage = lazy(() => import('./pages/HelpSupportPage'));
+const PayPage = lazy(() => import('./pages/PayPage'));
 
 let tabsPrefetched = false;
 /** Downloads the bottom-tab pages' code in the background so switching tabs stays instant. */
@@ -292,6 +293,7 @@ export default function App() {
         <ThemeProvider>
         <Routes>
           <Route path="/auth" element={<AuthPage />} />
+          <Route path="/pay" element={<PayPage />} />
           <Route
             path="/onboarding"
             element={
