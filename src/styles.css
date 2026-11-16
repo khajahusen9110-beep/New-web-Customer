@@ -1168,3 +1168,23 @@ h3, .section-title { letter-spacing: -0.015em; }
 .city-closed-banner svg{flex:0 0 auto;margin-top:1px}
 .city-closed-banner.hours{background:#fff7e6;border-color:#fde0a6;color:#7a4a00}
 .city-closed-banner.emergency{background:#fff0f0;border-color:#f6b8b8;color:#8a1111}
+
+/* First-visit app tour */
+.tour-overlay{position:fixed;inset:0;z-index:300;display:flex;align-items:flex-end;justify-content:center;background:rgba(18,12,40,.62);padding:0}
+.tour-card{width:100%;max-width:520px;background:var(--surface);border-radius:26px 26px 0 0;padding:16px 20px calc(20px + env(safe-area-inset-bottom));display:flex;flex-direction:column;gap:14px;animation:cart-in .3s ease-out}
+@media (min-width:640px){.tour-overlay{align-items:center}.tour-card{border-radius:26px}}
+.tour-top{display:flex;align-items:center;justify-content:space-between}
+.tour-lang{display:flex;gap:6px}
+.tour-lang button{padding:6px 12px;border-radius:999px;border:1px solid var(--outline-soft);background:var(--surface);font-size:12px;font-weight:700;color:var(--text-2)}
+.tour-lang button.on{background:var(--primary);border-color:var(--primary);color:#fff}
+.tour-skip{font-size:13px;font-weight:700;color:var(--text-2);padding:6px 4px}
+.tour-icon{align-self:center;width:112px;height:112px;border-radius:50%;display:flex;align-items:center;justify-content:center;background:linear-gradient(135deg,#ece9ff,#fbe9f6);color:var(--primary)}
+.tour-hero{width:100%;aspect-ratio:1210/748;object-fit:cover;border-radius:18px}
+.tour-title{margin:0;font-size:22px;font-weight:900;text-align:center;color:var(--text)}
+.tour-body{margin:0;font-size:14.5px;line-height:1.45;text-align:center;color:var(--text-2)}
+.tour-steps{display:grid;grid-template-columns:1fr 1fr;gap:8px}
+.tour-steps div{display:flex;align-items:center;gap:8px;padding:10px;border-radius:14px;background:#f5f3ff;font-size:12.5px;font-weight:700;color:var(--text)}
+.tour-steps span{flex:0 0 auto;width:24px;height:24px;border-radius:50%;background:var(--primary);color:#fff;display:flex;align-items:center;justify-content:center;font-size:12px}
+.tour-dots{display:flex;justify-content:center;gap:6px}
+.tour-dots i{width:7px;height:7px;border-radius:50%;background:#d9d6e6}
+.tour-dots i.on{width:20px;border-radius:4px;background:var(--primary)}

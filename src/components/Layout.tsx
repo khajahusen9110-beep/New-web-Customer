@@ -5,6 +5,7 @@ import { ReceiptText, ShoppingCart, Store, User } from 'lucide-react';
 import { useCart, cartCount } from '../store/cart';
 import { OfferRibbon } from './OfferBanner';
 import { CityClosedBanner } from './CityClosedBanner';
+import { AppTour } from './AppTour';
 
 const TABS = [
   { to: '/', label: 'Home', Icon: Store, end: true },
@@ -42,6 +43,7 @@ export function TabLayout() {
         </div>
       </nav>
       <main className="tab-content">
+        <AppTour />
         <CityClosedBanner />
         <OfferRibbon />
         <Suspense fallback={<CenterSpinner />}>

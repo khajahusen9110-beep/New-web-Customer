@@ -1,6 +1,7 @@
 import { useState } from 'react';
+import { OPEN_TOUR_EVENT } from '../components/AppTour';
 import { useNavigate } from 'react-router-dom';
-import { Bell, Briefcase, Building2, ChevronRight, CircleHelp, Gift, LogOut, MapPin, Star, User, UserRound, Wallet } from 'lucide-react';
+import { Bell, Briefcase, Building2, ChevronRight, CircleHelp, Gift, LogOut, MapPin, Star, User, UserRound, Sparkles, Wallet } from 'lucide-react';
 import { ConfirmDialog, PageHeader } from '../components/ui';
 import { openCityPicker } from '../components/CityPicker';
 import { signOut } from '../lib/repository';
@@ -29,6 +30,7 @@ export default function ProfilePage() {
       sub: unreadNotificationCount > 0 ? `${unreadNotificationCount} unread updates` : 'Order status & city updates',
       go: () => navigate('/notifications'),
     },
+    { Icon: Sparkles, title: 'App tour', sub: 'See what is new in Sndmart', go: () => window.dispatchEvent(new Event(OPEN_TOUR_EVENT)) },
     { Icon: MapPin, title: 'Saved Addresses', sub: 'Manage delivery addresses', go: () => navigate('/addresses') },
     {
       Icon: Wallet,
