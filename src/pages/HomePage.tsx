@@ -217,78 +217,7 @@ function DealsBanner({ imageUrl }: { imageUrl?: string | null }) {
   );
 }
 
-/** Swiggy-style "What's on your mind?" row: dishes served by this city's hotels, with images. */
-const DISHES_PER_SET = 8; // 4 on top, 4 below
-const DISH_SET_MS = 5 * 60 * 1000;
-const currentDishSlot = () => Math.floor(Date.now() / DISH_SET_MS);
-
-/**
- * Swiggy-style "What's on your mind?": 8 dishes (4 x 2) in round images. Every 5 minutes the next
- * 8 dishes (other dish types, from other hotels) take their place, cycling through all of them.
- * The set does not change while a dish is selected.
- */
-function DishRow({
-  dishes,
-  selectedKey,
-  onSelect,
-}: {
-  dishes: DishCategory[];
-  selectedKey: string | null;
-  onSelect: (key: string | null) => void;
-}) {
-  const [slot, setSlot] = useState(currentDishSlot);
-
-  // Move to the next set at each 5-minute boundary (not while a dish is selected).
-  useEffect(() => {
-    if (selectedKey) return;
-    setSlot(currentDishSlot());
-    let t = 0;
-    const schedule = () => {
-      const wait = DISH_SET_MS - (Date.now() % DISH_SET_MS) + 50;
-      t = window.setTimeout(() => {
-        setSlot(currentDishSlot());
-        schedule();
-      }, wait);
-    };
-    schedule();
-    return () => window.clearTimeout(t);
-  }, [selectedKey]);
-
-  const visible = useMemo(() => {
-    const n = dishes.length;
-    if (n <= DISHES_PER_SET) return dishes;
-    const sets = Math.ceil(n / DISHES_PER_SET);
-    const start = (slot % sets) * DISHES_PER_SET;
-    // The last set is topped up from the beginning, so there are always 8.
-    return Array.from({ length: DISHES_PER_SET }, (_, i) => dishes[(start + i) % n]);
-  }, [dishes, slot]);
-
-  return (
-    <section className="dish-section">
-      <h3 className="section-title">What's on your mind?</h3>
-      <div key={slot} className="dish-grid" role="list">
-        {visible.map((d) => {
-          const selected = selectedKey === d.key;
-          return (
-            <button
-              key={d.key}
-              role="listitem"
-              className={`dish-card${selected ? ' selected' : ''}`}
-              aria-pressed={selected}
-              onClick={() => onSelect(selected ? null : d.key)}
-            >
-              <span className="dish-img">
-                {d.imageUrl && <ResizedImg url={d.imageUrl} width={76} />}
-              </span>
-              <span className="dish-name">{d.name}</span>
-            </button>
-          );
-        })}
-      </div>
-    </section>
-  );
-}
-
+// The "What's on your mind?" dish grid was removed from the food home (dish data is still used for the promo banner picture).
 
 const TIER_ORDER: PriceTier[] = ['luxury', 'medium', 'low_budget'];
 /** Short names for the narrow tab switcher. */
@@ -1774,16 +1703,6 @@ export default function HomePage() {
                       onOrder={() => hotelsListRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' })}
                     />
                   );
-                const dishRow = dishes.length > 0 && (
-                  <DishRow
-                    dishes={dishes}
-                    selectedKey={dishKeySel}
-                    onSelect={(k) => {
-                      setDishKeySel(k);
-                      if (k) hotelsListRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' });
-                    }}
-                  />
-                );
                 // Budget tiers -> Top Hotels -> special offer, straight after the banner.
                 const hotelPicks = (
                   <>
@@ -1800,11 +1719,9 @@ export default function HomePage() {
                   <>
                     {banner}
                     {hotelPicks}
-                    {dishRow}
                   </>
                 ) : (
                   <>
-                    {dishRow}
                     {banner}
                     {hotelPicks}
                   </>
