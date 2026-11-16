@@ -1,25 +1,24 @@
 import { useSearchParams } from 'react-router-dom';
-import { ChevronRight, Mail, MessageCircle, Phone } from 'lucide-react';
+import { ChevronRight, Mail, MessageCircle } from 'lucide-react';
 import { PageHeader } from '../components/ui';
 
-const SUPPORT_PHONE = '+919353461742';
-const SUPPORT_WHATSAPP = '919110604033';
+// Support is the Sndmart WhatsApp bot (no personal number) and the support e-mail.
+const SUPPORT_BOT_WHATSAPP = '917899787976';
 const SUPPORT_EMAIL = 'sndmartt@gmail.com';
 
 export default function HelpSupportPage() {
   const [params] = useSearchParams();
   const orderNumber = params.get('order');
-  const waText = orderNumber ? `I need help with order ${orderNumber}` : 'Hi Sndmart Support, I need help';
+  const waText = orderNumber ? `Hi, I need help with my order ${orderNumber}` : 'Hi';
   const subject = orderNumber ? `Help with Order ${orderNumber}` : 'Sndmart Support';
 
   const options = [
-    { Icon: Phone, cls: 'bg-sky text-primary', title: 'Call Support', sub: SUPPORT_PHONE, href: `tel:${SUPPORT_PHONE}` },
     {
       Icon: MessageCircle,
       cls: 'bg-sage text-success',
       title: 'WhatsApp Support',
-      sub: 'Chat with us instantly',
-      href: `https://wa.me/${SUPPORT_WHATSAPP}?text=${encodeURIComponent(waText)}`,
+      sub: 'Chat with the Sndmart assistant',
+      href: `https://wa.me/${SUPPORT_BOT_WHATSAPP}?text=${encodeURIComponent(waText)}`,
       external: true,
     },
     {
