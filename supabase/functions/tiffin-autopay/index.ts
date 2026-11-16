@@ -156,6 +156,9 @@ Deno.serve(async (req) => {
         razorpay_subscription_id: sr.json.id, key_id: keyId, is_trial: !!p.is_trial,
         pay_now: p.is_trial ? trialPaise / 100 : monthlyPaise / 100, monthly: monthlyPaise / 100,
         first_charge_date: firstCharge,
+        // Razorpay's hosted payment page for this subscription (lists UPI apps in the browser): a fallback for phones whose
+        // in-app payment screen does not list UPI.
+        short_url: typeof sr.json.short_url === "string" ? sr.json.short_url : null,
       });
     }
 
