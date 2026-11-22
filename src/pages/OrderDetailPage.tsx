@@ -678,7 +678,7 @@ export default function OrderDetailPage() {
         }
       >
         <div className="stack">
-          <strong>Hotel / Vendor Rating</strong>
+          <strong>Hotel / Shop Rating</strong>
           <Stars value={vendorRating} onChange={setVendorRating} />
           <label className="field">
             <span>Food / Item Feedback</span>
