@@ -33,7 +33,7 @@ interface CartState {
     customPhotoPath?: string | null;
   }) => AddToCartResult;
   /** Edit the message / photo of a line already in the cart. */
-  setCustomization: (productId: string, note: string | null, photoPath: string | null) => void;
+  setCustomization: (productId: string, variantId: string | null, note: string | null, photoPath: string | null) => void;
   forceClearHotelCartAndAdd: (item: CartItem) => void;
   updateQuantity: (productId: string, isHotel: boolean, newQty: number, variantId?: string | null) => void;
   /** Removes several lines in one change (e.g. all unavailable items). */
@@ -161,8 +161,8 @@ export const useCart = create<CartState>()(
         return { kind: 'success' };
       },
 
-      setCustomization: (productId, note, photoPath) => {
-        set({ hotelCart: get().hotelCart.map((i) => (i.product_id === productId ? { ...i, custom_note: note, custom_photo_path: photoPath } : i)) });
+      setCustomization: (productId, variantId, note, photoPath) => {
+        set({ hotelCart: get().hotelCart.map((i) => (same(i, productId, variantId) ? { ...i, custom_note: note, custom_photo_path: photoPath } : i)) });
         persistCart();
       },
 

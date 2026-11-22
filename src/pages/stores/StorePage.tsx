@@ -40,22 +40,26 @@ export default function StorePage() {
   if (!menu) return <div className="page"><PageHeader title="Shop" /><CenterSpinner /></div>;
   const s = menu.store;
   const thisItems = hotelCart.filter((i) => i.vendor_id === storeId);
-  const priceOf = (id: string) => menu.products.find((p) => p.id === id)?.price ?? 0;
-  const thisTotal = thisItems.reduce((sum, i) => sum + priceOf(i.product_id) * i.quantity, 0);
-  const qtyOf = (id: string) => thisItems.find((i) => i.product_id === id)?.quantity ?? 0;
+  const lineUnit = (i: CartItem) => {
+    const p = menu.products.find((x) => x.id === i.product_id);
+    return p?.variants?.find((v) => v.id === i.variant_id)?.price ?? p?.price ?? 0;
+  };
+  const thisTotal = thisItems.reduce((sum, i) => sum + lineUnit(i) * i.quantity, 0);
+  const qtyOf = (id: string) => thisItems.filter((i) => i.product_id === id).reduce((n, i) => n + i.quantity, 0);
   const add = (productId: string, delta: number) => {
     const r = addToCart({ productId, vendorId: storeId, cityId, quantityDelta: delta, isHotel: true });
     if (r.kind === 'hotelConflict') setConflict(r.pendingItem);
   };
   const addCustom = (r: CustomiseResult) => {
     if (!customising) return;
-    const inCart = qtyOf(customising.id) > 0;
+    const hasVariants = (customising.variants ?? []).some((v) => v.is_available);
+    const inCart = !hasVariants && qtyOf(customising.id) > 0;
     if (inCart) {
       // editing a line already in the cart: only the message / photo change, the quantity stays
-      setCustomization(customising.id, r.note, r.photoPath);
+      setCustomization(customising.id, null, r.note, r.photoPath);
     } else {
-      const res = addToCart({ productId: customising.id, vendorId: storeId, cityId, quantityDelta: r.quantity, isHotel: true, customNote: r.note, customPhotoPath: r.photoPath });
-      if (res.kind === 'hotelConflict') { setConflict({ ...res.pendingItem, quantity: r.quantity, custom_note: r.note, custom_photo_path: r.photoPath }); }
+      const res = addToCart({ productId: customising.id, vendorId: storeId, cityId, quantityDelta: r.quantity, isHotel: true, variantId: r.variantId, customNote: r.note, customPhotoPath: r.photoPath });
+      if (res.kind === 'hotelConflict') { setConflict({ ...res.pendingItem, quantity: r.quantity, variant_id: r.variantId, custom_note: r.note, custom_photo_path: r.photoPath }); }
     }
     setCustomising(null);
   };
@@ -87,12 +91,12 @@ export default function StorePage() {
               {!p.is_available && <span className="closed-badge">Out of stock</span>}
             </span>
             <span className="store-product-price">
-              {rupee(p.price)}
+              {(p.variants ?? []).some((v) => v.is_available) ? `from ${rupee(Math.min(...(p.variants ?? []).filter((v) => v.is_available).map((v) => v.price)))}` : rupee(p.price)}
               {p.mrp != null && p.mrp > p.price && <s className="muted small block">{rupee(p.mrp)}</s>}
               {p.is_available && s.is_open && (
-                p.is_customizable ? (
-                  <button className="store-add-btn" onClick={() => setCustomising(p)} aria-label={`Customise ${p.name}`}>
-                    {qtyOf(p.id) > 0 ? `Edit · ${qtyOf(p.id)} in cart` : 'Customise'}
+                p.is_customizable || (p.variants ?? []).some((v) => v.is_available) ? (
+                  <button className="store-add-btn" onClick={() => setCustomising(p)} aria-label={`Choose ${p.name}`}>
+                    {qtyOf(p.id) > 0 ? `${qtyOf(p.id)} in cart · ${(p.variants ?? []).length ? 'Add' : 'Edit'}` : (p.variants ?? []).length ? 'Choose' : 'Customise'}
                   </button>
                 ) : qtyOf(p.id) > 0 ? (
                   <QuantityStepper quantity={qtyOf(p.id)} onIncrease={() => add(p.id, 1)} onDecrease={() => add(p.id, -1)} />
@@ -113,8 +117,8 @@ export default function StorePage() {
       <CustomiseSheet
         product={customising}
         userId={userId}
-        initial={customising ? (() => { const it = thisItems.find((i) => i.product_id === customising.id); return it ? { note: it.custom_note ?? null, photoPath: it.custom_photo_path ?? null, quantity: it.quantity } : undefined; })() : undefined}
-        editing={!!customising && qtyOf(customising.id) > 0}
+        initial={customising && !(customising.variants ?? []).some((v) => v.is_available) ? (() => { const it = thisItems.find((i) => i.product_id === customising.id); return it ? { note: it.custom_note ?? null, photoPath: it.custom_photo_path ?? null, quantity: it.quantity } : undefined; })() : undefined}
+        editing={!!customising && !(customising.variants ?? []).some((v) => v.is_available) && qtyOf(customising.id) > 0}
         onClose={() => setCustomising(null)}
         onDone={addCustom}
       />

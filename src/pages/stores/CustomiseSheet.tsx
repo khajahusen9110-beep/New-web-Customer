@@ -4,7 +4,7 @@ import { Modal, QuantityStepper, Spinner, toast } from '../../components/ui';
 import { customPhotoUrl, uploadCustomPhoto, type StoreMenu } from '../../lib/stores';
 
 type P = StoreMenu['products'][number];
-export interface CustomiseResult { note: string | null; photoPath: string | null; quantity: number }
+export interface CustomiseResult { variantId: string | null; note: string | null; photoPath: string | null; quantity: number }
 
 const rupee = (n: number) => `₹${Number.isInteger(n) ? n : n.toFixed(2)}`;
 
@@ -12,7 +12,7 @@ const rupee = (n: number) => `₹${Number.isInteger(n) ? n : n.toFixed(2)}`;
 export function CustomiseSheet({ product, userId, initial, editing, onClose, onDone }: {
   product: P | null;
   userId: string | null;
-  initial?: { note: string | null; photoPath: string | null; quantity: number };
+  initial?: { variantId?: string | null; note: string | null; photoPath: string | null; quantity: number };
   /** true when changing a line that is already in the cart (no quantity stepper) */
   editing?: boolean;
   onClose: () => void;
@@ -22,6 +22,7 @@ export function CustomiseSheet({ product, userId, initial, editing, onClose, onD
   const [photoPath, setPhotoPath] = useState<string | null>(null);
   const [preview, setPreview] = useState<string | null>(null);
   const [qty, setQty] = useState(1);
+  const [variantId, setVariantId] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
   const fileRef = useRef<HTMLInputElement>(null);
 
@@ -31,13 +32,18 @@ export function CustomiseSheet({ product, userId, initial, editing, onClose, onD
     setPhotoPath(initial?.photoPath ?? null);
     setPreview(null);
     setQty(initial?.quantity ?? 1);
+    const vs = (product.variants ?? []).filter((v) => v.is_available);
+    setVariantId(initial?.variantId ?? (vs.length === 1 ? vs[0].id : null));
     if (initial?.photoPath) void customPhotoUrl(initial.photoPath).then(setPreview);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [product?.id]);
 
   if (!product) return null;
-  const askNote = product.custom_allow_note !== false;
-  const askPhoto = product.custom_allow_photo === true;
+  const variants = (product.variants ?? []).filter((v) => v.is_available);
+  const custom = product.is_customizable === true;
+  const askNote = custom && product.custom_allow_note !== false;
+  const askPhoto = custom && product.custom_allow_photo === true;
+  const unitPrice = variants.find((v) => v.id === variantId)?.price ?? product.price;
   const required = product.custom_required === true;
   const lead = product.custom_lead_hours ?? 0;
 
@@ -57,10 +63,11 @@ export function CustomiseSheet({ product, userId, initial, editing, onClose, onD
   };
 
   const submit = () => {
+    if (variants.length > 0 && !variantId) { toast('Please choose an option'); return; }
     const n = note.trim();
     if (required && askNote && !n) { toast('Please write the message'); return; }
     if (required && askPhoto && !photoPath) { toast('Please add a photo'); return; }
-    onDone({ note: askNote && n ? n : null, photoPath: askPhoto ? photoPath : null, quantity: qty });
+    onDone({ variantId, note: askNote && n ? n : null, photoPath: askPhoto ? photoPath : null, quantity: qty });
   };
 
   return (
@@ -70,11 +77,23 @@ export function CustomiseSheet({ product, userId, initial, editing, onClose, onD
       title={product.name}
       footer={
         <button className="btn btn-primary btn-lg" disabled={busy} onClick={submit}>
-          {busy ? <Spinner size={18} light /> : editing ? 'Save changes' : `Add to cart · ${rupee(product.price * qty)}`}
+          {busy ? <Spinner size={18} light /> : editing ? 'Save changes' : `Add to cart · ${rupee(unitPrice * qty)}`}
         </button>
       }
     >
       <div className="stack">
+        {variants.length > 0 && (
+          <div>
+            <strong className="block">Choose an option *</strong>
+            <div className="row gap-8" style={{ flexWrap: 'wrap', marginTop: 6 }}>
+              {variants.map((v) => (
+                <button key={v.id} type="button" className={`chip ${variantId === v.id ? 'chip-on' : ''}`} onClick={() => setVariantId(v.id)}>
+                  {v.label} · {rupee(v.price)}
+                </button>
+              ))}
+            </div>
+          </div>
+        )}
         {lead > 0 && <p className="muted small">Made to order · needs {lead} hour{lead > 1 ? 's' : ''} notice, so choose a Scheduled time at checkout. · ಆರ್ಡರ್‌ಗೆ ತಯಾರಿಸಲಾಗುತ್ತದೆ, {lead} ಗಂಟೆ ಮುಂಚಿತವಾಗಿ ತಿಳಿಸಿ.</p>}
         {askNote && (
           <label className="block">

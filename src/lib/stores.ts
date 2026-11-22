@@ -94,6 +94,8 @@ export interface StoreMenu {
     custom_note_label?: string | null;
     custom_required?: boolean;
     custom_lead_hours?: number;
+    /** Sizes / options with their own price (empty or missing: a plain product) */
+    variants?: { id: string; label: string; label_kn?: string | null; price: number; is_available: boolean }[];
   }[];
 }
 
