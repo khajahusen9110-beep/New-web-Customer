@@ -37,14 +37,30 @@ export interface HelperConfig {
   max_days_ahead?: number;
   require_rules_ack?: boolean;
   refund_percent_after_accept?: number;
+  extension_enabled?: boolean;
+  extension_options?: number[];
+  extension_mode?: 'auto' | 'helper_ok';
+  max_extensions?: number;
   payment_window_minutes?: number;
   categories?: HelperCategory[];
 }
 
 export type HelperStatus = 'pending_payment' | 'requested' | 'accepted' | 'on_the_way' | 'started' | 'completed' | 'cancelled' | 'expired';
 
+export interface HelperExtension {
+  id: string;
+  minutes: number;
+  amount: number;
+  status: 'pending_payment' | 'awaiting_helper' | 'applied' | 'declined' | 'expired' | 'cancelled';
+  payment_method: 'upi' | 'cash';
+  payment_status: 'unpaid' | 'paid' | 'refund_due' | 'refunded';
+  expires_at: string | null;
+}
+
 export interface HelperBooking {
   id: string;
+  category_id?: string | null;
+  extensions?: HelperExtension[];
   booking_number: string;
   status: HelperStatus;
   task_type: string;
@@ -178,4 +194,24 @@ export async function verifyHelperPayment(bookingId: string, orderId: string, pa
 /** Asks the server to check Razorpay (a payment the app never reported) and to send a refund that is due. Never throws. */
 export async function syncHelperPayment(bookingId: string): Promise<void> {
   try { await paymentCall({ action: 'sync', booking_id: bookingId }); } catch { /* the next poll tries again */ }
+}
+
+/** The customer asks for more time while the work is running. The server works out the price. */
+export async function requestHelperExtension(bookingId: string, minutes: number): Promise<HelperExtension> {
+  const { data, error } = await supabase.rpc('helper_request_extension', { p_booking_id: bookingId, p_minutes: minutes });
+  if (error) throw new Error(error.message);
+  return data as HelperExtension;
+}
+
+export async function createExtensionPayment(extId: string): Promise<{ keyId: string; amount: number; currency: string; razorpayOrderId: string }> {
+  const d = await paymentCall<{ key_id: string; amount: number; currency: string; razorpay_order_id: string }>({ action: 'create_ext', extension_id: extId });
+  return { keyId: d.key_id, amount: d.amount, currency: d.currency, razorpayOrderId: d.razorpay_order_id };
+}
+
+export async function verifyExtensionPayment(extId: string, orderId: string, paymentId: string, signature: string): Promise<void> {
+  await paymentCall({ action: 'verify_ext', extension_id: extId, razorpay_order_id: orderId, razorpay_payment_id: paymentId, razorpay_signature: signature });
+}
+
+export async function syncExtensionPayment(extId: string): Promise<void> {
+  try { await paymentCall({ action: 'sync_ext', extension_id: extId }); } catch { /* the next poll tries again */ }
 }

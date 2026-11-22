@@ -10,7 +10,7 @@ import { errorMessage, rupees } from '../lib/utils';
 import { openUpiCheckout } from '../lib/razorpay';
 import {
   STATUS_LABEL, cancelHelperBooking, createHelperBooking, getHelperBooking, getHelperConfig, helperPhotoUrl, isActive,
-  createHelperPayment, myHelperBookings, rateHelperBooking, syncHelperPayment, verifyHelperPayment, uploadHelperPhoto, type HelperBooking, type HelperCategory, type HelperConfig,
+  createExtensionPayment, createHelperPayment, myHelperBookings, requestHelperExtension, syncExtensionPayment, verifyExtensionPayment, rateHelperBooking, syncHelperPayment, verifyHelperPayment, uploadHelperPhoto, type HelperBooking, type HelperCategory, type HelperConfig,
 } from '../lib/helper';
 
 /** Opens the in-app payment for a booking waiting for its advance. Returns true when the server confirmed it. */
@@ -28,6 +28,23 @@ async function payForBooking(b: { id: string; booking_number: string }, phone: s
     return false;
   }
   toast('Payment received. We are finding a helper.');
+  return true;
+}
+
+/** Opens the in-app payment for extra time. Returns true when the server confirmed it. */
+async function payForExtension(extId: string, label: string, phone: string | null, email: string | null): Promise<boolean> {
+  const order = await createExtensionPayment(extId);
+  const res = await openUpiCheckout({ order, orderNumber: label, phone, email });
+  if (res.kind === 'cancelled') { toast('Payment not completed. You can pay again from this page.'); return false; }
+  if (res.kind === 'error') { toast(res.message); return false; }
+  try {
+    await verifyExtensionPayment(extId, res.orderId, res.paymentId, res.signature);
+  } catch (e) {
+    await syncExtensionPayment(extId);
+    toast(errorMessage(e, 'We are confirming your payment. Please check again in a minute.'));
+    return false;
+  }
+  toast('Payment received.');
   return true;
 }
 
@@ -62,7 +79,7 @@ export default function HelperPage() {
       <PageHeader title="Quick Helper" subtitle={`Pay per 30 minutes${city?.name ? ' · ' + city.name : ''}`} />
       <div className="content-pad narrow stack">
         {openId ? (
-          <BookingDetail id={openId} onBack={() => setParams({ tab: 'mine' })} />
+          <BookingDetail id={openId} cfg={cfg} onBack={() => setParams({ tab: 'mine' })} />
         ) : (
           <>
             <div className="mode-toggle">
@@ -316,7 +333,7 @@ function MyBookings({ onOpen }: { onOpen: (id: string) => void }) {
   );
 }
 
-function BookingDetail({ id, onBack }: { id: string; onBack: () => void }) {
+function BookingDetail({ id, cfg, onBack }: { id: string; cfg: HelperConfig; onBack: () => void }) {
   const [b, setB] = useState<HelperBooking | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [photoUrls, setPhotoUrls] = useState<string[]>([]);
@@ -333,6 +350,8 @@ function BookingDetail({ id, onBack }: { id: string; onBack: () => void }) {
         await syncHelperPayment(id);
         x = await getHelperBooking(id);
       }
+      const openExt = (x.extensions ?? []).find((e) => e.payment_method === 'upi' && (e.payment_status === 'refund_due' || (e.payment_status === 'unpaid' && e.status === 'pending_payment')));
+      if (openExt) { await syncExtensionPayment(openExt.id); x = await getHelperBooking(id); }
       setB(x); setError(null);
     } catch (e) { setError((e as Error).message); }
   }, [id]);
@@ -368,6 +387,27 @@ function BookingDetail({ id, onBack }: { id: string; onBack: () => void }) {
     if (!window.confirm('Cancel this booking?')) return;
     setBusy(true);
     try { await cancelHelperBooking(b.id); await load(); } catch (e) { toast(errorMessage(e, 'Could not cancel')); } finally { setBusy(false); }
+  };
+  const askMore = async (minutes: number) => {
+    if (!b) return;
+    setBusy(true);
+    try {
+      const ext = await requestHelperExtension(b.id, minutes);
+      if (ext.status === 'pending_payment') {
+        const { userPhone, userEmail } = useSession.getState();
+        await payForExtension(ext.id, `${b.booking_number} +${minutes}m`, userPhone, userEmail);
+      } else toast(ext.status === 'applied' ? 'Time added.' : 'Waiting for your helper to accept.');
+      await load();
+    } catch (e) { toast(errorMessage(e, 'Could not add time')); } finally { setBusy(false); }
+  };
+  const payExtension = async (ext: { id: string; minutes: number }) => {
+    if (!b) return;
+    setBusy(true);
+    try {
+      const { userPhone, userEmail } = useSession.getState();
+      await payForExtension(ext.id, `${b.booking_number} +${ext.minutes}m`, userPhone, userEmail);
+      await load();
+    } catch (e) { toast(errorMessage(e, 'Could not start payment')); } finally { setBusy(false); }
   };
   const payNow = async () => {
     if (!b) return;
@@ -433,6 +473,37 @@ function BookingDetail({ id, onBack }: { id: string; onBack: () => void }) {
           {b.end_otp && <><span style={{ fontSize: 28, letterSpacing: 6 }}>{b.end_otp}</span><span className="muted small">Tell this code to your helper when the work is finished.</span></>}
         </div>
       )}
+
+      {b.status === 'started' && cfg.extension_enabled !== false && (() => {
+        const exts = b.extensions ?? [];
+        const open = exts.find((e) => e.status === 'pending_payment' || e.status === 'awaiting_helper');
+        const done = exts.filter((e) => e.status === 'applied').length;
+        const cat = (cfg.categories ?? []).find((c) => c.id === b.category_id);
+        const rate = cat?.rate_per_30 ?? cfg.rate_per_30 ?? 0;
+        const left = Math.max(0, (cfg.max_extensions ?? 3) - done);
+        return (
+          <div className="card pad stack">
+            <strong>Need more time?</strong>
+            {open ? (
+              open.status === 'pending_payment' ? (
+                <>
+                  <span className="small">+{open.minutes} min · {rupees(open.amount, 0)}: pay to add the time.</span>
+                  <button className="btn btn-primary" disabled={busy} onClick={() => void payExtension(open)}>Pay {rupees(open.amount, 0)}</button>
+                </>
+              ) : <span className="small">+{open.minutes} min requested. Waiting for your helper to accept{open.payment_status === 'paid' ? ' (paid; refunded if declined)' : ''}.</span>
+            ) : left === 0 ? <span className="muted small">You have used all the extra-time requests for this booking.</span> : (
+              <div className="row gap-8" style={{ flexWrap: 'wrap' }}>
+                {(cfg.extension_options ?? [30, 60]).map((m) => (
+                  <button key={m} className="btn btn-outline" disabled={busy} onClick={() => void askMore(m)}>+{m} min · {rupees(rate * m / 30, 0)}</button>
+                ))}
+              </div>
+            )}
+            {exts.filter((e) => e.status === 'declined' || e.status === 'expired').slice(-1).map((e) => (
+              <span key={e.id} className="muted small">Last request (+{e.minutes} min) was not added.{e.payment_status === 'refund_due' ? ' Refund on its way.' : e.payment_status === 'refunded' ? ' Refunded.' : ''}</span>
+            ))}
+          </div>
+        );
+      })()}
       {b.status === 'completed' && (
         <div className="card pad stack">
           <div className="row gap-8"><CheckCircle2 size={18} /><strong>Work completed</strong></div>
