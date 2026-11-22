@@ -9,7 +9,7 @@ import type { CustomerAddress } from '../lib/types';
 import { errorMessage, rupees } from '../lib/utils';
 import {
   STATUS_LABEL, cancelHelperBooking, createHelperBooking, getHelperBooking, getHelperConfig, helperPhotoUrl, isActive,
-  myHelperBookings, rateHelperBooking, uploadHelperPhoto, type HelperBooking, type HelperConfig,
+  myHelperBookings, rateHelperBooking, uploadHelperPhoto, type HelperBooking, type HelperCategory, type HelperConfig,
 } from '../lib/helper';
 
 /** Quick Helper: book a nearby helper for 30 / 60 / 90 minutes. */
@@ -61,9 +61,9 @@ export default function HelperPage() {
 }
 
 function BookForm({ cfg, cityId, userId, onBooked }: { cfg: HelperConfig; cityId: string; userId: string; onBooked: (b: HelperBooking) => void }) {
-  const durations = cfg.durations ?? [30, 60, 90];
-  const [minutes, setMinutes] = useState(durations[0] ?? 30);
-  const [taskType, setTaskType] = useState((cfg.task_types ?? [])[0] ?? '');
+  const cats = cfg.categories ?? [];
+  const [cat, setCat] = useState<HelperCategory | null>(null);
+  const [minutes, setMinutes] = useState(30);
   const [desc, setDesc] = useState('');
   const [photos, setPhotos] = useState<{ path: string; preview: string }[]>([]);
   const [addresses, setAddresses] = useState<CustomerAddress[]>([]);
@@ -71,6 +71,8 @@ function BookForm({ cfg, cityId, userId, onBooked }: { cfg: HelperConfig; cityId
   const [showAdd, setShowAdd] = useState(false);
   const [later, setLater] = useState(false);
   const [when, setWhen] = useState('');
+  const [pay, setPay] = useState<'upi' | 'cash'>(cfg.payment_mode === 'cash' ? 'cash' : 'upi');
+  const [ack, setAck] = useState(false);
   const [busy, setBusy] = useState(false);
   const [uploading, setUploading] = useState(false);
   const fileRef = useRef<HTMLInputElement>(null);
@@ -84,8 +86,35 @@ function BookForm({ cfg, cityId, userId, onBooked }: { cfg: HelperConfig; cityId
   }, [userId]);
   useEffect(() => { void loadAddresses(); }, [loadAddresses]);
 
-  const price = cfg.prices?.[String(minutes)] ?? (cfg.rate_per_30 ?? 0) * minutes / 30;
-  const maxPhotos = cfg.max_photos ?? 3;
+  const choose = (c: HelperCategory) => {
+    setCat(c); setMinutes(c.durations[0] ?? 30); setPhotos([]); setAck(false); window.scrollTo({ top: 0 });
+  };
+
+  if (cats.length === 0) return <EmptyState icon={<Clock size={36} />} title="No services yet" text="Please check again soon." />;
+
+  // Step 1: browse the services
+  if (!cat) {
+    return (
+      <>
+        <strong>Choose a service</strong>
+        {cats.map((c) => (
+          <button key={c.id} className="card pad row gap-8" style={{ textAlign: 'left', alignItems: 'center' }} onClick={() => choose(c)}>
+            {c.image_url ? <img src={c.image_url} alt="" style={{ width: 72, height: 72, objectFit: 'cover', borderRadius: 12, flexShrink: 0 }} /> : null}
+            <span className="stack" style={{ gap: 2 }}>
+              <strong>{c.name}</strong>
+              {c.description && <span className="muted small">{c.description}</span>}
+              <span className="small">From {rupees(Math.min(...Object.values(c.prices)), 0)} · {c.durations.join(' / ')} min</span>
+            </span>
+          </button>
+        ))}
+        {cfg.banned_note && <p className="muted small">{cfg.banned_note}</p>}
+      </>
+    );
+  }
+
+  const price = cat.prices[String(minutes)] ?? cat.rate_per_30 * minutes / 30;
+  const maxPhotos = cat.photos_allowed ? (cfg.max_photos ?? 3) : 0;
+  const mode = cfg.payment_mode ?? 'both';
 
   const addPhoto = async (file?: File) => {
     if (!file) return;
@@ -97,7 +126,12 @@ function BookForm({ cfg, cityId, userId, onBooked }: { cfg: HelperConfig; cityId
   };
 
   const minWhen = () => {
-    const d = new Date(Date.now() + 35 * 60_000);
+    const d = new Date(Date.now() + ((cfg.min_lead_minutes ?? 30) + 5) * 60_000);
+    d.setMinutes(d.getMinutes() - d.getTimezoneOffset());
+    return d.toISOString().slice(0, 16);
+  };
+  const maxWhen = () => {
+    const d = new Date(Date.now() + (cfg.max_days_ahead ?? 7) * 86_400_000);
     d.setMinutes(d.getMinutes() - d.getTimezoneOffset());
     return d.toISOString().slice(0, 16);
   };
@@ -106,39 +140,58 @@ function BookForm({ cfg, cityId, userId, onBooked }: { cfg: HelperConfig; cityId
     if (!addressId) { toast('Choose your address'); return; }
     if (desc.trim().length < 5) { toast('Please describe the task'); return; }
     if (later && !when) { toast('Choose the time'); return; }
+    if (cat.photo_required && photos.length === 0) { toast('Please add a photo'); return; }
+    if (cfg.require_rules_ack !== false && !ack) { toast('Please accept what the helper does and does not do'); return; }
     setBusy(true);
     try {
       const b = await createHelperBooking({
-        cityId, addressId, taskType, description: desc.trim(), photoPaths: photos.map((p) => p.path), minutes,
-        requestedFor: later ? new Date(when).toISOString() : null,
+        cityId, addressId, categoryId: cat.id, description: desc.trim(), photoPaths: photos.map((p) => p.path), minutes,
+        requestedFor: later ? new Date(when).toISOString() : null, paymentMethod: mode === 'both' ? pay : mode, rulesAccepted: ack,
       });
       toast('Request sent. We are finding a helper.');
       onBooked(b);
     } catch (e) { toast(errorMessage(e, 'Could not book')); } finally { setBusy(false); }
   };
 
+  const RuleList = ({ title, items, good }: { title: string; items: HelperCategory['dos']; good: boolean }) => items.length === 0 ? null : (
+    <div className="stack">
+      <strong style={{ color: good ? '#047857' : '#be123c' }}>{good ? '✓ ' : '✕ '}{title}</strong>
+      {items.map((r, i) => (
+        <div key={i} className="row gap-8" style={{ alignItems: 'center' }}>
+          {r.image_url ? <img src={r.image_url} alt="" style={{ width: 56, height: 56, objectFit: 'cover', borderRadius: 10, flexShrink: 0 }} /> : null}
+          <span className="small">{r.text}</span>
+        </div>
+      ))}
+    </div>
+  );
+
   return (
     <>
+      <button className="btn btn-outline" onClick={() => setCat(null)}>← All services</button>
+      <div className="card pad stack">
+        <div className="row gap-8" style={{ alignItems: 'center' }}>
+          {cat.image_url ? <img src={cat.image_url} alt="" style={{ width: 72, height: 72, objectFit: 'cover', borderRadius: 12 }} /> : null}
+          <span className="stack" style={{ gap: 2 }}><strong>{cat.name}</strong>{cat.description && <span className="muted small">{cat.description}</span>}</span>
+        </div>
+        <RuleList title="The helper does" items={cat.dos} good />
+        <RuleList title="The helper does not" items={cat.donts} good={false} />
+      </div>
+
       <div className="card pad stack">
         <strong>How long do you need a helper?</strong>
         <div className="row gap-8" style={{ flexWrap: 'wrap' }}>
-          {durations.map((d) => (
+          {cat.durations.map((d) => (
             <button key={d} className={`btn ${minutes === d ? 'btn-primary' : 'btn-outline'}`} onClick={() => setMinutes(d)}>
-              {d} min · {rupees(cfg.prices?.[String(d)] ?? (cfg.rate_per_30 ?? 0) * d / 30)}
+              {d} min · {rupees(cat.prices[String(d)] ?? cat.rate_per_30 * d / 30)}
             </button>
           ))}
         </div>
       </div>
 
       <div className="card pad stack">
-        <strong>What do you need help with?</strong>
-        <div className="row gap-8" style={{ flexWrap: 'wrap' }}>
-          {(cfg.task_types ?? []).map((t) => (
-            <button key={t} className={`btn ${taskType === t ? 'btn-primary' : 'btn-outline'}`} onClick={() => setTaskType(t)}>{t}</button>
-          ))}
-        </div>
+        <strong>Describe the task</strong>
         <textarea className="input" rows={4} maxLength={600} value={desc} onChange={(e) => setDesc(e.target.value)}
-          placeholder="Describe the task, e.g. Stand in the queue at the bank and keep my token" />
+          placeholder={cat.task_placeholder || 'Describe what you need, e.g. place, what to do, anything the helper should know'} />
         <span className="muted small">{desc.length}/600</span>
         {maxPhotos > 0 && (
           <div>
@@ -157,10 +210,9 @@ function BookForm({ cfg, cityId, userId, onBooked }: { cfg: HelperConfig; cityId
                 </button>
               )}
             </div>
-            <p className="muted small">Optional. Only you, your helper and Sndmart can see these.</p>
+            <p className="muted small">{cat.photo_required ? 'A photo is required.' : 'Optional.'} Only you, your helper and Sndmart can see these.</p>
           </div>
         )}
-        {cfg.banned_note && <p className="muted small">{cfg.banned_note}</p>}
       </div>
 
       <div className="card pad stack">
@@ -180,15 +232,35 @@ function BookForm({ cfg, cityId, userId, onBooked }: { cfg: HelperConfig; cityId
           <button className={`btn ${!later ? 'btn-primary' : 'btn-outline'}`} onClick={() => setLater(false)}>As soon as possible</button>
           <button className={`btn ${later ? 'btn-primary' : 'btn-outline'}`} onClick={() => setLater(true)}>Choose time</button>
         </div>
-        {later && <input className="input" type="datetime-local" min={minWhen()} value={when} onChange={(e) => setWhen(e.target.value)} />}
+        {later && <input className="input" type="datetime-local" min={minWhen()} max={maxWhen()} value={when} onChange={(e) => setWhen(e.target.value)} />}
       </div>
 
       <div className="card pad stack">
+        <strong>How will you pay?</strong>
+        {mode === 'both' ? (
+          <div className="row gap-8">
+            <button className={`btn ${pay === 'upi' ? 'btn-primary' : 'btn-outline'}`} onClick={() => setPay('upi')}>UPI</button>
+            <button className={`btn ${pay === 'cash' ? 'btn-primary' : 'btn-outline'}`} onClick={() => setPay('cash')}>Cash</button>
+          </div>
+        ) : <span>{mode === 'upi' ? 'UPI' : 'Cash'} only</span>}
+        <p className="muted small">Pay your helper directly after the work is done{(mode === 'upi' || (mode === 'both' && pay === 'upi')) ? ' (scan the helper’s UPI or pay to their number)' : ''}.</p>
+      </div>
+
+      {cfg.terms_text && <div className="card pad"><p className="muted small" style={{ whiteSpace: 'pre-wrap' }}>{cfg.terms_text}</p></div>}
+      {cfg.banned_note && <p className="muted small">{cfg.banned_note}</p>}
+
+      <div className="card pad stack">
+        {cfg.require_rules_ack !== false && (
+          <label className="row gap-8" style={{ alignItems: 'flex-start' }}>
+            <input type="checkbox" checked={ack} onChange={(e) => setAck(e.target.checked)} />
+            <span className="small">I have read what the helper does and does not do.</span>
+          </label>
+        )}
         <div className="row between"><strong>Total</strong><strong>{rupees(price, 0)}</strong></div>
-        <p className="muted small">Pay your helper in cash or UPI after the work is done. {minutes} minutes of work. Prices are set for your city.</p>
         <button className="btn btn-primary btn-lg" disabled={busy || uploading} onClick={submit}>
           {busy ? <Spinner size={16} /> : `Book helper · ${rupees(price, 0)}`}
         </button>
+        {cfg.support_phone && <p className="muted small">Need help? <a href={`tel:${cfg.support_phone}`}>{cfg.support_phone}</a></p>}
       </div>
 
       {showAdd && (
@@ -274,7 +346,7 @@ function BookingDetail({ id, onBack }: { id: string; onBack: () => void }) {
       <button className="btn btn-outline" onClick={onBack}>All bookings</button>
       <div className="card pad stack">
         <div className="row between"><strong>{b.booking_number}</strong><strong>{STATUS_LABEL[b.status]}</strong></div>
-        <span>{b.task_type} · {b.duration_minutes} min · {rupees(b.price_total, 0)}</span>
+        <span>{b.task_type} · {b.duration_minutes} min · {rupees(b.price_total, 0)} · pay by {b.payment_method === 'upi' ? 'UPI' : 'cash'}</span>
         <p>{b.task_description}</p>
         <span className="muted small"><MapPin size={12} /> {b.address_line}</span>
         {photoUrls.length > 0 && (
@@ -309,7 +381,7 @@ function BookingDetail({ id, onBack }: { id: string; onBack: () => void }) {
       {b.status === 'completed' && (
         <div className="card pad stack">
           <div className="row gap-8"><CheckCircle2 size={18} /><strong>Work completed</strong></div>
-          <span>Please pay {rupees(b.price_total, 0)} to your helper (cash or UPI).</span>
+          <span>Please pay {rupees(b.price_total, 0)} to your helper ({b.payment_method === 'upi' ? 'UPI' : 'cash'}).</span>
           {b.rating ? (
             <span className="muted small">You rated {b.rating}/5{b.review ? ` · ${b.review}` : ''}</span>
           ) : (

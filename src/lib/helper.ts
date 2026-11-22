@@ -2,15 +2,41 @@
 // this file only calls it.
 import { supabase } from './supabase';
 
+export interface HelperRuleItem { text: string; text_kn?: string | null; image_url?: string | null }
+
+export interface HelperCategory {
+  id: string;
+  name: string;
+  name_kn?: string | null;
+  description: string;
+  description_kn?: string | null;
+  image_url?: string | null;
+  photos_allowed: boolean;
+  photo_required: boolean;
+  task_placeholder: string;
+  rate_per_30: number;
+  durations: number[];
+  /** minutes -> price */
+  prices: Record<string, number>;
+  dos: HelperRuleItem[];
+  donts: HelperRuleItem[];
+}
+
+export type HelperPayMode = 'upi' | 'cash' | 'both';
+
 export interface HelperConfig {
   enabled: boolean;
   rate_per_30?: number;
   durations?: number[];
   max_photos?: number;
-  task_types?: string[];
   banned_note?: string;
-  /** minutes -> price */
-  prices?: Record<string, number>;
+  terms_text?: string;
+  support_phone?: string;
+  payment_mode?: HelperPayMode;
+  min_lead_minutes?: number;
+  max_days_ahead?: number;
+  require_rules_ack?: boolean;
+  categories?: HelperCategory[];
 }
 
 export type HelperStatus = 'requested' | 'accepted' | 'on_the_way' | 'started' | 'completed' | 'cancelled' | 'expired';
@@ -68,11 +94,13 @@ export async function getHelperConfig(cityId: string | null | undefined, force =
 }
 
 export async function createHelperBooking(p: {
-  cityId: string; addressId: string; taskType: string; description: string; photoPaths: string[]; minutes: number; requestedFor: string | null;
+  cityId: string; addressId: string; categoryId: string; description: string; photoPaths: string[]; minutes: number; requestedFor: string | null;
+  paymentMethod: 'upi' | 'cash'; rulesAccepted: boolean;
 }): Promise<HelperBooking> {
   const { data, error } = await supabase.rpc('helper_create_booking', {
-    p_city_id: p.cityId, p_address_id: p.addressId, p_task_type: p.taskType, p_description: p.description,
+    p_city_id: p.cityId, p_address_id: p.addressId, p_category_id: p.categoryId, p_description: p.description,
     p_photo_paths: p.photoPaths, p_minutes: p.minutes, p_requested_for: p.requestedFor,
+    p_payment_method: p.paymentMethod, p_rules_accepted: p.rulesAccepted,
   });
   if (error) throw new Error(error.message);
   return data as HelperBooking;
