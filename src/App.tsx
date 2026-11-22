@@ -44,6 +44,9 @@ const ProfilePage = lazy(() => import('./pages/ProfilePage'));
 const NotificationsPage = lazy(() => import('./pages/NotificationsPage'));
 const WalletPage = lazy(() => import('./pages/WalletPage'));
 const TiffinPage = lazy(() => import('./pages/TiffinPage'));
+const StoresPage = lazy(() => import('./pages/stores/StoresPage'));
+const StoreCategoryPage = lazy(() => import('./pages/stores/StoreCategoryPage'));
+const StorePage = lazy(() => import('./pages/stores/StorePage'));
 const ReferEarnPage = lazy(() => import('./pages/ReferEarnPage'));
 const AgentCodePage = lazy(() => import('./pages/AgentCodePage'));
 const MyReviewsPage = lazy(() => import('./pages/MyReviewsPage'));
@@ -313,6 +316,7 @@ export default function App() {
             <Route path="/cart" element={<CartPage />} />
             <Route path="/orders" element={<OrdersPage />} />
             <Route path="/profile" element={<ProfilePage />} />
+            <Route path="/stores" element={<StoresPage />} />
           </Route>
           <Route
             element={
@@ -327,6 +331,8 @@ export default function App() {
             <Route path="/notifications" element={<NotificationsPage />} />
             <Route path="/wallet" element={<WalletPage />} />
             <Route path="/tiffin" element={<TiffinPage />} />
+            <Route path="/stores/c/:categoryId" element={<StoreCategoryPage />} />
+            <Route path="/stores/s/:storeId" element={<StorePage />} />
             <Route path="/refer" element={<ReferEarnPage />} />
             <Route path="/agent-code" element={<AgentCodePage />} />
             <Route path="/reviews" element={<MyReviewsPage />} />

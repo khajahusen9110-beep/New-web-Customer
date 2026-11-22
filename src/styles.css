@@ -1192,3 +1192,35 @@ h3, .section-title { letter-spacing: -0.015em; }
 /* WhatsApp offers tick box (checkout, My Account) */
 .offers-check { display: flex; align-items: flex-start; gap: 10px; padding: 8px 2px 10px; cursor: pointer; }
 .offers-check input { width: 20px; height: 20px; margin-top: 2px; accent-color: var(--primary); flex-shrink: 0; }
+
+/* ---- Stores (new, only shown where the City Admin switched Stores on) ---- */
+.mode-toggle.four button { font-size: 11.5px; padding: 10px 2px; white-space: nowrap; }
+.section-title { font-size: 16px; font-weight: 800; margin: 4px 0 0; }
+.stores-grid { display: grid; grid-template-columns: repeat(2, 1fr); gap: 10px; }
+@media (min-width: 560px) { .stores-grid { grid-template-columns: repeat(3, 1fr); } }
+.store-cat-card { display: flex; flex-direction: column; align-items: flex-start; gap: 2px; padding: 12px; border-radius: 16px; background: var(--surface); border: 1px solid var(--outline-soft); text-align: left; }
+.store-cat-card:hover { background: var(--surface-variant); }
+.store-cat-card img, .store-cat-initial { width: 100%; height: 72px; border-radius: 12px; object-fit: cover; margin-bottom: 6px; background: var(--primary-container); }
+.store-cat-initial { display: grid; place-items: center; font-size: 28px; font-weight: 800; color: var(--primary); }
+.store-card { display: flex; align-items: center; gap: 12px; width: 100%; padding: 12px 14px; border-radius: 16px; background: var(--surface); border: 1px solid var(--outline-soft); text-align: left; }
+.store-card:hover { background: var(--surface-variant); }
+.store-card.closed { opacity: 0.6; }
+.store-card.pinned { background: var(--primary-container); border-color: color-mix(in srgb, var(--primary) 35%, white); }
+.store-card-logo { width: 56px; height: 56px; flex: none; border-radius: 14px; overflow: hidden; display: grid; place-items: center; background: var(--primary-container); color: var(--primary); }
+.store-card-logo img { width: 100%; height: 100%; object-fit: cover; }
+.store-badges { display: flex; gap: 6px; margin-top: 4px; }
+.nearest-badge, .open-badge, .closed-badge { display: inline-block; font-size: 10.5px; font-weight: 800; padding: 2px 8px; border-radius: 999px; }
+.nearest-badge { background: #fff3d6; color: #9a5b00; }
+.open-badge { background: #dcfce7; color: #166534; }
+.closed-badge { background: #fee2e2; color: #991b1b; }
+.sort-chips { display: flex; gap: 8px; overflow-x: auto; padding-bottom: 2px; }
+.sort-chips button { flex: none; padding: 7px 14px; border-radius: 999px; font-size: 13px; font-weight: 700; background: var(--surface-variant); color: var(--text-2); }
+.sort-chips button.active { background: var(--primary); color: #fff; }
+.store-product-row { display: flex; align-items: center; gap: 12px; width: 100%; padding: 10px 12px; border-radius: 14px; background: var(--surface); border: 1px solid var(--outline-soft); text-align: left; }
+.store-product-row.out { opacity: 0.55; }
+.store-product-img { width: 56px; height: 56px; flex: none; border-radius: 12px; overflow: hidden; display: grid; place-items: center; background: var(--surface-variant); color: var(--muted); }
+.store-product-img img { width: 100%; height: 100%; object-fit: cover; }
+.store-product-price { font-weight: 800; text-align: right; }
+.store-banner { width: 100%; max-height: 180px; object-fit: cover; border-radius: 16px; }
+.store-meta { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; }
+.store-meta .block { flex-basis: 100%; }

@@ -118,6 +118,7 @@ import { shouldShowRatingPopup, useSession } from '../store/session';
 import { cartCount, useCart } from '../store/cart';
 import { trackEvent } from '../lib/analytics';
 import { getTiffinConfig } from '../lib/tiffin';
+import { getStoresConfig, type StoresConfig } from '../lib/stores';
 import { useBannerImages } from '../lib/theme';
 
 const GROCERY_PAGE = 30;
@@ -886,6 +887,22 @@ export default function HomePage() {
       cancelled = true;
     };
   }, [cityId]);
+  // Stores: only where the City Admin switched it on (off = the app is exactly as before).
+  const [storesCfg, setStoresCfg] = useState<StoresConfig | null>(null);
+  useEffect(() => {
+    if (!cityId) return;
+    let cancelled = false;
+    getStoresConfig(cityId).then((c) => !cancelled && setStoresCfg(c));
+    return () => {
+      cancelled = true;
+    };
+  }, [cityId]);
+  const storesOn = storesCfg?.stores_enabled === true;
+  const storesReplaceGrocery = storesOn && storesCfg?.replace_grocery === true;
+  // The Groceries tab is replaced by Stores: opening the app lands on Stores (an explicit ?mode=... still wins).
+  useEffect(() => {
+    if (storesReplaceGrocery && !modeParam && serviceMode !== 'food_only') navigate('/stores', { replace: true });
+  }, [storesReplaceGrocery, modeParam, serviceMode, navigate]);
   const [topHotels, setTopHotels] = useState<TopHotelEntry[]>([]);
   const [recentGrocery, setRecentGrocery] = useState<ResolvedProduct[]>([]);
   const [recentFood, setRecentFood] = useState<ResolvedProduct[]>([]);
@@ -1497,23 +1514,28 @@ export default function HomePage() {
             </button>
           )}
         </div>
-        <div className={`mode-toggle${tiffinOn ? ' three' : ''}`}>
-          <button
-            className={!isHotels ? 'active' : ''}
-            disabled={serviceMode === 'food_only'}
-            onClick={() => setMode('grocery')}
-          >
-            {tiffinOn ? 'Groceries' : <>Fresh Groceries &amp; Fruits</>}
-            {serviceMode === 'food_only' && <span className="soon-badge">Coming Soon</span>}
-          </button>
+        <div className={`mode-toggle${tiffinOn && storesOn && !storesReplaceGrocery ? ' four' : tiffinOn || storesOn ? ' three' : ''}`}>
+          {storesReplaceGrocery ? (
+            <button onClick={() => navigate('/stores')}>Stores</button>
+          ) : (
+            <button
+              className={!isHotels ? 'active' : ''}
+              disabled={serviceMode === 'food_only'}
+              onClick={() => setMode('grocery')}
+            >
+              {tiffinOn || storesOn ? 'Groceries' : <>Fresh Groceries &amp; Fruits</>}
+              {serviceMode === 'food_only' && <span className="soon-badge">Coming Soon</span>}
+            </button>
+          )}
           <button
             className={isHotels ? 'active' : ''}
             disabled={serviceMode === 'grocery_only'}
             onClick={() => setMode('hotels')}
           >
-            {tiffinOn ? 'Hotel Food' : <>Hotel Food &amp; Dining</>}
+            {tiffinOn || storesOn ? 'Hotel Food' : <>Hotel Food &amp; Dining</>}
             {serviceMode === 'grocery_only' && <span className="soon-badge">Coming Soon</span>}
           </button>
+          {storesOn && !storesReplaceGrocery && <button onClick={() => navigate('/stores')}>Stores</button>}
           {tiffinOn && <button onClick={() => navigate('/tiffin')}>Tiffin Pickup</button>}
         </div>
       </div>
