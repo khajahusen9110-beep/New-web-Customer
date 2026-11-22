@@ -2145,6 +2145,8 @@ export async function placeOrder(p: {
   cookingInstructions?: string | null;
   /** Delivery instructions for the delivery partner (e.g. "gate pe call karein"). */
   deliveryInstructions?: string | null;
+  /** Shops only (Stores): Express or Scheduled delivery. Ignored for Food and Grocery. */
+  storeDelivery?: { type: 'express' | 'scheduled'; scheduledFor: string | null } | null;
 }): Promise<Order> {
   const { groceryCart, hotelCart } = useCart.getState();
   const raw = (p.items ?? (p.isHotel ? hotelCart : groceryCart)).filter((i) => i.quantity > 0);
@@ -2180,9 +2182,12 @@ export async function placeOrder(p: {
   }
   // v2 = the same checkout plus coupons with wallet cashback and paying part from the wallet.
   // A local shop (Stores) has its own checkout on the server (open hours, radius, category commission, cash limit).
-  const fn = p.isHotel
-    ? (await isStoreVendor(args.p_vendor_id as string)) ? 'checkout_store_order_v2' : 'checkout_food_order_v2'
-    : 'checkout_grocery_order_v2';
+  const store = p.isHotel && (await isStoreVendor(args.p_vendor_id as string));
+  const fn = p.isHotel ? (store ? 'checkout_store_order_v2' : 'checkout_food_order_v2') : 'checkout_grocery_order_v2';
+  if (store && p.storeDelivery) {
+    args.p_delivery_type = p.storeDelivery.type;
+    args.p_scheduled_for = p.storeDelivery.type === 'scheduled' ? p.storeDelivery.scheduledFor : null;
+  }
 
   // One retry for transient network errors only; DB/validation errors are final.
   let lastErr: unknown = null;

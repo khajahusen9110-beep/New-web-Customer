@@ -14,7 +14,20 @@ export interface StoreCategory {
   template: string;
   store_count: number;
 }
+export interface StoreDeliveryCfg {
+  express_enabled: boolean;
+  express_extra_fee: number;
+  scheduled_enabled: boolean;
+  scheduled_discount: number;
+  slot_first_hour: number;
+  slot_last_hour: number;
+  slot_minutes: number;
+  lead_minutes: number;
+  max_days: number;
+}
 export interface StoresConfig {
+  /** Express / Scheduled options of the city (older servers send none: Express only) */
+  delivery?: StoreDeliveryCfg;
   stores_enabled: boolean;
   /** true: the old Groceries tab is replaced by Stores (which starts with the "SND Mart Store" card) */
   replace_grocery: boolean;
@@ -99,6 +112,7 @@ export async function getStoresConfig(cityId: string | null | undefined, force =
       replace_grocery: d.replace_grocery === true,
       radius_km: Number(d.radius_km) || 5,
       categories: Array.isArray(d.categories) ? (d.categories as StoreCategory[]) : [],
+      delivery: d.delivery,
     };
     cfgCache.set(cityId, { at: Date.now(), v });
     return v;
@@ -169,3 +183,33 @@ export async function getCustomerLocation(userId: string | null): Promise<Loc | 
 }
 
 export const kmLabel = (km: number | null) => (km == null ? '' : km < 1 ? `${Math.round(km * 1000)} m` : `${km.toFixed(1)} km`);
+
+// ---- Express / Scheduled delivery -------------------------------------------------------------------------------
+export interface StoreSlot { startIso: string; label: string }
+export interface StoreSlotDay { key: string; label: string; slots: StoreSlot[] }
+const IST_MS = 5.5 * 3600_000;
+const pad2 = (n: number) => String(n).padStart(2, '0');
+const hm = (mins: number) => {
+  const h = Math.floor(mins / 60) % 24;
+  const m = mins % 60;
+  return `${h % 12 === 0 ? 12 : h % 12}${m ? ':' + pad2(m) : ''} ${h < 12 ? 'AM' : 'PM'}`;
+};
+
+/** Day + time windows the customer can pick (India time). The server checks the same rules again. */
+export function buildStoreSlots(cfg: StoreDeliveryCfg, now: number = Date.now()): StoreSlotDay[] {
+  const out: StoreSlotDay[] = [];
+  const ist = new Date(now + IST_MS);
+  for (let d = 0; d <= cfg.max_days; d++) {
+    const day = new Date(Date.UTC(ist.getUTCFullYear(), ist.getUTCMonth(), ist.getUTCDate() + d));
+    const slots: StoreSlot[] = [];
+    for (let m = cfg.slot_first_hour * 60; m + cfg.slot_minutes <= cfg.slot_last_hour * 60; m += cfg.slot_minutes) {
+      const startMs = Date.UTC(day.getUTCFullYear(), day.getUTCMonth(), day.getUTCDate(), 0, m) - IST_MS;
+      if (startMs < now + cfg.lead_minutes * 60_000) continue;
+      slots.push({ startIso: new Date(startMs).toISOString(), label: `${hm(m)} - ${hm(m + cfg.slot_minutes)}` });
+    }
+    if (!slots.length) continue;
+    const label = d === 0 ? 'Today' : d === 1 ? 'Tomorrow' : day.toLocaleDateString('en-IN', { weekday: 'short', day: 'numeric', month: 'short', timeZone: 'UTC' });
+    out.push({ key: `${day.getUTCFullYear()}-${pad2(day.getUTCMonth() + 1)}-${pad2(day.getUTCDate())}`, label, slots });
+  }
+  return out;
+}

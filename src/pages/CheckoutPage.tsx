@@ -38,6 +38,9 @@ import {
   slotIsFreeEligible,
 } from '../lib/utils';
 import { useSession } from '../store/session';
+import { isStoreVendor } from '../lib/storeVendor';
+import { getStoresConfig, type StoreDeliveryCfg } from '../lib/stores';
+import { StoreDeliveryPicker, type StoreDeliveryChoice } from './stores/StoreDeliveryPicker';
 import { useCart } from '../store/cart';
 import { trackEvent } from '../lib/analytics';
 
@@ -137,6 +140,25 @@ export default function CheckoutPage() {
   const hotelVendorId = isHotel
     ? hotelCart.find((i) => i.vendor_id)?.vendor_id ?? fresh.find((i) => i.product.vendorId)?.product.vendorId ?? null
     : null;
+
+  // Shops (Stores): Express or Scheduled delivery. Food and Grocery never enter this.
+  const [isStore, setIsStore] = useState(false);
+  const [storeCfg, setStoreCfg] = useState<StoreDeliveryCfg | null>(null);
+  const [storeChoice, setStoreChoice] = useState<StoreDeliveryChoice>({ type: 'express', scheduledFor: null });
+  useEffect(() => {
+    let off = false;
+    if (!isHotel || !hotelVendorId) { setIsStore(false); return; }
+    void (async () => {
+      if (!(await isStoreVendor(hotelVendorId))) { if (!off) setIsStore(false); return; }
+      const c = await getStoresConfig(cityId);
+      if (off) return;
+      const d: StoreDeliveryCfg = c.delivery ?? { express_enabled: true, express_extra_fee: 0, scheduled_enabled: false, scheduled_discount: 0, slot_first_hour: 8, slot_last_hour: 21, slot_minutes: 120, lead_minutes: 120, max_days: 2 };
+      setStoreCfg(d);
+      setStoreChoice(d.express_enabled ? { type: 'express', scheduledFor: null } : { type: 'scheduled', scheduledFor: null });
+      setIsStore(true);
+    })();
+    return () => { off = true; };
+  }, [isHotel, hotelVendorId, cityId]);
 
   const loadAddresses = useCallback(
     async (selectId?: string | null) => {
@@ -256,7 +278,10 @@ export default function CheckoutPage() {
   const matchedSlot = slots.find((s) => s.id === slotId) ?? slots[0] ?? null;
   const expressCalc = express ? expressCharge(express, distance, subtotal) : { fee: 0, isFree: false };
 
-  const deliveryFee: number | null = !deliveryAvailable
+  const storeAdj = isStore && storeCfg ? (storeChoice.type === 'express' ? storeCfg.express_extra_fee : -storeCfg.scheduled_discount) : 0;
+  const deliveryFee: number | null = isStore && storeCfg
+    ? Math.max((expressCalc.fee ?? 0) + storeAdj, 0)
+    : !deliveryAvailable
     ? null
     : deliveryType === 'express' && hasExpress
       ? expressCalc.fee
@@ -265,7 +290,7 @@ export default function CheckoutPage() {
         : null;
 
   const expressMinNotMet =
-    deliveryType === 'express' && express?.min_order_amount != null && subtotal < Number(express.min_order_amount);
+    !isStore && deliveryType === 'express' && express?.min_order_amount != null && subtotal < Number(express.min_order_amount);
 
   // Promotional offer discount (Sndmart bears it; vendor is paid in full). 0 when no offer is live.
   const promoInfo = usePromoFor(isHotel ? 'food' : 'grocery');
@@ -378,7 +403,8 @@ export default function CheckoutPage() {
     }
     if (!addressId) return toast('Please select or add a delivery address');
     if (!cityId) return toast('Please select a serviceable city');
-    if (!deliveryAvailable) return toast("Delivery isn't currently available in your area");
+    if (isStore && storeChoice.type === 'scheduled' && !storeChoice.scheduledFor) return toast('Please pick a delivery time window');
+    if (!isStore && !deliveryAvailable) return toast("Delivery isn't currently available in your area");
     if (expressMinNotMet) return toast(`Minimum order ${rupees(express?.min_order_amount)} required for Express Delivery`);
 
     setPlacing(true);
@@ -398,6 +424,7 @@ export default function CheckoutPage() {
         useWallet: walletApplied > 0,
         cookingInstructions,
         deliveryInstructions,
+        storeDelivery: isStore ? storeChoice : null,
       });
       void saveOffersChoice(offersOn, 'checkout_web');
       // Fired only here — after the server has genuinely created the order row — never on the
@@ -540,7 +567,12 @@ export default function CheckoutPage() {
             )}
           </section>
 
+          {isStore && storeCfg && (
+            <StoreDeliveryPicker cfg={storeCfg} shopOpen={true} value={storeChoice} onChange={setStoreChoice} />
+          )}
+
           {/* Delivery option */}
+          {!isStore && (
           <section className="card pad">
             <div className="row between">
               <h3>Delivery Option</h3>
@@ -651,6 +683,7 @@ export default function CheckoutPage() {
               </div>
             )}
           </section>
+          )}
 
           {/* Coupon */}
           <section className="card pad">
