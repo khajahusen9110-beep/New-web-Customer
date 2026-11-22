@@ -164,6 +164,9 @@ export interface CartItem {
   vendor_id?: string | null;
   city_id?: string | null;
   quantity: number;
+  /** Shops (Stores): the customer's message / photo for a made-to-order product */
+  custom_note?: string | null;
+  custom_photo_path?: string | null;
 }
 
 export interface CartItemUi {
@@ -345,6 +348,8 @@ export interface OrderItem {
   unit_price: number;
   total_price: number;
   vendor_id?: string | null;
+  custom_note?: string | null;
+  custom_photo_path?: string | null;
 }
 
 export interface OrderStatusHistory {

@@ -28,7 +28,12 @@ interface CartState {
     quantityDelta?: number;
     isHotel: boolean;
     variantId?: string | null;
+    /** Made-to-order shop products: the customer's message / photo path */
+    customNote?: string | null;
+    customPhotoPath?: string | null;
   }) => AddToCartResult;
+  /** Edit the message / photo of a line already in the cart. */
+  setCustomization: (productId: string, note: string | null, photoPath: string | null) => void;
   forceClearHotelCartAndAdd: (item: CartItem) => void;
   updateQuantity: (productId: string, isHotel: boolean, newQty: number, variantId?: string | null) => void;
   /** Removes several lines in one change (e.g. all unavailable items). */
@@ -55,6 +60,8 @@ async function writeCartToBackend(userId: string, items: CartItem[]) {
       vendor_id: i.vendor_id ?? null,
       city_id: i.city_id ?? null,
       quantity: i.quantity,
+      custom_note: i.custom_note ?? null,
+      custom_photo_path: i.custom_photo_path ?? null,
     }));
     await supabase.from('cart_items').insert(rows);
   }
@@ -117,7 +124,7 @@ export const useCart = create<CartState>()(
       pendingSync: false,
       hydrated: false,
 
-      addToCart: ({ productId, vendorId = null, cityId = null, quantityDelta = 1, isHotel, variantId = null }) => {
+      addToCart: ({ productId, vendorId = null, cityId = null, quantityDelta = 1, isHotel, variantId = null, customNote = null, customPhotoPath = null }) => {
         const userId = useSession.getState().userId ?? 'guest';
         const make = (): CartItem => ({
           id: crypto.randomUUID?.() ?? String(Date.now()),
@@ -127,6 +134,8 @@ export const useCart = create<CartState>()(
           vendor_id: isHotel ? vendorId : null,
           city_id: cityId,
           quantity: quantityDelta,
+          custom_note: customNote,
+          custom_photo_path: customPhotoPath,
         });
         if (isHotel) {
           const list = get().hotelCart;
@@ -139,7 +148,9 @@ export const useCart = create<CartState>()(
               pendingItem: make(),
             };
           }
-          set({ hotelCart: applyDelta(list, productId, variantId, quantityDelta, make) });
+          const next = applyDelta(list, productId, variantId, quantityDelta, make);
+          // adding a customised product again keeps one customisation per line: the newest message / photo wins
+          set({ hotelCart: customNote || customPhotoPath ? next.map((i) => (same(i, productId, variantId) ? { ...i, custom_note: customNote, custom_photo_path: customPhotoPath } : i)) : next });
         } else {
           set({ groceryCart: applyDelta(get().groceryCart, productId, variantId, quantityDelta, make) });
         }
@@ -148,6 +159,11 @@ export const useCart = create<CartState>()(
           trackEvent('add_to_cart', { product_id: productId, vendor_id: vendorId, is_hotel: isHotel, quantity: quantityDelta });
         }
         return { kind: 'success' };
+      },
+
+      setCustomization: (productId, note, photoPath) => {
+        set({ hotelCart: get().hotelCart.map((i) => (i.product_id === productId ? { ...i, custom_note: note, custom_photo_path: photoPath } : i)) });
+        persistCart();
       },
 
       forceClearHotelCartAndAdd: (item) => {
@@ -195,7 +211,7 @@ export const useCart = create<CartState>()(
         if (!userId) return;
         const { data, error } = await supabase
           .from('cart_items')
-          .select('id,user_id,product_id,variant_id,vendor_id,city_id,quantity')
+          .select('id,user_id,product_id,variant_id,vendor_id,city_id,quantity,custom_note,custom_photo_path')
           .eq('user_id', userId);
         if (error || !data) return;
         const items = (data as CartItem[]).map((i) => ({ ...i, quantity: Number(i.quantity) }));

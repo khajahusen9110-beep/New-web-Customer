@@ -5,6 +5,7 @@ import { CenterSpinner, ConfirmDialog, EmptyState, ErrorCard, FloatingCartButton
 import { getStoreMenu, type StoreMenu } from '../../lib/stores';
 import { rememberStoreVendor } from '../../lib/storeVendor';
 import { cartCount, useCart } from '../../store/cart';
+import { CustomiseSheet, type CustomiseResult } from './CustomiseSheet';
 import { useSession } from '../../store/session';
 import type { CartItem } from '../../lib/types';
 
@@ -22,6 +23,9 @@ export default function StorePage() {
   const [menu, setMenu] = useState<StoreMenu | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [cat, setCat] = useState<string>('all');
+  const userId = useSession((s) => s.userId);
+  const [customising, setCustomising] = useState<StoreMenu['products'][number] | null>(null);
+  const setCustomization = useCart((s) => s.setCustomization);
 
   const load = async () => {
     setError(null);
@@ -42,6 +46,18 @@ export default function StorePage() {
   const add = (productId: string, delta: number) => {
     const r = addToCart({ productId, vendorId: storeId, cityId, quantityDelta: delta, isHotel: true });
     if (r.kind === 'hotelConflict') setConflict(r.pendingItem);
+  };
+  const addCustom = (r: CustomiseResult) => {
+    if (!customising) return;
+    const inCart = qtyOf(customising.id) > 0;
+    if (inCart) {
+      // editing a line already in the cart: only the message / photo change, the quantity stays
+      setCustomization(customising.id, r.note, r.photoPath);
+    } else {
+      const res = addToCart({ productId: customising.id, vendorId: storeId, cityId, quantityDelta: r.quantity, isHotel: true, customNote: r.note, customPhotoPath: r.photoPath });
+      if (res.kind === 'hotelConflict') { setConflict({ ...res.pendingItem, quantity: r.quantity, custom_note: r.note, custom_photo_path: r.photoPath }); }
+    }
+    setCustomising(null);
   };
   return (
     <div className="page stores-page">
@@ -74,7 +90,11 @@ export default function StorePage() {
               {rupee(p.price)}
               {p.mrp != null && p.mrp > p.price && <s className="muted small block">{rupee(p.mrp)}</s>}
               {p.is_available && s.is_open && (
-                qtyOf(p.id) > 0 ? (
+                p.is_customizable ? (
+                  <button className="store-add-btn" onClick={() => setCustomising(p)} aria-label={`Customise ${p.name}`}>
+                    {qtyOf(p.id) > 0 ? `Edit · ${qtyOf(p.id)} in cart` : 'Customise'}
+                  </button>
+                ) : qtyOf(p.id) > 0 ? (
                   <QuantityStepper quantity={qtyOf(p.id)} onIncrease={() => add(p.id, 1)} onDecrease={() => add(p.id, -1)} />
                 ) : (
                   <button className="store-add-btn" onClick={() => add(p.id, 1)} aria-label={`Add ${p.name}`}><Plus size={14} /> Add</button>
@@ -89,6 +109,15 @@ export default function StorePage() {
       <div className="floating-cart-wrap">
         <FloatingCartButton itemCount={cartCount(thisItems)} total={thisTotal} onClick={() => navigate('/checkout/hotel')} />
       </div>
+
+      <CustomiseSheet
+        product={customising}
+        userId={userId}
+        initial={customising ? (() => { const it = thisItems.find((i) => i.product_id === customising.id); return it ? { note: it.custom_note ?? null, photoPath: it.custom_photo_path ?? null, quantity: it.quantity } : undefined; })() : undefined}
+        editing={!!customising && qtyOf(customising.id) > 0}
+        onClose={() => setCustomising(null)}
+        onDone={addCustom}
+      />
 
       <ConfirmDialog
         open={!!conflict}

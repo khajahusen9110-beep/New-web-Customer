@@ -38,6 +38,7 @@ import {
   slotIsFreeEligible,
 } from '../lib/utils';
 import { useSession } from '../store/session';
+import { supabase } from '../lib/supabase';
 import { isStoreVendor } from '../lib/storeVendor';
 import { getStoresConfig, type StoreDeliveryCfg } from '../lib/stores';
 import { StoreDeliveryPicker, type StoreDeliveryChoice } from './stores/StoreDeliveryPicker';
@@ -145,6 +146,7 @@ export default function CheckoutPage() {
   const [isStore, setIsStore] = useState(false);
   const [storeCfg, setStoreCfg] = useState<StoreDeliveryCfg | null>(null);
   const [storeChoice, setStoreChoice] = useState<StoreDeliveryChoice>({ type: 'express', scheduledFor: null });
+  const [storeLeadHours, setStoreLeadHours] = useState(0);
   useEffect(() => {
     let off = false;
     if (!isHotel || !hotelVendorId) { setIsStore(false); return; }
@@ -154,7 +156,13 @@ export default function CheckoutPage() {
       if (off) return;
       const d: StoreDeliveryCfg = c.delivery ?? { express_enabled: true, express_extra_fee: 0, scheduled_enabled: false, scheduled_discount: 0, slot_first_hour: 8, slot_last_hour: 21, slot_minutes: 120, lead_minutes: 120, max_days: 2 };
       setStoreCfg(d);
-      setStoreChoice(d.express_enabled ? { type: 'express', scheduledFor: null } : { type: 'scheduled', scheduledFor: null });
+      // made-to-order products need notice: the longest one decides the earliest Scheduled time
+      const ids = hotelCart.map((i) => i.product_id);
+      const { data: lead } = ids.length ? await supabase.from('products').select('custom_lead_hours,is_customizable').in('id', ids) : { data: [] };
+      const hrs = Math.max(0, ...((lead ?? []) as { custom_lead_hours: number | null; is_customizable: boolean }[]).filter((r) => r.is_customizable).map((r) => r.custom_lead_hours ?? 0));
+      if (off) return;
+      setStoreLeadHours(hrs);
+      setStoreChoice(d.express_enabled && hrs === 0 ? { type: 'express', scheduledFor: null } : { type: 'scheduled', scheduledFor: null });
       setIsStore(true);
     })();
     return () => { off = true; };
@@ -568,7 +576,7 @@ export default function CheckoutPage() {
           </section>
 
           {isStore && storeCfg && (
-            <StoreDeliveryPicker cfg={storeCfg} shopOpen={true} value={storeChoice} onChange={setStoreChoice} />
+            <StoreDeliveryPicker cfg={storeCfg} shopOpen={true} leadHours={storeLeadHours} value={storeChoice} onChange={setStoreChoice} />
           )}
 
           {/* Delivery option */}
@@ -841,7 +849,7 @@ export default function CheckoutPage() {
               <>
                 {fresh.map((i) =>
                   i.state === 'ok' && !hotelClosed ? (
-                    <BillRow key={i.key} label={`${i.displayName} × ${i.cartItem.quantity}`} value={rupees(i.totalPrice)} />
+                    <BillRow key={i.key} label={<>{`${i.displayName} × ${i.cartItem.quantity}`}{(i.cartItem.custom_note || i.cartItem.custom_photo_path) && <span className="muted small block">{i.cartItem.custom_note ? `✏️ ${i.cartItem.custom_note}` : ''}{i.cartItem.custom_note && i.cartItem.custom_photo_path ? ' · ' : ''}{i.cartItem.custom_photo_path ? '📷 Photo added' : ''}</span>}</>} value={rupees(i.totalPrice)} />
                   ) : (
                     <BillRow
                       key={i.key}

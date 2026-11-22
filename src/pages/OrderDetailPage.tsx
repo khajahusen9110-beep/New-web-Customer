@@ -595,6 +595,9 @@ export default function OrderDetailPage() {
                 <div key={it.id ?? it.product_id} className="row between item-line">
                   <span>
                     <strong className="block">{it.product_name}</strong>
+                    {(it.custom_note || it.custom_photo_path) && (
+                      <span className="muted small block">{it.custom_note ? `✏️ ${it.custom_note}` : ''}{it.custom_note && it.custom_photo_path ? ' · ' : ''}{it.custom_photo_path ? '📷 Photo sent to the shop' : ''}</span>
+                    )}
                     <span className="muted small">
                       {it.quantity} x {rupees(it.unit_price)}
                       {it.variant_label ? ` (${it.variant_label})` : ''}

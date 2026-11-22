@@ -87,6 +87,13 @@ export interface StoreMenu {
     unit_label: string | null;
     category_id: string | null;
     is_available: boolean;
+    /** Made-to-order: the shop asks for a message and/or a photo, and may need notice */
+    is_customizable?: boolean;
+    custom_allow_note?: boolean;
+    custom_allow_photo?: boolean;
+    custom_note_label?: string | null;
+    custom_required?: boolean;
+    custom_lead_hours?: number;
   }[];
 }
 
@@ -196,15 +203,17 @@ const hm = (mins: number) => {
 };
 
 /** Day + time windows the customer can pick (India time). The server checks the same rules again. */
-export function buildStoreSlots(cfg: StoreDeliveryCfg, now: number = Date.now()): StoreSlotDay[] {
+export function buildStoreSlots(cfg: StoreDeliveryCfg, now: number = Date.now(), minLeadMinutes = 0): StoreSlotDay[] {
+  const lead = Math.max(cfg.lead_minutes, minLeadMinutes);
+  const maxDays = Math.max(cfg.max_days, Math.ceil(minLeadMinutes / 1440) + 1);
   const out: StoreSlotDay[] = [];
   const ist = new Date(now + IST_MS);
-  for (let d = 0; d <= cfg.max_days; d++) {
+  for (let d = 0; d <= maxDays; d++) {
     const day = new Date(Date.UTC(ist.getUTCFullYear(), ist.getUTCMonth(), ist.getUTCDate() + d));
     const slots: StoreSlot[] = [];
     for (let m = cfg.slot_first_hour * 60; m + cfg.slot_minutes <= cfg.slot_last_hour * 60; m += cfg.slot_minutes) {
       const startMs = Date.UTC(day.getUTCFullYear(), day.getUTCMonth(), day.getUTCDate(), 0, m) - IST_MS;
-      if (startMs < now + cfg.lead_minutes * 60_000) continue;
+      if (startMs < now + lead * 60_000) continue;
       slots.push({ startIso: new Date(startMs).toISOString(), label: `${hm(m)} - ${hm(m + cfg.slot_minutes)}` });
     }
     if (!slots.length) continue;
@@ -212,4 +221,26 @@ export function buildStoreSlots(cfg: StoreDeliveryCfg, now: number = Date.now())
     out.push({ key: `${day.getUTCFullYear()}-${pad2(day.getUTCMonth() + 1)}-${pad2(day.getUTCDate())}`, label, slots });
   }
   return out;
+}
+
+// ---- Customised (made-to-order) products ------------------------------------------------------------------------
+/** Shrinks a photo (long side 1280 px, JPEG) and stores it in the private bucket under the customer's own folder. Returns the path. */
+export async function uploadCustomPhoto(userId: string, file: File): Promise<string> {
+  const bitmap = await createImageBitmap(file);
+  const scale = Math.min(1, 1280 / Math.max(bitmap.width, bitmap.height));
+  const canvas = document.createElement('canvas');
+  canvas.width = Math.round(bitmap.width * scale);
+  canvas.height = Math.round(bitmap.height * scale);
+  canvas.getContext('2d')!.drawImage(bitmap, 0, 0, canvas.width, canvas.height);
+  const blob: Blob = await new Promise((res, rej) => canvas.toBlob((b) => (b ? res(b) : rej(new Error('Could not read the photo'))), 'image/jpeg', 0.82));
+  const path = `${userId}/${crypto.randomUUID()}.jpg`;
+  const { error } = await supabase.storage.from('custom-order-photos').upload(path, blob, { contentType: 'image/jpeg' });
+  if (error) throw new Error(error.message || 'Photo upload failed');
+  return path;
+}
+
+/** A short-lived link to show the customer their own photo again (e.g. when editing the cart). */
+export async function customPhotoUrl(path: string): Promise<string | null> {
+  const { data } = await supabase.storage.from('custom-order-photos').createSignedUrl(path, 600);
+  return data?.signedUrl ?? null;
 }

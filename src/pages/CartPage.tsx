@@ -272,6 +272,9 @@ export default function CartPage() {
                   </div>
                   <div className="grow min-w-0">
                     <strong className="ellipsis block">{it.displayName}</strong>
+                    {(it.cartItem.custom_note || it.cartItem.custom_photo_path) && (
+                      <span className="muted small block">{it.cartItem.custom_note ? `✏️ ${it.cartItem.custom_note}` : ''}{it.cartItem.custom_note && it.cartItem.custom_photo_path ? ' · ' : ''}{it.cartItem.custom_photo_path ? '📷 Photo added' : ''}</span>
+                    )}
                     {it.state === 'ok' ? (
                       <>
                         <div className="muted small">

@@ -2163,7 +2163,13 @@ export async function placeOrder(p: {
     throw new Error('Card payment is not available. Please choose UPI or Cash on Delivery.');
   }
   const paymentMethod = p.paymentMethod === 'cod' ? 'cash' : p.paymentMethod;
-  const items = raw.map((i) => ({ product_id: i.product_id, variant_id: i.variant_id ?? null, quantity: i.quantity }));
+  const items = raw.map((i) => ({
+    product_id: i.product_id,
+    variant_id: i.variant_id ?? null,
+    quantity: i.quantity,
+    // made-to-order shop products only; absent for everything else
+    ...(i.custom_note || i.custom_photo_path ? { custom_note: i.custom_note ?? null, custom_photo_path: i.custom_photo_path ?? null } : {}),
+  }));
   const args: Record<string, unknown> = {
     p_address_id: p.addressId,
     p_payment_method: paymentMethod,
@@ -2371,7 +2377,7 @@ export async function getOrderById(orderId: string): Promise<Order> {
 export async function getOrderItems(orderId: string): Promise<OrderItem[]> {
   const { data } = await supabase
     .from('order_items')
-    .select('id,order_id,product_id,variant_id,product_name,variant_label,quantity,unit_price,total_price,vendor_id')
+    .select('id,order_id,product_id,variant_id,product_name,variant_label,quantity,unit_price,total_price,vendor_id,custom_note,custom_photo_path')
     .eq('order_id', orderId);
   return ((data ?? []) as OrderItem[]).map((i) => ({ ...i, quantity: Number(i.quantity) }));
 }

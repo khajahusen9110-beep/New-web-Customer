@@ -4,15 +4,17 @@ import { buildStoreSlots, type StoreDeliveryCfg } from '../../lib/stores';
 export interface StoreDeliveryChoice { type: 'express' | 'scheduled'; scheduledFor: string | null }
 
 /** Express (as soon as possible) or Scheduled (a day + time window) for an order from a local shop. */
-export function StoreDeliveryPicker({ cfg, shopOpen, value, onChange }: {
+export function StoreDeliveryPicker({ cfg, shopOpen, leadHours = 0, value, onChange }: {
   cfg: StoreDeliveryCfg;
+  /** longest notice a made-to-order item in the cart needs (hours); 0 = none */
+  leadHours?: number;
   shopOpen: boolean;
   value: StoreDeliveryChoice;
   onChange: (v: StoreDeliveryChoice) => void;
 }) {
-  const days = useMemo(() => buildStoreSlots(cfg), [cfg]);
+  const days = useMemo(() => buildStoreSlots(cfg, Date.now(), leadHours * 60), [cfg, leadHours]);
   const [dayKey, setDayKey] = useState<string>(() => days[0]?.key ?? '');
-  const canExpress = cfg.express_enabled && shopOpen;
+  const canExpress = cfg.express_enabled && shopOpen && leadHours === 0;
   const canSchedule = cfg.scheduled_enabled && days.length > 0;
 
   // Keep the choice valid: if the current one is not possible, move to the one that is.
@@ -40,7 +42,8 @@ export function StoreDeliveryPicker({ cfg, shopOpen, value, onChange }: {
           </button>
         )}
       </div>
-      {cfg.express_enabled && !shopOpen && <p className="muted small">The shop is closed right now. Choose a scheduled time. · ಅಂಗಡಿ ಈಗ ಮುಚ್ಚಿದೆ, ಸಮಯ ಆಯ್ಕೆಮಾಡಿ.</p>}
+      {leadHours > 0 && <p className="muted small">A made-to-order item in your cart needs {leadHours} hour{leadHours > 1 ? 's' : ''} notice, so only Scheduled delivery is available. · ಆರ್ಡರ್‌ಗೆ ತಯಾರಿಸುವ ವಸ್ತು, ಸಮಯ ಆಯ್ಕೆಮಾಡಿ.</p>}
+      {leadHours === 0 && cfg.express_enabled && !shopOpen && <p className="muted small">The shop is closed right now. Choose a scheduled time. · ಅಂಗಡಿ ಈಗ ಮುಚ್ಚಿದೆ, ಸಮಯ ಆಯ್ಕೆಮಾಡಿ.</p>}
       {value.type === 'express' && canExpress && <p className="muted small">Delivered as soon as the shop packs it. · ಅಂಗಡಿ ಪ್ಯಾಕ್ ಮಾಡಿದ ತಕ್ಷಣ ಡೆಲಿವರಿ.</p>}
       {value.type === 'scheduled' && day && (
         <>
