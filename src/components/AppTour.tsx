@@ -1,14 +1,13 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { Gift, Headphones, Soup, Store } from 'lucide-react';
+import { Gift, HandHelping, Headphones, Store } from 'lucide-react';
 import { useSession } from '../store/session';
-import { getTiffinConfig, type TiffinConfig } from '../lib/tiffin';
-import { initialTiffinLang, saveTiffinLang, tt, type TiffinLang } from '../lib/tiffinI18n';
-import { rupees } from '../lib/utils';
+import { getHelperConfig } from '../lib/helper';
+import { initialTourLang, saveTourLang, tt, type TourLang } from '../lib/tourText';
 
 /**
- * First-visit tour: a few swipeable cards on what Sndmart offers, with Tiffin Pickup (when switched on for the
- * city) first and in most detail. Shown once per device; Profile > "App tour" opens it again.
+ * First-visit tour: a few swipeable cards on what Sndmart offers, with Quick Helper (when switched on for the
+ * city). Shown once per device; Profile > "App tour" opens it again.
  */
 
 const DONE_KEY = 'sndmart-tour-v1';
@@ -29,15 +28,15 @@ const markSeen = () => {
   }
 };
 
-type Slide = { key: string; Icon: typeof Store; title: string; body: string; tiffin?: 'intro' | 'trial' };
+type Slide = { key: string; Icon: typeof Store; title: string; body: string; helper?: boolean };
 
 export function AppTour() {
   const navigate = useNavigate();
   const city = useSession((s) => s.selectedCity);
   const cityId = city?.id;
   const [open, setOpen] = useState(false);
-  const [config, setConfig] = useState<TiffinConfig | null>(null);
-  const [lang, setLang] = useState<TiffinLang>(initialTiffinLang);
+  const [helperOn, setHelperOn] = useState(false);
+  const [lang, setLang] = useState<TourLang>(initialTourLang);
   const [i, setI] = useState(0);
   const askedFor = useRef<string | null>(null);
 
@@ -46,13 +45,13 @@ export function AppTour() {
       if (!cityId) return;
       if (!force && (seen() || askedFor.current === cityId)) return;
       askedFor.current = cityId;
-      let cfg: TiffinConfig | null = null;
+      let on = false;
       try {
-        cfg = await getTiffinConfig(cityId);
+        on = (await getHelperConfig(cityId)).enabled === true;
       } catch {
-        cfg = null;
+        on = false;
       }
-      setConfig(cfg?.enabled ? cfg : null);
+      setHelperOn(on);
       setI(0);
       setOpen(true);
     },
@@ -71,17 +70,10 @@ export function AppTour() {
   const touchX = useRef<number | null>(null);
   if (!open) return null;
 
-  const tx = (key: string, ...a: (string | number)[]) => tt(lang, key, ...a);
-  const days = config?.trial_days ?? 7;
-  const trialPrice = rupees(config?.trial_price ?? 9);
+  const tx = (key: string) => tt(lang, key);
   const slides: Slide[] = [
     { key: 'welcome', Icon: Store, title: tx('tourWelcomeT'), body: tx('tourWelcomeB') },
-    ...(config
-      ? ([
-          { key: 'tiffin', Icon: Soup, title: tx('tourTiffinT'), body: tx('tourTiffinB'), tiffin: 'intro' },
-          { key: 'trial', Icon: Soup, title: config.trial_enabled ? tx('tourTrialT', days, trialPrice) : tx('title'), body: config.trial_enabled ? tx('tourTrialB') : tx('heroSub'), tiffin: 'trial' },
-        ] as Slide[])
-      : []),
+    ...(helperOn ? ([{ key: 'helper', Icon: HandHelping, title: tx('tourHelperT'), body: tx('tourHelperB'), helper: true }] as Slide[]) : []),
     { key: 'wa', Icon: Headphones, title: tx('tourWaT'), body: tx('tourWaB') },
     { key: 'rewards', Icon: Gift, title: tx('tourRewardsT'), body: tx('tourRewardsB') },
   ];
@@ -94,8 +86,8 @@ export function AppTour() {
   };
   const next = () => (last ? close() : setI((n) => n + 1));
   const back = () => setI((n) => Math.max(0, n - 1));
-  const pickLang = (l: TiffinLang) => {
-    saveTiffinLang(l);
+  const pickLang = (l: TourLang) => {
+    saveTourLang(l);
     setLang(l);
   };
 
@@ -129,35 +121,22 @@ export function AppTour() {
           )}
         </div>
 
-        {slide.tiffin === 'intro' ? (
-          <img className="tour-hero" src={config?.hero_image_url || '/tiffin/hero.jpg'} alt="" />
-        ) : slide.tiffin === 'trial' ? (
-          <div className="tour-steps">
-            {['hw1', 'hw2', 'hw3', 'hw4'].map((k, n) => (
-              <div key={k}>
-                <span>{n + 1}</span>
-                {tx(k)}
-              </div>
-            ))}
-          </div>
-        ) : (
-          <div className="tour-icon">
-            <slide.Icon size={54} />
-          </div>
-        )}
+        <div className="tour-icon">
+          <slide.Icon size={54} />
+        </div>
 
         <h2 className="tour-title">{slide.title}</h2>
         <p className="tour-body">{slide.body}</p>
 
-        {slide.tiffin === 'trial' && (
+        {slide.helper && (
           <button
             className="btn btn-outline w-full"
             onClick={() => {
               close();
-              navigate('/tiffin');
+              navigate('/helper');
             }}
           >
-            {tx('tourTryTiffin')}
+            {tx('tourTryHelper')}
           </button>
         )}
 

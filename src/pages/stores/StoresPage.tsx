@@ -7,7 +7,7 @@ import {
   getCustomerLocation, getStoresConfig, kmLabel, listStores, searchStoreProducts,
   type Loc, type StoreListItem, type StoreProductHit, type StoreSort, type StoresConfig,
 } from '../../lib/stores';
-import { getTiffinConfig } from '../../lib/tiffin';
+import { getHelperConfig } from '../../lib/helper';
 import { StoreCard, StoreProductRow } from './parts';
 
 const SORTS: { key: StoreSort; label: string }[] = [
@@ -36,9 +36,9 @@ export default function StoresPage() {
   const [hits, setHits] = useState<StoreProductHit[] | null>(null);
   const [searching, setSearching] = useState(false);
 
-  const [tiffinOn, setTiffinOn] = useState(false);
+  const [helperOn, setHelperOn] = useState(false);
   useEffect(() => { void getStoresConfig(cityId).then(setCfg); }, [cityId]);
-  useEffect(() => { if (cityId) void getTiffinConfig(cityId).then((c) => setTiffinOn(c?.enabled === true)); }, [cityId]);
+  useEffect(() => { if (cityId) void getHelperConfig(cityId).then((c) => setHelperOn(c?.enabled === true)); }, [cityId]);
   useEffect(() => { void getCustomerLocation(userId).then((l) => { setLoc(l); setLocDone(true); }); }, [userId]);
 
   // Stores off for this city: nothing to show here
@@ -76,10 +76,10 @@ export default function StoresPage() {
     <div className="page stores-page">
       <PageHeader title="Stores" subtitle={city?.name} back={false} />
       <div className="content-pad narrow stack">
-        <div className={`mode-toggle${tiffinOn ? ' three' : ''}`}>
+        <div className={`mode-toggle${helperOn ? ' three' : ''}`}>
           <button className="active">Stores</button>
           <button onClick={() => navigate('/?mode=hotels')}>Hotel Food</button>
-          {tiffinOn && <button onClick={() => navigate('/tiffin')}>Tiffin Pickup</button>}
+          {helperOn && <button onClick={() => navigate('/helper')}>Quick Helper</button>}
         </div>
 
         <div className="search-bar">

@@ -117,7 +117,7 @@ import {
 import { shouldShowRatingPopup, useSession } from '../store/session';
 import { cartCount, useCart } from '../store/cart';
 import { trackEvent } from '../lib/analytics';
-import { getTiffinConfig } from '../lib/tiffin';
+import { getHelperConfig } from '../lib/helper';
 import { getStoresConfig, type StoresConfig } from '../lib/stores';
 import { useBannerImages } from '../lib/theme';
 
@@ -877,12 +877,12 @@ export default function HomePage() {
   const [topFood, setTopFood] = useState<ResolvedProduct[]>([]);
   const [budgetFood, setBudgetFood] = useState<ResolvedProduct[]>([]);
   const [foodMeta, setFoodMeta] = useState<FoodHomeMeta | null>(null);
-  // Third section: shown only where the City Admin has switched Tiffin Pickup on.
-  const [tiffinOn, setTiffinOn] = useState(false);
+  // Third section: shown only where the City Admin has switched Quick Helper on.
+  const [helperOn, setHelperOn] = useState(false);
   useEffect(() => {
     if (!cityId) return;
     let cancelled = false;
-    getTiffinConfig(cityId).then((c) => !cancelled && setTiffinOn(c?.enabled === true));
+    getHelperConfig(cityId).then((c) => !cancelled && setHelperOn(c?.enabled === true));
     return () => {
       cancelled = true;
     };
@@ -1514,7 +1514,7 @@ export default function HomePage() {
             </button>
           )}
         </div>
-        <div className={`mode-toggle${tiffinOn && storesOn && !storesReplaceGrocery ? ' four' : tiffinOn || storesOn ? ' three' : ''}`}>
+        <div className={`mode-toggle${helperOn && storesOn && !storesReplaceGrocery ? ' four' : helperOn || storesOn ? ' three' : ''}`}>
           {storesReplaceGrocery ? (
             <button onClick={() => navigate('/stores')}>Stores</button>
           ) : (
@@ -1523,7 +1523,7 @@ export default function HomePage() {
               disabled={serviceMode === 'food_only'}
               onClick={() => setMode('grocery')}
             >
-              {tiffinOn || storesOn ? 'Groceries' : <>Fresh Groceries &amp; Fruits</>}
+              {helperOn || storesOn ? 'Groceries' : <>Fresh Groceries &amp; Fruits</>}
               {serviceMode === 'food_only' && <span className="soon-badge">Coming Soon</span>}
             </button>
           )}
@@ -1532,11 +1532,11 @@ export default function HomePage() {
             disabled={serviceMode === 'grocery_only'}
             onClick={() => setMode('hotels')}
           >
-            {tiffinOn || storesOn ? 'Hotel Food' : <>Hotel Food &amp; Dining</>}
+            {helperOn || storesOn ? 'Hotel Food' : <>Hotel Food &amp; Dining</>}
             {serviceMode === 'grocery_only' && <span className="soon-badge">Coming Soon</span>}
           </button>
           {storesOn && !storesReplaceGrocery && <button onClick={() => navigate('/stores')}>Stores</button>}
-          {tiffinOn && <button onClick={() => navigate('/tiffin')}>Tiffin Pickup</button>}
+          {helperOn && <button onClick={() => navigate('/helper')}>Quick Helper</button>}
         </div>
       </div>
 

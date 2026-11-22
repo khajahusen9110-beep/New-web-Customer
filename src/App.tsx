@@ -43,7 +43,7 @@ const OrderDetailPage = lazy(() => import('./pages/OrderDetailPage'));
 const ProfilePage = lazy(() => import('./pages/ProfilePage'));
 const NotificationsPage = lazy(() => import('./pages/NotificationsPage'));
 const WalletPage = lazy(() => import('./pages/WalletPage'));
-const TiffinPage = lazy(() => import('./pages/TiffinPage'));
+const HelperPage = lazy(() => import('./pages/HelperPage'));
 const StoresPage = lazy(() => import('./pages/stores/StoresPage'));
 const StoreCategoryPage = lazy(() => import('./pages/stores/StoreCategoryPage'));
 const StorePage = lazy(() => import('./pages/stores/StorePage'));
@@ -330,7 +330,7 @@ export default function App() {
             <Route path="/orders/:orderId" element={<OrderDetailPage />} />
             <Route path="/notifications" element={<NotificationsPage />} />
             <Route path="/wallet" element={<WalletPage />} />
-            <Route path="/tiffin" element={<TiffinPage />} />
+            <Route path="/helper" element={<HelperPage />} />
             <Route path="/stores/c/:categoryId" element={<StoreCategoryPage />} />
             <Route path="/stores/s/:storeId" element={<StorePage />} />
             <Route path="/refer" element={<ReferEarnPage />} />

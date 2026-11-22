@@ -1,0 +1,121 @@
+// Quick Helper: book a nearby helper for 30 / 60 / 90 minutes. The server computes the price and enforces every rule;
+// this file only calls it.
+import { supabase } from './supabase';
+
+export interface HelperConfig {
+  enabled: boolean;
+  rate_per_30?: number;
+  durations?: number[];
+  max_photos?: number;
+  task_types?: string[];
+  banned_note?: string;
+  /** minutes -> price */
+  prices?: Record<string, number>;
+}
+
+export type HelperStatus = 'requested' | 'accepted' | 'on_the_way' | 'started' | 'completed' | 'cancelled' | 'expired';
+
+export interface HelperBooking {
+  id: string;
+  booking_number: string;
+  status: HelperStatus;
+  task_type: string;
+  task_description: string;
+  photo_paths: string[];
+  duration_minutes: number;
+  requested_for: string | null;
+  address_line: string;
+  landmark: string | null;
+  price_total: number;
+  payment_method: string;
+  payment_collected: boolean;
+  /** Shown to the customer only: the helper asks for it to start / end the work. */
+  start_otp: string | null;
+  end_otp: string | null;
+  started_at: string | null;
+  ends_at: string | null;
+  completed_at: string | null;
+  cancel_reason: string | null;
+  rating: number | null;
+  review: string | null;
+  created_at: string;
+  expires_at: string | null;
+  helper: { name: string; phone: string | null; avg_rating: number | null; total_ratings: number | null } | null;
+}
+
+export const STATUS_LABEL: Record<HelperStatus, string> = {
+  requested: 'Finding a helper',
+  accepted: 'Helper accepted',
+  on_the_way: 'Helper is on the way',
+  started: 'Work in progress',
+  completed: 'Completed',
+  cancelled: 'Cancelled',
+  expired: 'No helper available',
+};
+
+export const isActive = (s: HelperStatus) => s === 'requested' || s === 'accepted' || s === 'on_the_way' || s === 'started';
+
+const configCache = new Map<string, { at: number; cfg: HelperConfig }>();
+
+export async function getHelperConfig(cityId: string | null | undefined, force = false): Promise<HelperConfig> {
+  if (!cityId) return { enabled: false };
+  const hit = configCache.get(cityId);
+  if (!force && hit && Date.now() - hit.at < 5 * 60_000) return hit.cfg;
+  const { data, error } = await supabase.rpc('helper_get_config', { p_city_id: cityId });
+  const cfg: HelperConfig = error || !data ? { enabled: false } : (data as HelperConfig);
+  configCache.set(cityId, { at: Date.now(), cfg });
+  return cfg;
+}
+
+export async function createHelperBooking(p: {
+  cityId: string; addressId: string; taskType: string; description: string; photoPaths: string[]; minutes: number; requestedFor: string | null;
+}): Promise<HelperBooking> {
+  const { data, error } = await supabase.rpc('helper_create_booking', {
+    p_city_id: p.cityId, p_address_id: p.addressId, p_task_type: p.taskType, p_description: p.description,
+    p_photo_paths: p.photoPaths, p_minutes: p.minutes, p_requested_for: p.requestedFor,
+  });
+  if (error) throw new Error(error.message);
+  return data as HelperBooking;
+}
+
+export async function myHelperBookings(): Promise<HelperBooking[]> {
+  const { data, error } = await supabase.rpc('helper_my_bookings');
+  if (error) throw new Error(error.message);
+  return (data ?? []) as HelperBooking[];
+}
+
+export async function getHelperBooking(id: string): Promise<HelperBooking> {
+  const { data, error } = await supabase.rpc('helper_get_booking', { p_id: id });
+  if (error) throw new Error(error.message);
+  return data as HelperBooking;
+}
+
+export async function cancelHelperBooking(id: string, reason?: string): Promise<void> {
+  const { error } = await supabase.rpc('helper_cancel_booking', { p_id: id, p_reason: reason ?? null });
+  if (error) throw new Error(error.message);
+}
+
+export async function rateHelperBooking(id: string, rating: number, review: string): Promise<void> {
+  const { error } = await supabase.rpc('helper_rate_booking', { p_id: id, p_rating: rating, p_review: review || null });
+  if (error) throw new Error(error.message);
+}
+
+/** Squeezes the photo (max 1280 px) and stores it in the customer's private folder. Returns the storage path. */
+export async function uploadHelperPhoto(userId: string, file: File): Promise<string> {
+  const bitmap = await createImageBitmap(file);
+  const scale = Math.min(1, 1280 / Math.max(bitmap.width, bitmap.height));
+  const canvas = document.createElement('canvas');
+  canvas.width = Math.round(bitmap.width * scale);
+  canvas.height = Math.round(bitmap.height * scale);
+  canvas.getContext('2d')!.drawImage(bitmap, 0, 0, canvas.width, canvas.height);
+  const blob: Blob = await new Promise((res, rej) => canvas.toBlob((b) => (b ? res(b) : rej(new Error('Could not read the photo'))), 'image/jpeg', 0.82));
+  const path = `${userId}/${crypto.randomUUID()}.jpg`;
+  const { error } = await supabase.storage.from('helper-task-photos').upload(path, blob, { contentType: 'image/jpeg' });
+  if (error) throw new Error(error.message || 'Photo upload failed');
+  return path;
+}
+
+export async function helperPhotoUrl(path: string): Promise<string | null> {
+  const { data } = await supabase.storage.from('helper-task-photos').createSignedUrl(path, 600);
+  return data?.signedUrl ?? null;
+}
