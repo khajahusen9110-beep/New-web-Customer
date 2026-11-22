@@ -36,10 +36,12 @@ export interface HelperConfig {
   min_lead_minutes?: number;
   max_days_ahead?: number;
   require_rules_ack?: boolean;
+  refund_percent_after_accept?: number;
+  payment_window_minutes?: number;
   categories?: HelperCategory[];
 }
 
-export type HelperStatus = 'requested' | 'accepted' | 'on_the_way' | 'started' | 'completed' | 'cancelled' | 'expired';
+export type HelperStatus = 'pending_payment' | 'requested' | 'accepted' | 'on_the_way' | 'started' | 'completed' | 'cancelled' | 'expired';
 
 export interface HelperBooking {
   id: string;
@@ -55,6 +57,8 @@ export interface HelperBooking {
   price_total: number;
   payment_method: string;
   payment_collected: boolean;
+  payment_status: 'unpaid' | 'paid' | 'refund_due' | 'refunded';
+  refund_amount: number;
   /** Shown to the customer only: the helper asks for it to start / end the work. */
   start_otp: string | null;
   end_otp: string | null;
@@ -70,6 +74,7 @@ export interface HelperBooking {
 }
 
 export const STATUS_LABEL: Record<HelperStatus, string> = {
+  pending_payment: 'Payment pending',
   requested: 'Finding a helper',
   accepted: 'Helper accepted',
   on_the_way: 'Helper is on the way',
@@ -79,7 +84,7 @@ export const STATUS_LABEL: Record<HelperStatus, string> = {
   expired: 'No helper available',
 };
 
-export const isActive = (s: HelperStatus) => s === 'requested' || s === 'accepted' || s === 'on_the_way' || s === 'started';
+export const isActive = (s: HelperStatus) => s === 'pending_payment' || s === 'requested' || s === 'accepted' || s === 'on_the_way' || s === 'started';
 
 const configCache = new Map<string, { at: number; cfg: HelperConfig }>();
 
@@ -146,4 +151,31 @@ export async function uploadHelperPhoto(userId: string, file: File): Promise<str
 export async function helperPhotoUrl(path: string): Promise<string | null> {
   const { data } = await supabase.storage.from('helper-task-photos').createSignedUrl(path, 600);
   return data?.signedUrl ?? null;
+}
+
+async function paymentCall<T>(body: Record<string, unknown>): Promise<T> {
+  const { data, error } = await supabase.functions.invoke('helper-payment', { body });
+  if (error) {
+    // the function answers with a plain message; read it when there is one
+    let msg = 'Payment step failed. Please try again.';
+    try { const j = await (error as { context?: Response }).context?.json(); if (j?.error) msg = j.error; } catch { /* keep the default */ }
+    throw new Error(msg);
+  }
+  if (data?.error) throw new Error(data.error);
+  return data as T;
+}
+
+/** The Razorpay order for a booking that waits for its advance payment. */
+export async function createHelperPayment(bookingId: string): Promise<{ keyId: string; amount: number; currency: string; razorpayOrderId: string }> {
+  const d = await paymentCall<{ key_id: string; amount: number; currency: string; razorpay_order_id: string }>({ action: 'create', booking_id: bookingId });
+  return { keyId: d.key_id, amount: d.amount, currency: d.currency, razorpayOrderId: d.razorpay_order_id };
+}
+
+export async function verifyHelperPayment(bookingId: string, orderId: string, paymentId: string, signature: string): Promise<void> {
+  await paymentCall({ action: 'verify', booking_id: bookingId, razorpay_order_id: orderId, razorpay_payment_id: paymentId, razorpay_signature: signature });
+}
+
+/** Asks the server to check Razorpay (a payment the app never reported) and to send a refund that is due. Never throws. */
+export async function syncHelperPayment(bookingId: string): Promise<void> {
+  try { await paymentCall({ action: 'sync', booking_id: bookingId }); } catch { /* the next poll tries again */ }
 }

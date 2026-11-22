@@ -7,10 +7,29 @@ import { AddressPickerModal } from '../components/AddressPickerModal';
 import { getAddresses } from '../lib/repository';
 import type { CustomerAddress } from '../lib/types';
 import { errorMessage, rupees } from '../lib/utils';
+import { openUpiCheckout } from '../lib/razorpay';
 import {
   STATUS_LABEL, cancelHelperBooking, createHelperBooking, getHelperBooking, getHelperConfig, helperPhotoUrl, isActive,
-  myHelperBookings, rateHelperBooking, uploadHelperPhoto, type HelperBooking, type HelperCategory, type HelperConfig,
+  createHelperPayment, myHelperBookings, rateHelperBooking, syncHelperPayment, verifyHelperPayment, uploadHelperPhoto, type HelperBooking, type HelperCategory, type HelperConfig,
 } from '../lib/helper';
+
+/** Opens the in-app payment for a booking waiting for its advance. Returns true when the server confirmed it. */
+async function payForBooking(b: { id: string; booking_number: string }, phone: string | null, email: string | null): Promise<boolean> {
+  const order = await createHelperPayment(b.id);
+  const res = await openUpiCheckout({ order, orderNumber: b.booking_number, phone, email });
+  if (res.kind === 'cancelled') { toast('Payment not completed. You can pay from My bookings.'); return false; }
+  if (res.kind === 'error') { toast(res.message); return false; }
+  try {
+    await verifyHelperPayment(b.id, res.orderId, res.paymentId, res.signature);
+  } catch (e) {
+    // the money may have gone through: ask the server to check with Razorpay before telling the customer anything is wrong
+    await syncHelperPayment(b.id);
+    toast(errorMessage(e, 'We are confirming your payment. Please check My bookings in a minute.'));
+    return false;
+  }
+  toast('Payment received. We are finding a helper.');
+  return true;
+}
 
 /** Quick Helper: book a nearby helper for 30 / 60 / 90 minutes. */
 export default function HelperPage() {
@@ -148,7 +167,10 @@ function BookForm({ cfg, cityId, userId, onBooked }: { cfg: HelperConfig; cityId
         cityId, addressId, categoryId: cat.id, description: desc.trim(), photoPaths: photos.map((p) => p.path), minutes,
         requestedFor: later ? new Date(when).toISOString() : null, paymentMethod: mode === 'both' ? pay : mode, rulesAccepted: ack,
       });
-      toast('Request sent. We are finding a helper.');
+      if (b.status === 'pending_payment') {
+        const { userPhone, userEmail } = useSession.getState();
+        try { await payForBooking(b, userPhone, userEmail); } catch (e) { toast(errorMessage(e, 'Could not start payment. You can pay from My bookings.')); }
+      } else toast('Request sent. We are finding a helper.');
       onBooked(b);
     } catch (e) { toast(errorMessage(e, 'Could not book')); } finally { setBusy(false); }
   };
@@ -243,7 +265,11 @@ function BookForm({ cfg, cityId, userId, onBooked }: { cfg: HelperConfig; cityId
             <button className={`btn ${pay === 'cash' ? 'btn-primary' : 'btn-outline'}`} onClick={() => setPay('cash')}>Cash</button>
           </div>
         ) : <span>{mode === 'upi' ? 'UPI' : 'Cash'} only</span>}
-        <p className="muted small">Pay your helper directly after the work is done{(mode === 'upi' || (mode === 'both' && pay === 'upi')) ? ' (scan the helper’s UPI or pay to their number)' : ''}.</p>
+        <p className="muted small">
+          {(mode === 'upi' || (mode === 'both' && pay === 'upi'))
+            ? `You pay now, inside the app. If no helper accepts, or you cancel before the work starts, you get your money back${cfg.refund_percent_after_accept != null && cfg.refund_percent_after_accept < 100 ? ` (after a helper accepts, ${cfg.refund_percent_after_accept}% is refunded)` : ''}.`
+            : 'Pay your helper in cash after the work is done.'}
+        </p>
       </div>
 
       {cfg.terms_text && <div className="card pad"><p className="muted small" style={{ whiteSpace: 'pre-wrap' }}>{cfg.terms_text}</p></div>}
@@ -258,7 +284,7 @@ function BookForm({ cfg, cityId, userId, onBooked }: { cfg: HelperConfig; cityId
         )}
         <div className="row between"><strong>Total</strong><strong>{rupees(price, 0)}</strong></div>
         <button className="btn btn-primary btn-lg" disabled={busy || uploading} onClick={submit}>
-          {busy ? <Spinner size={16} /> : `Book helper · ${rupees(price, 0)}`}
+          {busy ? <Spinner size={16} /> : `${(mode === 'upi' || (mode === 'both' && pay === 'upi')) ? 'Pay & book' : 'Book helper'} · ${rupees(price, 0)}`}
         </button>
         {cfg.support_phone && <p className="muted small">Need help? <a href={`tel:${cfg.support_phone}`}>{cfg.support_phone}</a></p>}
       </div>
@@ -300,7 +326,15 @@ function BookingDetail({ id, onBack }: { id: string; onBack: () => void }) {
   const [left, setLeft] = useState('');
 
   const load = useCallback(async () => {
-    try { setB(await getHelperBooking(id)); setError(null); } catch (e) { setError((e as Error).message); }
+    try {
+      let x = await getHelperBooking(id);
+      // a payment the app never reported, or a refund still to be sent: let the server check, then read again
+      if ((x.status === 'pending_payment' && x.payment_status === 'unpaid') || x.payment_status === 'refund_due') {
+        await syncHelperPayment(id);
+        x = await getHelperBooking(id);
+      }
+      setB(x); setError(null);
+    } catch (e) { setError((e as Error).message); }
   }, [id]);
   useEffect(() => { void load(); }, [load]);
   // live status while the booking is open
@@ -335,6 +369,15 @@ function BookingDetail({ id, onBack }: { id: string; onBack: () => void }) {
     setBusy(true);
     try { await cancelHelperBooking(b.id); await load(); } catch (e) { toast(errorMessage(e, 'Could not cancel')); } finally { setBusy(false); }
   };
+  const payNow = async () => {
+    if (!b) return;
+    setBusy(true);
+    try {
+      const { userPhone, userEmail } = useSession.getState();
+      await payForBooking(b, userPhone, userEmail);
+      await load();
+    } catch (e) { toast(errorMessage(e, 'Could not start payment')); } finally { setBusy(false); }
+  };
   const rate = async () => {
     if (!stars) { toast('Choose a star rating'); return; }
     setBusy(true);
@@ -346,7 +389,7 @@ function BookingDetail({ id, onBack }: { id: string; onBack: () => void }) {
       <button className="btn btn-outline" onClick={onBack}>All bookings</button>
       <div className="card pad stack">
         <div className="row between"><strong>{b.booking_number}</strong><strong>{STATUS_LABEL[b.status]}</strong></div>
-        <span>{b.task_type} · {b.duration_minutes} min · {rupees(b.price_total, 0)} · pay by {b.payment_method === 'upi' ? 'UPI' : 'cash'}</span>
+        <span>{b.task_type} · {b.duration_minutes} min · {rupees(b.price_total, 0)} · {b.payment_status === 'paid' ? 'paid online' : b.payment_method === 'upi' ? 'UPI' : 'pay cash after the work'}</span>
         <p>{b.task_description}</p>
         <span className="muted small"><MapPin size={12} /> {b.address_line}</span>
         {photoUrls.length > 0 && (
@@ -356,6 +399,18 @@ function BookingDetail({ id, onBack }: { id: string; onBack: () => void }) {
         )}
       </div>
 
+      {b.status === 'pending_payment' && (
+        <div className="card pad stack">
+          <strong>Pay {rupees(b.price_total, 0)} to confirm your booking</strong>
+          <span className="muted small">Your request goes to helpers only after the payment. Pay within the time shown, or the booking lapses.</span>
+          <button className="btn btn-primary" disabled={busy} onClick={payNow}>{busy ? <Spinner size={16} /> : `Pay ${rupees(b.price_total, 0)}`}</button>
+        </div>
+      )}
+      {(b.payment_status === 'refund_due' || b.payment_status === 'refunded') && (
+        <div className="card pad">
+          {b.payment_status === 'refunded' ? `Refund of ${rupees(b.refund_amount, 0)} sent to your account.` : `Your refund of ${rupees(b.refund_amount, 0)} is on its way.`}
+        </div>
+      )}
       {b.status === 'requested' && <div className="card pad"><Spinner size={16} /> We are finding a helper near you. This can take a few minutes.</div>}
 
       {b.helper && (
@@ -381,7 +436,7 @@ function BookingDetail({ id, onBack }: { id: string; onBack: () => void }) {
       {b.status === 'completed' && (
         <div className="card pad stack">
           <div className="row gap-8"><CheckCircle2 size={18} /><strong>Work completed</strong></div>
-          <span>Please pay {rupees(b.price_total, 0)} to your helper ({b.payment_method === 'upi' ? 'UPI' : 'cash'}).</span>
+          {b.payment_status === 'paid' ? <span className="muted small">Paid online. Nothing more to pay.</span> : <span>Please pay {rupees(b.price_total, 0)} to your helper (cash).</span>}
           {b.rating ? (
             <span className="muted small">You rated {b.rating}/5{b.review ? ` · ${b.review}` : ''}</span>
           ) : (
@@ -396,7 +451,7 @@ function BookingDetail({ id, onBack }: { id: string; onBack: () => void }) {
         </div>
       )}
       {(b.status === 'cancelled' || b.status === 'expired') && <div className="card pad muted">{b.cancel_reason || STATUS_LABEL[b.status]}</div>}
-      {(b.status === 'requested' || b.status === 'accepted' || b.status === 'on_the_way') && (
+      {(b.status === 'pending_payment' || b.status === 'requested' || b.status === 'accepted' || b.status === 'on_the_way') && (
         <button className="btn btn-outline" disabled={busy} onClick={cancel}>Cancel booking</button>
       )}
     </>
