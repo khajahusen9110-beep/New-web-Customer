@@ -94,6 +94,9 @@ export interface StoreMenu {
     custom_note_label?: string | null;
     custom_required?: boolean;
     custom_lead_hours?: number;
+    /** Smallest order (default 1) and the extra charge per piece for customising */
+    min_order_qty?: number;
+    custom_extra_charge?: number;
     /** Sizes / options with their own price (empty or missing: a plain product) */
     variants?: { id: string; label: string; label_kn?: string | null; price: number; is_available: boolean }[];
   }[];

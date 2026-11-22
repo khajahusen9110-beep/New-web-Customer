@@ -42,12 +42,19 @@ export default function StorePage() {
   const thisItems = hotelCart.filter((i) => i.vendor_id === storeId);
   const lineUnit = (i: CartItem) => {
     const p = menu.products.find((x) => x.id === i.product_id);
-    return p?.variants?.find((v) => v.id === i.variant_id)?.price ?? p?.price ?? 0;
+    const extra = i.custom_note || i.custom_photo_path ? Number(p?.custom_extra_charge ?? 0) : 0;
+    return (p?.variants?.find((v) => v.id === i.variant_id)?.price ?? p?.price ?? 0) + extra;
   };
   const thisTotal = thisItems.reduce((sum, i) => sum + lineUnit(i) * i.quantity, 0);
   const qtyOf = (id: string) => thisItems.filter((i) => i.product_id === id).reduce((n, i) => n + i.quantity, 0);
   const add = (productId: string, delta: number) => {
-    const r = addToCart({ productId, vendorId: storeId, cityId, quantityDelta: delta, isHotel: true });
+    // a shop's minimum order: the first add brings the minimum, and going below it removes the line
+    const moq = Math.max(1, menu.products.find((x) => x.id === productId)?.min_order_qty ?? 1);
+    const cur = qtyOf(productId);
+    let d = delta;
+    if (delta > 0 && cur === 0) d = moq;
+    if (delta < 0 && cur > 0 && cur - 1 < moq) d = -cur;
+    const r = addToCart({ productId, vendorId: storeId, cityId, quantityDelta: d, isHotel: true });
     if (r.kind === 'hotelConflict') setConflict(r.pendingItem);
   };
   const addCustom = (r: CustomiseResult) => {
@@ -88,11 +95,17 @@ export default function StorePage() {
             <span className="grow">
               <strong className="block">{p.name}</strong>
               <span className="muted small block">{p.unit ?? ''}{p.unit && p.unit_price != null ? ' · ' : ''}{p.unit_price != null ? `${rupee(p.unit_price)}/${p.unit_label}` : ''}</span>
+              {(p.min_order_qty ?? 1) > 1 && <span className="muted small block">Minimum order {p.min_order_qty}</span>}
               {!p.is_available && <span className="closed-badge">Out of stock</span>}
             </span>
             <span className="store-product-price">
               {(p.variants ?? []).some((v) => v.is_available) ? `from ${rupee(Math.min(...(p.variants ?? []).filter((v) => v.is_available).map((v) => v.price)))}` : rupee(p.price)}
-              {p.mrp != null && p.mrp > p.price && <s className="muted small block">{rupee(p.mrp)}</s>}
+              {p.mrp != null && p.mrp > p.price && !(p.variants ?? []).some((v) => v.is_available) && (
+                <>
+                  <s className="muted small block">{rupee(p.mrp)}</s>
+                  <span className="open-badge">{Math.round(((p.mrp - p.price) * 100) / p.mrp)}% OFF</span>
+                </>
+              )}
               {p.is_available && s.is_open && (
                 p.is_customizable || (p.variants ?? []).some((v) => v.is_available) ? (
                   <button className="store-add-btn" onClick={() => setCustomising(p)} aria-label={`Choose ${p.name}`}>

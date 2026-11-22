@@ -31,7 +31,7 @@ export function CustomiseSheet({ product, userId, initial, editing, onClose, onD
     setNote(initial?.note ?? '');
     setPhotoPath(initial?.photoPath ?? null);
     setPreview(null);
-    setQty(initial?.quantity ?? 1);
+    setQty(Math.max(initial?.quantity ?? 1, product.min_order_qty ?? 1));
     const vs = (product.variants ?? []).filter((v) => v.is_available);
     setVariantId(initial?.variantId ?? (vs.length === 1 ? vs[0].id : null));
     if (initial?.photoPath) void customPhotoUrl(initial.photoPath).then(setPreview);
@@ -43,7 +43,11 @@ export function CustomiseSheet({ product, userId, initial, editing, onClose, onD
   const custom = product.is_customizable === true;
   const askNote = custom && product.custom_allow_note !== false;
   const askPhoto = custom && product.custom_allow_photo === true;
-  const unitPrice = variants.find((v) => v.id === variantId)?.price ?? product.price;
+  const moq = Math.max(1, product.min_order_qty ?? 1);
+  const extra = Number(product.custom_extra_charge ?? 0);
+  // customising (a message or a photo) costs the shop's extra charge on top, per piece
+  const customised = (askNote && note.trim().length > 0) || (askPhoto && !!photoPath);
+  const unitPrice = (variants.find((v) => v.id === variantId)?.price ?? product.price) + (customised ? extra : 0);
   const required = product.custom_required === true;
   const lead = product.custom_lead_hours ?? 0;
 
@@ -94,6 +98,8 @@ export function CustomiseSheet({ product, userId, initial, editing, onClose, onD
             </div>
           </div>
         )}
+        {moq > 1 && !editing && <p className="muted small">Minimum order: {moq}</p>}
+        {extra > 0 && custom && <p className="muted small">Customising costs ₹{extra} extra per piece{customised ? ' (added)' : ''}. · ಕಸ್ಟಮೈಸ್ ಮಾಡಲು ಪ್ರತಿ ಒಂದಕ್ಕೆ ₹{extra} ಹೆಚ್ಚು.</p>}
         {lead > 0 && <p className="muted small">Made to order · needs {lead} hour{lead > 1 ? 's' : ''} notice, so choose a Scheduled time at checkout. · ಆರ್ಡರ್‌ಗೆ ತಯಾರಿಸಲಾಗುತ್ತದೆ, {lead} ಗಂಟೆ ಮುಂಚಿತವಾಗಿ ತಿಳಿಸಿ.</p>}
         {askNote && (
           <label className="block">
@@ -122,7 +128,7 @@ export function CustomiseSheet({ product, userId, initial, editing, onClose, onD
         {!editing && (
           <div className="row between">
             <strong>Quantity</strong>
-            <QuantityStepper quantity={qty} onIncrease={() => setQty((q) => q + 1)} onDecrease={() => setQty((q) => Math.max(1, q - 1))} />
+            <QuantityStepper quantity={qty} onIncrease={() => setQty((q) => q + 1)} onDecrease={() => setQty((q) => Math.max(moq, q - 1))} />
           </div>
         )}
       </div>

@@ -79,6 +79,10 @@ export interface ProductVariant {
   id: string;
   label: string;
   is_active?: boolean;
+  /** A shop's own sizes carry their price here (grocery uses the city stock rows) */
+  price?: number | null;
+  stock_qty?: number | null;
+  is_available?: boolean;
   product_variant_city_stock?: ProductVariantCityStock[] | null;
 }
 
@@ -99,6 +103,9 @@ export interface Product {
   is_featured?: boolean | null;
   available_from?: string | null;
   available_until?: string | null;
+  /** Shops: extra charge per piece when the customer customises, and the smallest order */
+  custom_extra_charge?: number | null;
+  min_order_qty?: number | null;
   product_variants?: ProductVariant[] | null;
   /** This city's price/stock row, embedded in the product query (0 or 1 rows). */
   product_city_stock?: ProductCityStock[] | null;

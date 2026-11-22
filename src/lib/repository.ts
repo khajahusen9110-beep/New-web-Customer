@@ -966,8 +966,8 @@ const HOTEL_PRODUCT_COLS =
   CITY_STOCK_EMBED;
 // Cart lines can hold grocery and hotel items.
 const CART_PRODUCT_COLS =
-  'id,category_id,vendor_id,name,description,image_url,price,mrp,unit,stock_qty,is_available,is_active,is_featured,available_from,available_until,' +
-  'product_variants(id,label,is_active,product_variant_city_stock(price,stock_qty,is_available,is_active,city_id)),' +
+  'id,category_id,vendor_id,name,description,image_url,price,mrp,unit,stock_qty,is_available,is_active,is_featured,available_from,available_until,custom_extra_charge,min_order_qty,' +
+  'product_variants(id,label,price,stock_qty,is_available,is_active,product_variant_city_stock(price,stock_qty,is_available,is_active,city_id)),' +
   CITY_STOCK_EMBED;
 
 /** Limits the embedded stock rows to this city (variant rows: this city or city-less). */
@@ -1001,6 +1001,9 @@ function resolveVariants(prod: Product, cityId: string): ResolvedVariant[] {
         stockQty: num(row.stock_qty),
         isAvailable: row.is_available !== false && row.is_active !== false,
       });
+    } else if (prod.vendor_id && v.price != null) {
+      // A shop's own size: its price lives on the variant itself
+      out.push({ id: v.id, label: v.label, price: num(v.price), stockQty: num(v.stock_qty), isAvailable: v.is_available !== false });
     }
   }
   return out.sort((a, b) => a.price - b.price);
@@ -1727,7 +1730,9 @@ export function buildCartLines(items: CartItem[], live: Map<string, ResolvedProd
     const rp = live.get(item.product_id);
     if (!rp) continue;
     const variant = item.variant_id ? rp.variants.find((v) => v.id === item.variant_id) ?? null : null;
-    const price = variant?.price ?? rp.effectivePrice;
+    // a customised piece (message / photo) costs the shop's extra charge on top
+    const extra = item.custom_note || item.custom_photo_path ? Number(rp.base.custom_extra_charge ?? 0) : 0;
+    const price = (variant?.price ?? rp.effectivePrice) + extra;
     out.push({
       cartItem: item,
       product: rp,
