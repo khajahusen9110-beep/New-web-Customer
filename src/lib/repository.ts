@@ -1,4 +1,5 @@
 // Port of SndmartRepository.kt: the single data layer talking to Supabase.
+import { isStoreVendor } from './storeVendor';
 import { supabase } from './supabase';
 import { useSession } from '../store/session';
 import { clearCartDirectly, useCart, type AddToCartResult } from '../store/cart';
@@ -2178,7 +2179,10 @@ export async function placeOrder(p: {
     args.p_vendor_id = vendorId;
   }
   // v2 = the same checkout plus coupons with wallet cashback and paying part from the wallet.
-  const fn = p.isHotel ? 'checkout_food_order_v2' : 'checkout_grocery_order_v2';
+  // A local shop (Stores) has its own checkout on the server (open hours, radius, category commission, cash limit).
+  const fn = p.isHotel
+    ? (await isStoreVendor(args.p_vendor_id as string)) ? 'checkout_store_order_v2' : 'checkout_food_order_v2'
+    : 'checkout_grocery_order_v2';
 
   // One retry for transient network errors only; DB/validation errors are final.
   let lastErr: unknown = null;

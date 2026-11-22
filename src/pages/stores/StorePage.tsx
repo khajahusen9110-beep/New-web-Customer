@@ -1,14 +1,24 @@
 import { useEffect, useMemo, useState } from 'react';
-import { useParams } from 'react-router-dom';
-import { Clock, Store as StoreIcon } from 'lucide-react';
-import { CenterSpinner, EmptyState, ErrorCard, PageHeader } from '../../components/ui';
+import { useNavigate, useParams } from 'react-router-dom';
+import { Clock, Plus, Store as StoreIcon } from 'lucide-react';
+import { CenterSpinner, ConfirmDialog, EmptyState, ErrorCard, FloatingCartButton, PageHeader, QuantityStepper, toast } from '../../components/ui';
 import { getStoreMenu, type StoreMenu } from '../../lib/stores';
+import { rememberStoreVendor } from '../../lib/storeVendor';
+import { cartCount, useCart } from '../../store/cart';
+import { useSession } from '../../store/session';
+import type { CartItem } from '../../lib/types';
 
 const rupee = (n: number) => `₹${Number.isInteger(n) ? n : n.toFixed(2)}`;
 
-/** One shop: its details and its products by category. (Adding to a cart comes with the store checkout.) */
+/** One shop: its details, its products by category, and the cart (one shop at a time, like a hotel). */
 export default function StorePage() {
   const { storeId = '' } = useParams();
+  const navigate = useNavigate();
+  const cityId = useSession((s) => s.selectedCity?.id ?? null);
+  const hotelCart = useCart((s) => s.hotelCart);
+  const addToCart = useCart((s) => s.addToCart);
+  const forceClearHotelCartAndAdd = useCart((s) => s.forceClearHotelCartAndAdd);
+  const [conflict, setConflict] = useState<CartItem | null>(null);
   const [menu, setMenu] = useState<StoreMenu | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [cat, setCat] = useState<string>('all');
@@ -18,12 +28,21 @@ export default function StorePage() {
     try { setMenu(await getStoreMenu(storeId)); } catch (e) { setError((e as Error).message); }
   };
   useEffect(() => { void load(); /* eslint-disable-next-line react-hooks/exhaustive-deps */ }, [storeId]);
+  useEffect(() => { if (menu) rememberStoreVendor(storeId, true); }, [menu, storeId]);
 
   const shown = useMemo(() => (menu?.products ?? []).filter((p) => cat === 'all' || p.category_id === cat), [menu, cat]);
 
   if (error) return <div className="page"><PageHeader title="Shop" /><div className="content-pad narrow"><ErrorCard message={error} onRetry={() => void load()} /></div></div>;
   if (!menu) return <div className="page"><PageHeader title="Shop" /><CenterSpinner /></div>;
   const s = menu.store;
+  const thisItems = hotelCart.filter((i) => i.vendor_id === storeId);
+  const priceOf = (id: string) => menu.products.find((p) => p.id === id)?.price ?? 0;
+  const thisTotal = thisItems.reduce((sum, i) => sum + priceOf(i.product_id) * i.quantity, 0);
+  const qtyOf = (id: string) => thisItems.find((i) => i.product_id === id)?.quantity ?? 0;
+  const add = (productId: string, delta: number) => {
+    const r = addToCart({ productId, vendorId: storeId, cityId, quantityDelta: delta, isHotel: true });
+    if (r.kind === 'hotelConflict') setConflict(r.pendingItem);
+  };
   return (
     <div className="page stores-page">
       <PageHeader title={s.name} subtitle={s.category_name ?? undefined} />
@@ -54,10 +73,35 @@ export default function StorePage() {
             <span className="store-product-price">
               {rupee(p.price)}
               {p.mrp != null && p.mrp > p.price && <s className="muted small block">{rupee(p.mrp)}</s>}
+              {p.is_available && s.is_open && (
+                qtyOf(p.id) > 0 ? (
+                  <QuantityStepper quantity={qtyOf(p.id)} onIncrease={() => add(p.id, 1)} onDecrease={() => add(p.id, -1)} />
+                ) : (
+                  <button className="store-add-btn" onClick={() => add(p.id, 1)} aria-label={`Add ${p.name}`}><Plus size={14} /> Add</button>
+                )
+              )}
             </span>
           </div>
         ))}
+        {thisItems.length > 0 && <div style={{ height: 84 }} />}
       </div>
+
+      <div className="floating-cart-wrap">
+        <FloatingCartButton itemCount={cartCount(thisItems)} total={thisTotal} onClick={() => navigate('/checkout/hotel')} />
+      </div>
+
+      <ConfirmDialog
+        open={!!conflict}
+        title="Replace your cart?"
+        text={`Your cart already has items from another shop or hotel. Clear it and add from ${s.name}?`}
+        confirmLabel="Clear & Add"
+        onCancel={() => setConflict(null)}
+        onConfirm={() => {
+          forceClearHotelCartAndAdd(conflict!);
+          setConflict(null);
+          toast('Cart cleared and item added');
+        }}
+      />
     </div>
   );
 }
