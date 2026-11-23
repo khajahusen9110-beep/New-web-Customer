@@ -1239,3 +1239,6 @@ h3, .section-title { letter-spacing: -0.015em; }
 .store-cats-sticky { position: sticky; top: 0; z-index: 5; background: var(--bg, #fff); padding: 6px 0; }
 .store-hero { display: flex; gap: 12px; align-items: center; }
 .store-hero .store-card-logo { width: 64px; height: 64px; }
+/* Section colour: Grocery = green, Food = orange */
+.mode-toggle button.active:nth-child(1) { background: #dcfce7; color: #15803d; }
+.mode-toggle button.active:nth-child(2) { background: #ffedd5; color: #c2410c; }
