@@ -2,9 +2,11 @@ import { useEffect, useMemo, useState } from 'react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import { ChevronRight, MapPin, Search, Sparkles, Store as StoreIcon, X } from 'lucide-react';
 import { useSession } from '../../store/session';
-import { EmptyState, ErrorCard, ListSkeleton, PageHeader } from '../../components/ui';
+import { ConfirmDialog, EmptyState, ErrorCard, ListSkeleton, PageHeader, toast } from '../../components/ui';
+import { cartCount, useCart } from '../../store/cart';
+import type { CartItem } from '../../lib/types';
 import {
-  getCustomerLocation, getStoresConfig, listStores, searchStoreProducts,
+  getCustomerLocation, getStoreMenu, getStoresConfig, listStores, searchStoreProducts,
   type Loc, type StoreListItem, type StoreProductHit, type StoreSort, type StoresConfig,
 } from '../../lib/stores';
 import { getHelperConfig } from '../../lib/helper';
@@ -70,6 +72,28 @@ export default function StoresPage() {
     return () => { cancelled = true; };
   }, [cityId, cfg?.stores_enabled, locDone, loc?.lat, loc?.lng, q, sort]);
 
+  const hotelCart = useCart((s) => s.hotelCart);
+  const addToCart = useCart((s) => s.addToCart);
+  const forceClearHotelCartAndAdd = useCart((s) => s.forceClearHotelCartAndAdd);
+  const [addingId, setAddingId] = useState<string | null>(null);
+  const [conflict, setConflict] = useState<CartItem | null>(null);
+  const [conflictShop, setConflictShop] = useState('');
+  // "+ Add" in the search results: a plain product goes straight into the cart; sizes / customised products open on the shop page
+  const addFromSearch = async (h: StoreProductHit) => {
+    setAddingId(h.product_id);
+    try {
+      const menu = await getStoreMenu(h.store_id);
+      const p = menu.products.find((x) => x.id === h.product_id);
+      if (!p || !p.is_available) { toast('This product is not available right now'); return; }
+      if (!menu.store.is_open) { toast(`${menu.store.name} is closed now`); return; }
+      if (p.is_customizable || (p.variants ?? []).some((v) => v.is_available)) { navigate(`/stores/s/${h.store_id}?add=${h.product_id}`); return; }
+      const moq = Math.max(1, p.min_order_qty ?? 1);
+      const r = addToCart({ productId: p.id, vendorId: h.store_id, cityId, quantityDelta: moq, isHotel: true });
+      if (r.kind === 'hotelConflict') { setConflictShop(h.store_name); setConflict(r.pendingItem); return; }
+      toast(`${p.name} added`);
+    } catch (e) { toast((e as Error).message || 'Could not add'); } finally { setAddingId(null); }
+  };
+  const cartItems = hotelCart;
   const selectCat = (id: string) => setParams(id ? { c: id } : {}, { replace: true });
   const shops = useMemo(
     () => (stores ?? []).slice().sort((a, b) => Number(b.is_open) - Number(a.is_open) || (a.distance_km ?? 999) - (b.distance_km ?? 999) || a.name.localeCompare(b.name)),
@@ -126,7 +150,7 @@ export default function StoresPage() {
             </div>
             {searching && !hits && <ListSkeleton count={4} height={72} />}
             {hits && hits.length === 0 && <EmptyState icon={<Search size={36} />} title="Nothing found" text={`No open shop near you has “${q}” right now.`} />}
-            {hits && hits.map((h) => <StoreProductRow key={`${h.store_id}:${h.product_id}`} hit={h} />)}
+            {hits && hits.map((h) => <StoreProductRow key={`${h.store_id}:${h.product_id}`} hit={h} busy={addingId === h.product_id} onAdd={() => void addFromSearch(h)} />)}
           </>
         ) : (
           <>
@@ -147,7 +171,21 @@ export default function StoresPage() {
             {shops.length > 0 && <p className="muted small center">Open shops first{loc ? ' · nearest first' : ''} · within {cfg?.radius_km ?? 5} km.</p>}
           </>
         )}
+        {cartItems.length > 0 && <div style={{ height: 84 }} />}
       </div>
+      {cartItems.length > 0 && (
+        <div className="floating-cart-wrap">
+          <button className="btn btn-primary btn-lg" style={{ width: '100%' }} onClick={() => navigate('/checkout/hotel')}>View cart · {cartCount(cartItems)} item{cartCount(cartItems) === 1 ? '' : 's'}</button>
+        </div>
+      )}
+      <ConfirmDialog
+        open={!!conflict}
+        title="Replace your cart?"
+        text={`Your cart already has items from another shop or hotel. Clear it and add from ${conflictShop}?`}
+        confirmLabel="Clear & Add"
+        onCancel={() => setConflict(null)}
+        onConfirm={() => { forceClearHotelCartAndAdd(conflict!); setConflict(null); toast('Cart cleared and item added'); }}
+      />
     </div>
   );
 }

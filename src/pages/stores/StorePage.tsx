@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from 'react';
-import { useNavigate, useParams } from 'react-router-dom';
+import { useNavigate, useParams, useSearchParams } from 'react-router-dom';
 import { Clock, MapPin, Plus, Search, Sparkles, Store as StoreIcon, X } from 'lucide-react';
 import { CenterSpinner, ConfirmDialog, EmptyState, ErrorCard, FloatingCartButton, PageHeader, QuantityStepper, toast } from '../../components/ui';
 import { getStoreMenu, type StoreMenu } from '../../lib/stores';
@@ -15,6 +15,7 @@ const rupee = (n: number) => `₹${Number.isInteger(n) ? n : n.toFixed(2)}`;
 export default function StorePage() {
   const { storeId = '' } = useParams();
   const navigate = useNavigate();
+  const [qs, setQs] = useSearchParams();
   const cityId = useSession((s) => s.selectedCity?.id ?? null);
   const hotelCart = useCart((s) => s.hotelCart);
   const addToCart = useCart((s) => s.addToCart);
@@ -34,6 +35,14 @@ export default function StorePage() {
   };
   useEffect(() => { void load(); /* eslint-disable-next-line react-hooks/exhaustive-deps */ }, [storeId]);
   useEffect(() => { if (menu) rememberStoreVendor(storeId, true); }, [menu, storeId]);
+  // arriving from "+ Add" in the search: open the size / customise sheet of that product
+  useEffect(() => {
+    const want = qs.get('add');
+    if (!menu || !want) return;
+    const p = menu.products.find((x) => x.id === want);
+    if (p && p.is_available && menu.store.is_open) setCustomising(p);
+    setQs({}, { replace: true });
+  }, [menu, qs, setQs]);
 
   // "Recommended" = the shop's best picks: products on offer first, then the rest in the shop's own order
   const shown = useMemo(() => {

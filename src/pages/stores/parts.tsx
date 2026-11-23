@@ -1,5 +1,5 @@
 import { useNavigate } from 'react-router-dom';
-import { ChevronRight, Store as StoreIcon } from 'lucide-react';
+import { ChevronRight, Plus, Store as StoreIcon } from 'lucide-react';
 import { kmLabel, type StoreListItem, type StoreProductHit } from '../../lib/stores';
 
 const rupee = (n: number) => `₹${Number.isInteger(n) ? n : n.toFixed(2)}`;
@@ -22,7 +22,7 @@ export function StoreCard({ s }: { s: StoreListItem }) {
   );
 }
 
-export function StoreProductRow({ hit }: { hit: StoreProductHit }) {
+export function StoreProductRow({ hit, onAdd, busy }: { hit: StoreProductHit; onAdd?: () => void; busy?: boolean }) {
   const navigate = useNavigate();
   return (
     <button className="store-product-row" onClick={() => navigate(`/stores/s/${hit.store_id}`)}>
@@ -35,6 +35,13 @@ export function StoreProductRow({ hit }: { hit: StoreProductHit }) {
       <span className="store-product-price">
         {rupee(hit.price)}
         {hit.mrp != null && hit.mrp > hit.price && <s className="muted small block">{rupee(hit.mrp)}</s>}
+        {onAdd && (
+          <span role="button" tabIndex={0} className="store-add-btn" aria-label={`Add ${hit.name}`}
+            onClick={(e) => { e.stopPropagation(); if (!busy) onAdd(); }}
+            onKeyDown={(e) => { if (e.key === 'Enter') { e.stopPropagation(); if (!busy) onAdd(); } }}>
+            <Plus size={14} /> {busy ? '...' : 'Add'}
+          </span>
+        )}
       </span>
     </button>
   );
