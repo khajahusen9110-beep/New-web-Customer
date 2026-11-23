@@ -519,6 +519,7 @@ function BookingDetail({ id, cfg, onBack }: { id: string; cfg: HelperConfig; onB
         const done = exts.filter((e) => e.status === 'applied').length;
         const cat = (cfg.categories ?? []).find((c) => c.id === b.category_id);
         const rate = cat?.rate_per_30 ?? cfg.rate_per_30 ?? 0;
+        const extPrice = (m: number) => cat?.prices?.[String(m)] ?? rate * m / 30;
         const left = Math.max(0, (cfg.max_extensions ?? 3) - done);
         return (
           <div className="card pad stack">
@@ -533,7 +534,7 @@ function BookingDetail({ id, cfg, onBack }: { id: string; cfg: HelperConfig; onB
             ) : left === 0 ? <span className="muted small">You have used all the extra-time requests for this booking.</span> : (
               <div className="row gap-8" style={{ flexWrap: 'wrap' }}>
                 {(cfg.extension_options ?? [30, 60]).map((m) => (
-                  <button key={m} className="btn btn-outline" disabled={busy} onClick={() => void askMore(m)}>+{m} min · {rupees(rate * m / 30, 0)}</button>
+                  <button key={m} className="btn btn-outline" disabled={busy} onClick={() => void askMore(m)}>+{m} min · {rupees(extPrice(m), 0)}</button>
                 ))}
               </div>
             )}

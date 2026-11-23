@@ -88,6 +88,8 @@ export interface StoreMenu {
     category_id: string | null;
     is_available: boolean;
     /** Made-to-order: the shop asks for a message and/or a photo, and may need notice */
+    /** The shop quotes the price for this product (the customer asks first) */
+    needs_quote?: boolean;
     is_customizable?: boolean;
     custom_allow_note?: boolean;
     custom_allow_photo?: boolean;

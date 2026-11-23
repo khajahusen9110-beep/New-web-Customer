@@ -1,8 +1,10 @@
 import { useEffect, useMemo, useState } from 'react';
 import { useNavigate, useParams, useSearchParams } from 'react-router-dom';
 import { Clock, MapPin, Plus, Search, Sparkles, Store as StoreIcon, X } from 'lucide-react';
-import { CenterSpinner, ConfirmDialog, EmptyState, ErrorCard, FloatingCartButton, PageHeader, QuantityStepper, toast } from '../../components/ui';
+import { CenterSpinner, ConfirmDialog, Modal, EmptyState, ErrorCard, FloatingCartButton, PageHeader, QuantityStepper, toast } from '../../components/ui';
 import { getStoreMenu, type StoreMenu } from '../../lib/stores';
+import { requestQuote } from '../../lib/quotes';
+import { uploadCustomPhoto } from '../../lib/stores';
 import { rememberStoreVendor } from '../../lib/storeVendor';
 import { cartCount, useCart } from '../../store/cart';
 import { CustomiseSheet, type CustomiseResult } from './CustomiseSheet';
@@ -28,6 +30,7 @@ export default function StorePage() {
   const userId = useSession((s) => s.userId);
   const [customising, setCustomising] = useState<StoreMenu['products'][number] | null>(null);
   const setCustomization = useCart((s) => s.setCustomization);
+  const [quoting, setQuoting] = useState<StoreMenu['products'][number] | null>(null);
 
   const load = async () => {
     setError(null);
@@ -134,7 +137,10 @@ export default function StorePage() {
                   <span className="open-badge">{Math.round(((p.mrp - p.price) * 100) / p.mrp)}% OFF</span>
                 </>
               )}
-              {p.is_available && s.is_open && (
+              {p.is_available && s.is_open && p.needs_quote && (
+                <button className="store-add-btn" onClick={() => setQuoting(p)} aria-label={`Get a quote for ${p.name}`}>Get a quote</button>
+              )}
+              {p.is_available && s.is_open && !p.needs_quote && (
                 p.is_customizable || (p.variants ?? []).some((v) => v.is_available) ? (
                   <button className="store-add-btn" onClick={() => setCustomising(p)} aria-label={`Choose ${p.name}`}>
                     {qtyOf(p.id) > 0 ? `${qtyOf(p.id)} in cart · ${(p.variants ?? []).length ? 'Add' : 'Edit'}` : (p.variants ?? []).length ? 'Choose' : 'Customise'}
@@ -164,6 +170,16 @@ export default function StorePage() {
         onDone={addCustom}
       />
 
+      {quoting && (
+        <QuoteSheet
+          product={quoting}
+          storeId={storeId}
+          userId={userId}
+          onClose={() => setQuoting(null)}
+          onSent={() => { setQuoting(null); toast('Request sent. The shop will send you a price.'); navigate('/quotes'); }}
+        />
+      )}
+
       <ConfirmDialog
         open={!!conflict}
         title="Replace your cart?"
@@ -177,5 +193,47 @@ export default function StorePage() {
         }}
       />
     </div>
+  );
+}
+
+/** Ask the shop for a price: how many, what you want (message), and an optional photo. No payment now. */
+function QuoteSheet({ product, storeId, userId, onClose, onSent }: { product: StoreMenu['products'][number]; storeId: string; userId: string | null; onClose: () => void; onSent: () => void }) {
+  const variants = (product.variants ?? []).filter((v) => v.is_available);
+  const [variantId, setVariantId] = useState<string | null>(variants[0]?.id ?? null);
+  const [qty, setQty] = useState(Math.max(1, product.min_order_qty ?? 1));
+  const [note, setNote] = useState('');
+  const [photo, setPhoto] = useState<{ path: string; preview: string } | null>(null);
+  const [busy, setBusy] = useState(false);
+  const pick = async (f?: File) => {
+    if (!f || !userId) return;
+    setBusy(true);
+    try { setPhoto({ path: await uploadCustomPhoto(userId, f), preview: URL.createObjectURL(f) }); } catch (e) { toast((e as Error).message); } finally { setBusy(false); }
+  };
+  const send = async () => {
+    if (!note.trim() && !photo) { toast('Describe what you need, or add a photo'); return; }
+    setBusy(true);
+    try { await requestQuote({ vendorId: storeId, productId: product.id, variantId, quantity: qty, note: note.trim() || null, photoPath: photo?.path ?? null }); onSent(); }
+    catch (e) { toast((e as Error).message); setBusy(false); }
+  };
+  return (
+    <Modal open onClose={onClose} title={`Get a quote: ${product.name}`}>
+      <div className="stack">
+        {variants.length > 0 && (
+          <div className="row gap-8" style={{ flexWrap: 'wrap' }}>
+            {variants.map((v) => <button key={v.id} className={`btn ${variantId === v.id ? 'btn-primary' : 'btn-outline'}`} onClick={() => setVariantId(v.id)}>{v.label}</button>)}
+          </div>
+        )}
+        <label className="small bold">How many
+          <input className="input" type="number" min={Math.max(1, product.min_order_qty ?? 1)} value={qty} onChange={(e) => setQty(Math.max(1, Number(e.target.value) || 1))} /></label>
+        <label className="small bold">What do you need?
+          <textarea className="input" rows={4} maxLength={600} value={note} onChange={(e) => setNote(e.target.value)} placeholder="Size, colour, message, date... anything the shop should know" /></label>
+        {photo ? <img src={photo.preview} alt="Reference" style={{ width: 96, height: 96, objectFit: 'cover', borderRadius: 12 }} /> : (
+          <label className="btn btn-outline" style={{ cursor: 'pointer' }}>{busy ? 'Uploading...' : 'Add a photo (optional)'}
+            <input type="file" accept="image/*" hidden onChange={(e) => void pick(e.target.files?.[0])} /></label>
+        )}
+        <p className="muted small">No payment now. The shop sends you a price; you accept it and order. The price is valid for the time the shop sets.</p>
+        <button className="btn btn-primary btn-lg" disabled={busy} onClick={() => void send()}>{busy ? 'Please wait...' : 'Send request'}</button>
+      </div>
+    </Modal>
   );
 }

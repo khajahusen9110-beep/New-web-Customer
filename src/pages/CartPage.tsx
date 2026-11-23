@@ -8,6 +8,7 @@ import { usePromoFor, cartPromoDiscount } from '../lib/promo';
 import { getHotelProducts, getPromoCoupon, previewCheckoutRewards } from '../lib/repository';
 import type { ResolvedProduct } from '../lib/types';
 import { useSession } from '../store/session';
+import { getCheckoutFees } from '../lib/fees';
 import { cartCount, useCart } from '../store/cart';
 import { trackEvent } from '../lib/analytics';
 
@@ -129,6 +130,14 @@ export default function CartPage() {
 
   const couponDiscount = autoCoupon?.discount ?? 0;
   const payable = Math.max(subtotal - promoDiscount - couponDiscount, 0);
+  // "Add Rs X more" nudge for the platform fee (the delivery nudge needs the address, so it shows at checkout)
+  const [feeNudge, setFeeNudge] = useState<string | null>(null);
+  useEffect(() => {
+    if (!city?.id || payable <= 0) { setFeeNudge(null); return; }
+    let off = false;
+    const t = setTimeout(() => { void getCheckoutFees(city.id, null, payable).then((f) => !off && setFeeNudge(f?.rules_enabled ? (f.nudges.find((n) => n.kind === 'platform_fee')?.text ?? null) : null)); }, 300);
+    return () => { off = true; clearTimeout(t); };
+  }, [city?.id, payable]);
 
   // Clear the one-time error from history so a reload does not show it again.
   useEffect(() => {
@@ -301,6 +310,11 @@ export default function CartPage() {
                     >
                       Remove
                     </button>
+                  ) : it.cartItem.quote_id ? (
+                    <div className="stack" style={{ alignItems: 'flex-end', gap: 4 }}>
+                      <span className="muted small">Qty {it.cartItem.quantity} · quoted price</span>
+                      <button className="btn btn-sm btn-danger-soft" onClick={() => removeItems(isHotel, [it.cartItem])}>Remove</button>
+                    </div>
                   ) : (
                     <QuantityStepper
                       quantity={it.cartItem.quantity}
@@ -319,6 +333,7 @@ export default function CartPage() {
             })()}
             <div className="card pad">
               <h3>Bill Details</h3>
+              {feeNudge && <div className="fee-nudge"><span className="fee-nudge-text">🎉 {feeNudge}</span></div>}
               <BillRow label="Item Subtotal" value={rupees(subtotal, 2)} />
               {promoDiscount > 0 && <BillRow label={`Offer ${Math.round(promoInfo?.percent ?? 0)}% OFF`} value={`−${rupees(promoDiscount, 2)}`} accent />}
               {couponDiscount > 0 && (

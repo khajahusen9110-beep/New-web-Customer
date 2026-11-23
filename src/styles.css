@@ -1271,3 +1271,7 @@ h3, .section-title { letter-spacing: -0.015em; }
 .helper-chip[data-s="accepted"], .helper-chip[data-s="on_the_way"] { background: #dbeafe; color: #1d4ed8; }
 .helper-chip[data-s="started"] { background: #e0e7ff; color: #4338ca; }
 .helper-chip[data-s="completed"] { background: #dcfce7; color: #166534; }
+/* "Add Rs X more" fee nudge */
+.fee-nudge { display: flex; flex-direction: column; gap: 2px; width: 100%; text-align: left; padding: 10px 12px; margin-bottom: 8px; border-radius: 14px; background: #ecfdf5; border: 1px dashed #34d399; }
+.fee-nudge-text { font-weight: 700; font-size: 13px; color: #047857; }
+.fee-nudge-save { font-size: 12px; color: #065f46; }

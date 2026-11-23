@@ -22,6 +22,7 @@ import {
   verifyRazorpayPayment,
 } from '../lib/repository';
 import { openUpiCheckout } from '../lib/razorpay';
+import { getCheckoutFees, type CheckoutFees } from '../lib/fees';
 import type { CustomerAddress, DeliverySlot, ExpressDeliverySettings, Order, RewardsPreview } from '../lib/types';
 import { useCartCheck } from '../lib/hooks';
 import { usePromoFor, cartPromoDiscount } from '../lib/promo';
@@ -92,8 +93,9 @@ export default function CheckoutPage() {
 
   const [slots, setSlots] = useState<DeliverySlot[]>([]);
   const [express, setExpress] = useState<ExpressDeliverySettings | null>(null);
-  const [handlingFee, setHandlingFee] = useState(DEFAULT_HANDLING_FEE);
-  const [platformFee, setPlatformFee] = useState(0);
+  const [handlingBase, setHandlingFee] = useState(DEFAULT_HANDLING_FEE);
+  const [platformBase, setPlatformFee] = useState(0);
+  const [feeInfo, setFeeInfo] = useState<CheckoutFees | null>(null);
   const [loadingDelivery, setLoadingDelivery] = useState(true);
   const [deliveryType, setDeliveryType] = useState<DeliveryType>('scheduled');
   const [slotId, setSlotId] = useState<string | null>(null);
@@ -286,11 +288,29 @@ export default function CheckoutPage() {
   const matchedSlot = slots.find((s) => s.id === slotId) ?? slots[0] ?? null;
   const expressCalc = express ? expressCharge(express, distance, subtotal) : { fee: 0, isFree: false };
 
+  // Promotional offer discount (Sndmart bears it; vendor is paid in full). 0 when no offer is live.
+  const promoInfo = usePromoFor(isHotel ? 'food' : 'grocery');
+  const promoDiscount = cartPromoDiscount(subtotal, promoInfo);
+
+  // Fee rules by order amount (City Admin): the server gives the delivery, handling and platform fee and the "add Rs X more" nudges.
+  const feeAmount = Math.max(subtotal - discount - promoDiscount, 0);
+  useEffect(() => {
+    if (!cityId || subtotal <= 0) { setFeeInfo(null); return; }
+    let off = false;
+    const t = setTimeout(() => { void getCheckoutFees(cityId, distanceKm, feeAmount).then((f) => !off && setFeeInfo(f)); }, 250);
+    return () => { off = true; clearTimeout(t); };
+  }, [cityId, distanceKm, feeAmount, subtotal]);
+  const rulesOn = feeInfo?.rules_enabled === true;
+  const handlingFee = rulesOn ? feeInfo!.handling_fee : handlingBase;
+  const platformFee = rulesOn ? feeInfo!.platform_fee : platformBase;
+
   const storeAdj = isStore && storeCfg ? (storeChoice.type === 'express' ? storeCfg.express_extra_fee : -storeCfg.scheduled_discount) : 0;
   const deliveryFee: number | null = isStore && storeCfg
-    ? Math.max((expressCalc.fee ?? 0) + storeAdj, 0)
+    ? Math.max((rulesOn ? feeInfo!.delivery_fee : (expressCalc.fee ?? 0)) + storeAdj, 0)
     : !deliveryAvailable
     ? null
+    : rulesOn
+    ? feeInfo!.delivery_fee
     : deliveryType === 'express' && hasExpress
       ? expressCalc.fee
       : deliveryType === 'scheduled' && hasSlots && matchedSlot
@@ -300,9 +320,6 @@ export default function CheckoutPage() {
   const expressMinNotMet =
     !isStore && deliveryType === 'express' && express?.min_order_amount != null && subtotal < Number(express.min_order_amount);
 
-  // Promotional offer discount (Sndmart bears it; vendor is paid in full). 0 when no offer is live.
-  const promoInfo = usePromoFor(isHotel ? 'food' : 'grocery');
-  const promoDiscount = cartPromoDiscount(subtotal, promoInfo);
 
   // Items - instant discount - offer + delivery + handling + platform, before the wallet.
   const payableBeforeWallet = Math.max(subtotal - discount - promoDiscount + (deliveryFee ?? 0) + handlingFee + platformFee, 0);
@@ -859,6 +876,12 @@ export default function CheckoutPage() {
                   ),
                 )}
                 <hr />
+                {rulesOn && feeInfo!.nudges.length > 0 && (
+                  <button type="button" className="fee-nudge" onClick={() => navigate(-1)}>
+                    <span className="fee-nudge-text">🎉 {feeInfo!.nudges[0].text}</span>
+                    <span className="fee-nudge-save">Save ₹{Math.round(feeInfo!.nudges[0].saves)} · Add items</span>
+                  </button>
+                )}
                 <BillRow label="Item total" value={rupees(subtotal, 2)} />
                 {promoDiscount > 0 && <BillRow label={`Offer ${Math.round(promoInfo?.percent ?? 0)}% OFF`} value={`−${rupees(promoDiscount, 2)}`} accent />}
                 {discount > 0 && <BillRow label={`Coupon discount (${previewCoupon?.code})`} value={`−${rupees(discount, 2)}`} accent />}
@@ -878,7 +901,14 @@ export default function CheckoutPage() {
                     )
                   }
                 />
-                <FeesBreakdownRow handlingFee={handlingFee} platformFee={platformFee} />
+                {rulesOn ? (
+                  <>
+                    {handlingFee > 0 && <BillRow label="Handling Fee" value={rupees(handlingFee)} />}
+                    <BillRow label="Platform Fee" value={platformFee > 0 ? rupees(platformFee) : <span className="text-primary bold">FREE</span>} />
+                  </>
+                ) : (
+                  <FeesBreakdownRow handlingFee={handlingFee} platformFee={platformFee} />
+                )}
                 {walletApplied > 0 && <BillRow label="Wallet" value={`−${rupees(walletApplied, 2)}`} accent />}
                 <hr />
                 <BillRow label="To Pay" value={total != null && deliveryAvailable ? rupees(total, 2) : '--'} bold accent />

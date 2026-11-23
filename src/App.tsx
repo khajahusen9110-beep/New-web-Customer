@@ -47,6 +47,7 @@ const HelperPage = lazy(() => import('./pages/HelperPage'));
 const StoresPage = lazy(() => import('./pages/stores/StoresPage'));
 const StoreCategoryPage = lazy(() => import('./pages/stores/StoreCategoryPage'));
 const StorePage = lazy(() => import('./pages/stores/StorePage'));
+const QuotesPage = lazy(() => import('./pages/stores/QuotesPage'));
 const ReferEarnPage = lazy(() => import('./pages/ReferEarnPage'));
 const AgentCodePage = lazy(() => import('./pages/AgentCodePage'));
 const MyReviewsPage = lazy(() => import('./pages/MyReviewsPage'));
@@ -333,6 +334,7 @@ export default function App() {
             <Route path="/helper" element={<HelperPage />} />
             <Route path="/stores/c/:categoryId" element={<StoreCategoryPage />} />
             <Route path="/stores/s/:storeId" element={<StorePage />} />
+            <Route path="/quotes" element={<QuotesPage />} />
             <Route path="/refer" element={<ReferEarnPage />} />
             <Route path="/agent-code" element={<AgentCodePage />} />
             <Route path="/reviews" element={<MyReviewsPage />} />

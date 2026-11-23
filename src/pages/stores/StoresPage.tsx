@@ -112,6 +112,11 @@ export default function StoresPage() {
           {helperOn && <button onClick={() => navigate('/helper')}>Quick Helper</button>}
         </div>
 
+        <button className="list-card" onClick={() => navigate('/quotes')} style={{ padding: '10px 14px' }}>
+          <span className="grow"><strong className="block">My price quotes</strong><span className="muted small">Ask a shop for a price on custom work</span></span>
+          <ChevronRight size={20} className="muted" />
+        </button>
+
         <div className="search-bar">
           <Search size={18} />
           <input value={text} onChange={(e) => setText(e.target.value)} placeholder="Search products in all shops" aria-label="Search products in shops" />

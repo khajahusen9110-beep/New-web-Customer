@@ -1732,7 +1732,8 @@ export function buildCartLines(items: CartItem[], live: Map<string, ResolvedProd
     const variant = item.variant_id ? rp.variants.find((v) => v.id === item.variant_id) ?? null : null;
     // a customised piece (message / photo) costs the shop's extra charge on top
     const extra = item.custom_note || item.custom_photo_path ? Number(rp.base.custom_extra_charge ?? 0) : 0;
-    const price = (variant?.price ?? rp.effectivePrice) + extra;
+    // a quoted line costs exactly the shop's accepted price per piece
+    const price = item.quote_id && item.quote_price != null ? Number(item.quote_price) : (variant?.price ?? rp.effectivePrice) + extra;
     out.push({
       cartItem: item,
       product: rp,
@@ -2174,6 +2175,7 @@ export async function placeOrder(p: {
     quantity: i.quantity,
     // made-to-order shop products only; absent for everything else
     ...(i.custom_note || i.custom_photo_path ? { custom_note: i.custom_note ?? null, custom_photo_path: i.custom_photo_path ?? null } : {}),
+    ...(i.quote_id ? { quote_id: i.quote_id } : {}),
   }));
   const args: Record<string, unknown> = {
     p_address_id: p.addressId,

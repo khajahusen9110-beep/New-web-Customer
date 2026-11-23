@@ -31,6 +31,9 @@ interface CartState {
     /** Made-to-order shop products: the customer's message / photo path */
     customNote?: string | null;
     customPhotoPath?: string | null;
+    /** An accepted shop quote: its id and the quoted price per piece */
+    quoteId?: string | null;
+    quotePrice?: number | null;
   }) => AddToCartResult;
   /** Edit the message / photo of a line already in the cart. */
   setCustomization: (productId: string, variantId: string | null, note: string | null, photoPath: string | null) => void;
@@ -62,6 +65,8 @@ async function writeCartToBackend(userId: string, items: CartItem[]) {
       quantity: i.quantity,
       custom_note: i.custom_note ?? null,
       custom_photo_path: i.custom_photo_path ?? null,
+      quote_id: i.quote_id ?? null,
+      quote_price: i.quote_price ?? null,
     }));
     await supabase.from('cart_items').insert(rows);
   }
@@ -124,7 +129,7 @@ export const useCart = create<CartState>()(
       pendingSync: false,
       hydrated: false,
 
-      addToCart: ({ productId, vendorId = null, cityId = null, quantityDelta = 1, isHotel, variantId = null, customNote = null, customPhotoPath = null }) => {
+      addToCart: ({ productId, vendorId = null, cityId = null, quantityDelta = 1, isHotel, variantId = null, customNote = null, customPhotoPath = null, quoteId = null, quotePrice = null }) => {
         const userId = useSession.getState().userId ?? 'guest';
         const make = (): CartItem => ({
           id: crypto.randomUUID?.() ?? String(Date.now()),
@@ -136,6 +141,8 @@ export const useCart = create<CartState>()(
           quantity: quantityDelta,
           custom_note: customNote,
           custom_photo_path: customPhotoPath,
+          quote_id: quoteId,
+          quote_price: quotePrice,
         });
         if (isHotel) {
           const list = get().hotelCart;
@@ -150,7 +157,7 @@ export const useCart = create<CartState>()(
           }
           const next = applyDelta(list, productId, variantId, quantityDelta, make);
           // adding a customised product again keeps one customisation per line: the newest message / photo wins
-          set({ hotelCart: customNote || customPhotoPath ? next.map((i) => (same(i, productId, variantId) ? { ...i, custom_note: customNote, custom_photo_path: customPhotoPath } : i)) : next });
+          set({ hotelCart: (customNote || customPhotoPath) && !quoteId ? next.map((i) => (same(i, productId, variantId) ? { ...i, custom_note: customNote, custom_photo_path: customPhotoPath } : i)) : next });
         } else {
           set({ groceryCart: applyDelta(get().groceryCart, productId, variantId, quantityDelta, make) });
         }
@@ -211,10 +218,10 @@ export const useCart = create<CartState>()(
         if (!userId) return;
         const { data, error } = await supabase
           .from('cart_items')
-          .select('id,user_id,product_id,variant_id,vendor_id,city_id,quantity,custom_note,custom_photo_path')
+          .select('id,user_id,product_id,variant_id,vendor_id,city_id,quantity,custom_note,custom_photo_path,quote_id,quote_price')
           .eq('user_id', userId);
         if (error || !data) return;
-        const items = (data as CartItem[]).map((i) => ({ ...i, quantity: Number(i.quantity) }));
+        const items = (data as CartItem[]).map((i) => ({ ...i, quantity: Number(i.quantity), quote_price: i.quote_price == null ? null : Number(i.quote_price) }));
         set({
           groceryCart: items.filter((i) => !i.vendor_id),
           hotelCart: items.filter((i) => !!i.vendor_id),

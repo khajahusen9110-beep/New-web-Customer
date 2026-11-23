@@ -174,6 +174,9 @@ export interface CartItem {
   /** Shops (Stores): the customer's message / photo for a made-to-order product */
   custom_note?: string | null;
   custom_photo_path?: string | null;
+  /** An accepted price quote from the shop: its id and the quoted price per piece (the server re-checks both at checkout) */
+  quote_id?: string | null;
+  quote_price?: number | null;
 }
 
 export interface CartItemUi {
