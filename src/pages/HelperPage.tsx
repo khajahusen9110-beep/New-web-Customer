@@ -82,7 +82,7 @@ export default function HelperPage() {
           <BookingDetail id={openId} cfg={cfg} onBack={() => setParams({ tab: 'mine' })} />
         ) : (
           <>
-            <div className="mode-toggle">
+            <div className="mode-toggle helper-tabs">
               <button className={tab === 'book' ? 'active' : ''} onClick={() => setParams({})}>Book a helper</button>
               <button className={tab === 'mine' ? 'active' : ''} onClick={() => setParams({ tab: 'mine' })}>My bookings</button>
             </div>
@@ -99,6 +99,7 @@ export default function HelperPage() {
 function BookForm({ cfg, cityId, userId, onBooked }: { cfg: HelperConfig; cityId: string; userId: string; onBooked: (b: HelperBooking) => void }) {
   const cats = cfg.categories ?? [];
   const [cat, setCat] = useState<HelperCategory | null>(null);
+  const [step, setStep] = useState<'detail' | 'form'>('detail');
   const [minutes, setMinutes] = useState(30);
   const [desc, setDesc] = useState('');
   const [photos, setPhotos] = useState<{ path: string; preview: string }[]>([]);
@@ -123,27 +124,65 @@ function BookForm({ cfg, cityId, userId, onBooked }: { cfg: HelperConfig; cityId
   useEffect(() => { void loadAddresses(); }, [loadAddresses]);
 
   const choose = (c: HelperCategory) => {
-    setCat(c); setMinutes(c.durations[0] ?? 30); setPhotos([]); setAck(false); window.scrollTo({ top: 0 });
+    setCat(c); setStep('detail'); setMinutes(c.durations[0] ?? 30); setPhotos([]); setAck(false); window.scrollTo({ top: 0 });
   };
 
   if (cats.length === 0) return <EmptyState icon={<Clock size={36} />} title="No services yet" text="Please check again soon." />;
 
-  // Step 1: browse the services
+  // Step 1: hero, round services, how it works
   if (!cat) {
     return (
       <>
-        <strong>Choose a service</strong>
-        {cats.map((c) => (
-          <button key={c.id} className="card pad row gap-8" style={{ textAlign: 'left', alignItems: 'center' }} onClick={() => choose(c)}>
-            {c.image_url ? <img src={c.image_url} alt="" style={{ width: 72, height: 72, objectFit: 'cover', borderRadius: 12, flexShrink: 0 }} /> : null}
-            <span className="stack" style={{ gap: 2 }}>
-              <strong>{c.name}</strong>
-              {c.description && <span className="muted small">{c.description}</span>}
-              <span className="small">From {rupees(Math.min(...Object.values(c.prices)), 0)} · {c.durations.join(' / ')} min</span>
-            </span>
-          </button>
-        ))}
+        <div className="helper-hero"><strong>A helper for any small task</strong><span>Pay per 30 minutes. A verified person near you.</span></div>
+        <h3 className="section-title">Choose a service</h3>
+        <div className="helper-grid">
+          {cats.map((c) => (
+            <button key={c.id} className="helper-cat" onClick={() => choose(c)}>
+              <span className="helper-cat-img">{c.image_url ? <img src={c.image_url} alt="" loading="lazy" /> : <b>{c.is_custom ? '✎' : c.name.charAt(0)}</b>}</span>
+              <span className="helper-cat-name">{c.name}</span>
+              <span className="muted small">{c.is_custom ? 'Any task · ' : 'from '}{rupees(Math.min(...Object.values(c.prices)), 0)}{c.is_custom ? '+' : ''}</span>
+            </button>
+          ))}
+        </div>
+        <h3 className="section-title">How it works</h3>
+        <div className="helper-steps3">
+          {['Choose task', 'Pay advance', 'Helper arrives'].map((t, i) => <div key={t} className="helper-step3"><span>{i + 1}</span>{t}</div>)}
+        </div>
         {cfg.banned_note && <p className="muted small">{cfg.banned_note}</p>}
+      </>
+    );
+  }
+
+  // Step 2: the service, price blocks, do / don't
+  if (step === 'detail') {
+    const list = (items: HelperCategory['dos'], good: boolean) => (
+      <div className={`helper-rule ${good ? 'good' : 'bad'}`}>
+        <strong>{good ? 'Do ✓' : "Don't ✕"}</strong>
+        {items.length === 0 ? <span className="muted small">-</span> : items.map((r, i) => (
+          <div key={i} className="stack" style={{ gap: 4 }}>
+            <span className="small">{good ? '✓ ' : '✕ '}{r.text}</span>
+            {r.image_url ? <img src={r.image_url} alt="" style={{ width: '100%', height: 80, objectFit: 'cover', borderRadius: 10 }} /> : null}
+          </div>
+        ))}
+      </div>
+    );
+    return (
+      <>
+        <button className="btn btn-outline" onClick={() => setCat(null)}>← All services</button>
+        {cat.image_url && <img className="store-banner" src={cat.image_url} alt="" />}
+        <h2 style={{ margin: 0 }}>{cat.name}</h2>
+        {cat.description && <p className="muted">{cat.description}</p>}
+        {cat.is_custom && <div className="helper-hero"><span>Not sure which service? Describe your own task in the next step: what, where and for how long.</span></div>}
+        <h3 className="section-title">Choose time</h3>
+        <div className="helper-prices">
+          {cat.durations.map((d) => (
+            <button key={d} className={`helper-price${minutes === d ? ' active' : ''}`} onClick={() => setMinutes(d)}>
+              <strong>{rupees(cat.prices[String(d)] ?? cat.rate_per_30 * d / 30, 0)}</strong><span>{d} min</span>
+            </button>
+          ))}
+        </div>
+        {(cat.dos.length > 0 || cat.donts.length > 0) && <div className="helper-rules">{list(cat.dos, true)}{list(cat.donts, false)}</div>}
+        <button className="btn btn-primary btn-lg helper-cta" onClick={() => { setStep('form'); window.scrollTo({ top: 0 }); }}>Continue</button>
       </>
     );
   }
@@ -174,7 +213,7 @@ function BookForm({ cfg, cityId, userId, onBooked }: { cfg: HelperConfig; cityId
 
   const submit = async () => {
     if (!addressId) { toast('Choose your address'); return; }
-    if (desc.trim().length < 5) { toast('Please describe the task'); return; }
+    if (desc.trim().length < (cat.is_custom ? 15 : 5)) { toast(cat.is_custom ? 'Please describe your task in a little more detail' : 'Please describe the task'); return; }
     if (later && !when) { toast('Choose the time'); return; }
     if (cat.photo_required && photos.length === 0) { toast('Please add a photo'); return; }
     if (cfg.require_rules_ack !== false && !ack) { toast('Please accept what the helper does and does not do'); return; }
@@ -206,7 +245,7 @@ function BookForm({ cfg, cityId, userId, onBooked }: { cfg: HelperConfig; cityId
 
   return (
     <>
-      <button className="btn btn-outline" onClick={() => setCat(null)}>← All services</button>
+      <button className="btn btn-outline" onClick={() => setStep('detail')}>← Back</button>
       <div className="card pad stack">
         <div className="row gap-8" style={{ alignItems: 'center' }}>
           {cat.image_url ? <img src={cat.image_url} alt="" style={{ width: 72, height: 72, objectFit: 'cover', borderRadius: 12 }} /> : null}
@@ -230,7 +269,7 @@ function BookForm({ cfg, cityId, userId, onBooked }: { cfg: HelperConfig; cityId
       <div className="card pad stack">
         <strong>Describe the task</strong>
         <textarea className="input" rows={4} maxLength={600} value={desc} onChange={(e) => setDesc(e.target.value)}
-          placeholder={cat.task_placeholder || 'Describe what you need, e.g. place, what to do, anything the helper should know'} />
+          placeholder={cat.task_placeholder || (cat.is_custom ? 'Tell us exactly what you need: the work, the place, how long, anything the helper should know' : 'Describe what you need, e.g. place, what to do, anything the helper should know')} />
         <span className="muted small">{desc.length}/600</span>
         {maxPhotos > 0 && (
           <div>
@@ -301,7 +340,7 @@ function BookForm({ cfg, cityId, userId, onBooked }: { cfg: HelperConfig; cityId
         )}
         <div className="row between"><strong>Total</strong><strong>{rupees(price, 0)}</strong></div>
         <button className="btn btn-primary btn-lg" disabled={busy || uploading} onClick={submit}>
-          {busy ? <Spinner size={16} /> : `${(mode === 'upi' || (mode === 'both' && pay === 'upi')) ? 'Pay & book' : 'Book helper'} · ${rupees(price, 0)}`}
+          {busy ? <Spinner size={16} /> : `${(mode === 'upi' || (mode === 'both' && pay === 'upi')) ? 'Pay advance & book' : 'Book helper'} · ${rupees(price, 0)}`}
         </button>
         {cfg.support_phone && <p className="muted small">Need help? <a href={`tel:${cfg.support_phone}`}>{cfg.support_phone}</a></p>}
       </div>
@@ -325,7 +364,7 @@ function MyBookings({ onOpen }: { onOpen: (id: string) => void }) {
     <>
       {list.map((b) => (
         <button key={b.id} className="card pad stack" style={{ textAlign: 'left' }} onClick={() => onOpen(b.id)}>
-          <div className="row between"><strong>{b.task_type}</strong><span className="muted small">{STATUS_LABEL[b.status]}</span></div>
+          <div className="row between"><strong>{b.task_type}</strong><span className="helper-chip" data-s={b.status}>{STATUS_LABEL[b.status]}</span></div>
           <span className="muted small">{b.duration_minutes} min · {rupees(b.price_total, 0)} · {new Date(b.created_at).toLocaleString()}</span>
         </button>
       ))}

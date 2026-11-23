@@ -20,6 +20,8 @@ export interface HelperCategory {
   prices: Record<string, number>;
   dos: HelperRuleItem[];
   donts: HelperRuleItem[];
+  /** the "Custom helper" option: the customer describes any task */
+  is_custom?: boolean;
 }
 
 export type HelperPayMode = 'upi' | 'cash' | 'both';

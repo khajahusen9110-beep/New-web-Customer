@@ -1242,3 +1242,32 @@ h3, .section-title { letter-spacing: -0.015em; }
 /* Section colour: Grocery = green, Food = orange */
 .mode-toggle button.active:nth-child(1) { background: #dcfce7; color: #15803d; }
 .mode-toggle button.active:nth-child(2) { background: #ffedd5; color: #c2410c; }
+/* Quick Helper: calm blue accent */
+.helper-hero { display: flex; flex-direction: column; gap: 2px; padding: 16px; border-radius: 18px; background: #dbeafe; color: #1d4ed8; }
+.helper-hero span { font-size: 13px; color: var(--text-2); }
+.helper-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 12px 8px; }
+.helper-cat { display: flex; flex-direction: column; align-items: center; gap: 5px; background: none; text-align: center; }
+.helper-cat-img { width: 68px; height: 68px; border-radius: 50%; overflow: hidden; display: grid; place-items: center; background: #dbeafe; color: #1d4ed8; font-size: 26px; }
+.helper-cat-img img { width: 100%; height: 100%; object-fit: cover; }
+.helper-cat-name { font-size: 13px; font-weight: 700; line-height: 1.2; }
+.helper-steps3 { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; }
+.helper-step3 { display: flex; flex-direction: column; align-items: center; gap: 6px; padding: 10px 6px; border-radius: 14px; background: var(--surface); border: 1px solid var(--outline-soft); font-size: 12px; font-weight: 600; text-align: center; }
+.helper-step3 span { width: 26px; height: 26px; border-radius: 50%; background: #2563eb; color: #fff; display: grid; place-items: center; font-weight: 700; font-size: 13px; }
+.helper-prices { display: grid; grid-template-columns: repeat(3, 1fr); gap: 10px; }
+.helper-price { display: flex; flex-direction: column; align-items: center; padding: 14px 6px; border-radius: 14px; background: var(--surface); border: 1px solid var(--outline-soft); }
+.helper-price strong { font-size: 20px; font-weight: 800; }
+.helper-price span { font-size: 12px; color: var(--text-2); }
+.helper-price.active { background: #dbeafe; border: 2px solid #2563eb; }
+.helper-price.active strong { color: #1d4ed8; }
+.helper-rules { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; align-items: stretch; }
+.helper-rule { display: flex; flex-direction: column; gap: 8px; padding: 12px; border-radius: 16px; }
+.helper-rule.good { background: #ecfdf5; color: #047857; }
+.helper-rule.bad { background: #fef2f2; color: #be123c; }
+.helper-rule .small { color: var(--text); }
+.helper-cta { background: #2563eb; width: 100%; }
+.mode-toggle.helper-tabs button.active { background: #dbeafe; color: #1d4ed8; }
+.helper-chip { padding: 3px 9px; border-radius: 8px; font-size: 11px; font-weight: 700; background: #e5e7eb; color: #4b5563; }
+.helper-chip[data-s="pending_payment"], .helper-chip[data-s="requested"] { background: #fef3c7; color: #92400e; }
+.helper-chip[data-s="accepted"], .helper-chip[data-s="on_the_way"] { background: #dbeafe; color: #1d4ed8; }
+.helper-chip[data-s="started"] { background: #e0e7ff; color: #4338ca; }
+.helper-chip[data-s="completed"] { background: #dcfce7; color: #166534; }
