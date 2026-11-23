@@ -1227,3 +1227,15 @@ h3, .section-title { letter-spacing: -0.015em; }
 
 .store-add-btn { display: inline-flex; align-items: center; gap: 2px; margin-top: 6px; padding: 5px 14px; border-radius: 999px; font-size: 12.5px; font-weight: 800; color: var(--primary); background: var(--primary-container); border: 1px solid color-mix(in srgb, var(--primary) 35%, white); }
 .store-product-price { display: flex; flex-direction: column; align-items: flex-end; }
+/* Grocery: round shop-category icons (Recommended first) */
+.cat-round-row { display: flex; gap: 14px; overflow-x: auto; padding: 4px 2px 8px; scrollbar-width: none; }
+.cat-round-row::-webkit-scrollbar { display: none; }
+.cat-round { flex: none; width: 74px; display: flex; flex-direction: column; align-items: center; gap: 6px; background: none; }
+.cat-round-img { width: 64px; height: 64px; border-radius: 50%; overflow: hidden; display: grid; place-items: center; background: var(--primary-container); color: var(--primary); border: 2px solid transparent; font-size: 24px; }
+.cat-round-img img { width: 100%; height: 100%; object-fit: cover; }
+.cat-round.active .cat-round-img { border-color: var(--primary); box-shadow: 0 0 0 3px color-mix(in srgb, var(--primary) 20%, transparent); }
+.cat-round-name { font-size: 12px; font-weight: 600; text-align: center; line-height: 1.2; color: var(--text-2); }
+.cat-round.active .cat-round-name { color: var(--primary); font-weight: 800; }
+.store-cats-sticky { position: sticky; top: 0; z-index: 5; background: var(--bg, #fff); padding: 6px 0; }
+.store-hero { display: flex; gap: 12px; align-items: center; }
+.store-hero .store-card-logo { width: 64px; height: 64px; }

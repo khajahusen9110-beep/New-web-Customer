@@ -898,7 +898,8 @@ export default function HomePage() {
     };
   }, [cityId]);
   const storesOn = storesCfg?.stores_enabled === true;
-  const storesReplaceGrocery = storesOn && storesCfg?.replace_grocery === true;
+  // Stores IS the Grocery section now (search, round shop categories, shops) - it always takes the Groceries tab over
+  const storesReplaceGrocery = storesOn;
   // The Groceries tab is replaced by Stores: opening the app lands on Stores (an explicit ?mode=... still wins).
   useEffect(() => {
     if (storesReplaceGrocery && !modeParam && serviceMode !== 'food_only') navigate('/stores', { replace: true });
@@ -1514,9 +1515,9 @@ export default function HomePage() {
             </button>
           )}
         </div>
-        <div className={`mode-toggle${helperOn && storesOn && !storesReplaceGrocery ? ' four' : helperOn || storesOn ? ' three' : ''}`}>
+        <div className={`mode-toggle${helperOn ? ' three' : ''}`}>
           {storesReplaceGrocery ? (
-            <button onClick={() => navigate('/stores')}>Stores</button>
+            <button onClick={() => navigate('/stores')}>Grocery</button>
           ) : (
             <button
               className={!isHotels ? 'active' : ''}
@@ -1532,10 +1533,9 @@ export default function HomePage() {
             disabled={serviceMode === 'grocery_only'}
             onClick={() => setMode('hotels')}
           >
-            {helperOn || storesOn ? 'Hotel Food' : <>Hotel Food &amp; Dining</>}
+            {helperOn ? 'Hotel Food' : <>Hotel Food &amp; Dining</>}
             {serviceMode === 'grocery_only' && <span className="soon-badge">Coming Soon</span>}
           </button>
-          {storesOn && !storesReplaceGrocery && <button onClick={() => navigate('/stores')}>Stores</button>}
           {helperOn && <button onClick={() => navigate('/helper')}>Quick Helper</button>}
         </div>
       </div>

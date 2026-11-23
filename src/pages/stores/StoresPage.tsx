@@ -1,10 +1,10 @@
 import { useEffect, useMemo, useState } from 'react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
-import { ChevronRight, MapPin, Search, Store as StoreIcon, X } from 'lucide-react';
+import { ChevronRight, MapPin, Search, Sparkles, Store as StoreIcon, X } from 'lucide-react';
 import { useSession } from '../../store/session';
 import { EmptyState, ErrorCard, ListSkeleton, PageHeader } from '../../components/ui';
 import {
-  getCustomerLocation, getStoresConfig, kmLabel, listStores, searchStoreProducts,
+  getCustomerLocation, getStoresConfig, listStores, searchStoreProducts,
   type Loc, type StoreListItem, type StoreProductHit, type StoreSort, type StoresConfig,
 } from '../../lib/stores';
 import { getHelperConfig } from '../../lib/helper';
@@ -30,6 +30,7 @@ export default function StoresPage() {
   const [stores, setStores] = useState<StoreListItem[] | null>(null);
   const [error, setError] = useState<string | null>(null);
 
+  const catId = params.get('c') ?? '';
   const q = params.get('q') ?? '';
   const [text, setText] = useState(q);
   const [sort, setSort] = useState<StoreSort>('cheapest');
@@ -49,13 +50,13 @@ export default function StoresPage() {
   const load = async () => {
     if (!cityId || !cfg?.stores_enabled || !locDone) return;
     setError(null);
-    try { setStores(await listStores(cityId, loc)); } catch (e) { setError((e as Error).message); }
+    try { setStores(null); setStores(await listStores(cityId, loc, catId || null)); } catch (e) { setError((e as Error).message); }
   };
-  useEffect(() => { void load(); /* eslint-disable-next-line react-hooks/exhaustive-deps */ }, [cityId, cfg?.stores_enabled, locDone, loc?.lat, loc?.lng]);
+  useEffect(() => { void load(); /* eslint-disable-next-line react-hooks/exhaustive-deps */ }, [cityId, cfg?.stores_enabled, locDone, loc?.lat, loc?.lng, catId]);
 
   // search: wait a moment after typing stops
   useEffect(() => {
-    const t = window.setTimeout(() => { if (text.trim() !== q) setParams(text.trim() ? { q: text.trim() } : {}, { replace: true }); }, 350);
+    const t = window.setTimeout(() => { if (text.trim() !== q) setParams(text.trim() ? { q: text.trim() } : catId ? { c: catId } : {}, { replace: true }); }, 350);
     return () => window.clearTimeout(t);
   }, [text, q, setParams]);
   useEffect(() => {
@@ -69,15 +70,20 @@ export default function StoresPage() {
     return () => { cancelled = true; };
   }, [cityId, cfg?.stores_enabled, locDone, loc?.lat, loc?.lng, q, sort]);
 
-  const nearby = useMemo(() => (stores ?? []).filter((s) => s.is_open).sort((a, b) => (a.distance_km ?? 999) - (b.distance_km ?? 999)).slice(0, 6), [stores]);
+  const selectCat = (id: string) => setParams(id ? { c: id } : {}, { replace: true });
+  const shops = useMemo(
+    () => (stores ?? []).slice().sort((a, b) => Number(b.is_open) - Number(a.is_open) || (a.distance_km ?? 999) - (b.distance_km ?? 999) || a.name.localeCompare(b.name)),
+    [stores],
+  );
+  const activeCat = cfg?.categories.find((c) => c.id === catId);
   const searchingNow = q.length >= 2;
 
   return (
     <div className="page stores-page">
-      <PageHeader title="Stores" subtitle={city?.name} back={false} />
+      <PageHeader title="Grocery" subtitle={city?.name} back={false} />
       <div className="content-pad narrow stack">
         <div className={`mode-toggle${helperOn ? ' three' : ''}`}>
-          <button className="active">Stores</button>
+          <button className="active">Grocery</button>
           <button onClick={() => navigate('/?mode=hotels')}>Hotel Food</button>
           {helperOn && <button onClick={() => navigate('/helper')}>Quick Helper</button>}
         </div>
@@ -85,8 +91,23 @@ export default function StoresPage() {
         <div className="search-bar">
           <Search size={18} />
           <input value={text} onChange={(e) => setText(e.target.value)} placeholder="Search products in all shops" aria-label="Search products in shops" />
-          {text && <button className="icon-btn sm" aria-label="Clear search" onClick={() => { setText(''); setParams({}, { replace: true }); }}><X size={16} /></button>}
+          {text && <button className="icon-btn sm" aria-label="Clear search" onClick={() => { setText(''); setParams(catId ? { c: catId } : {}, { replace: true }); }}><X size={16} /></button>}
         </div>
+
+        {cfg && cfg.categories.length > 0 && !searchingNow && (
+          <div className="cat-round-row" role="tablist" aria-label="Shop categories">
+            <button role="tab" aria-selected={!catId} className={`cat-round${!catId ? ' active' : ''}`} onClick={() => selectCat('')}>
+              <span className="cat-round-img"><Sparkles size={26} /></span>
+              <span className="cat-round-name">Recommended</span>
+            </button>
+            {cfg.categories.map((c) => (
+              <button key={c.id} role="tab" aria-selected={catId === c.id} className={`cat-round${catId === c.id ? ' active' : ''}`} onClick={() => selectCat(c.id)}>
+                <span className="cat-round-img">{c.image_url ? <img src={c.image_url} alt="" loading="lazy" /> : <b>{c.name.charAt(0)}</b>}</span>
+                <span className="cat-round-name">{c.name}</span>
+              </button>
+            ))}
+          </div>
+        )}
 
         {locDone && !loc && (
           <button className="list-card" onClick={() => navigate('/addresses')}>
@@ -109,7 +130,7 @@ export default function StoresPage() {
           </>
         ) : (
           <>
-            {cfg?.replace_grocery && (
+            {!catId && cfg?.replace_grocery && (
               <button className="store-card pinned" onClick={() => navigate('/?mode=grocery')}>
                 <span className="store-card-logo"><StoreIcon size={26} /></span>
                 <span className="grow"><strong className="block">SND Mart Store</strong><span className="muted small">Fresh groceries &amp; fruits from SND Mart</span></span>
@@ -117,29 +138,13 @@ export default function StoresPage() {
               </button>
             )}
 
-            {cfg && cfg.categories.length > 0 && (
-              <>
-                <h3 className="section-title">Shop by category</h3>
-                <div className="stores-grid">
-                  {cfg.categories.map((c) => (
-                    <button key={c.id} className="store-cat-card" onClick={() => navigate(`/stores/c/${c.id}`)}>
-                      {c.image_url ? <img src={c.image_url} alt="" loading="lazy" /> : <span className="store-cat-initial">{c.name.charAt(0)}</span>}
-                      <strong>{c.name}</strong>
-                      {c.name_kn && <span className="muted small">{c.name_kn}</span>}
-                      <span className="muted small">{c.store_count} shop{c.store_count === 1 ? '' : 's'}</span>
-                    </button>
-                  ))}
-                </div>
-              </>
-            )}
-
-            <h3 className="section-title">Shops near you</h3>
+            <h3 className="section-title">{activeCat ? activeCat.name : 'Recommended shops'}{shops.length > 0 ? <span className="muted small"> · {shops.length}</span> : null}</h3>
             {stores === null && !error && <ListSkeleton count={3} height={88} />}
-            {stores && nearby.length === 0 && (
-              <EmptyState icon={<StoreIcon size={36} />} title="No shops open nearby" text={`We show shops within ${cfg?.radius_km ?? 5} km. Please check again soon.`} />
+            {stores && shops.length === 0 && (
+              <EmptyState icon={<StoreIcon size={36} />} title="No shops here yet" text={`We show shops within ${cfg?.radius_km ?? 5} km of you. Please check again soon.`} />
             )}
-            {nearby.map((s) => <StoreCard key={s.store_id} s={s} />)}
-            {nearby.length > 0 && <p className="muted small center">Showing shops within {cfg?.radius_km ?? 5} km{loc ? ` · nearest first (${kmLabel(nearby[0]?.distance_km ?? null)})` : ''}.</p>}
+            {shops.map((s) => <StoreCard key={s.store_id} s={s} />)}
+            {shops.length > 0 && <p className="muted small center">Open shops first{loc ? ' · nearest first' : ''} · within {cfg?.radius_km ?? 5} km.</p>}
           </>
         )}
       </div>

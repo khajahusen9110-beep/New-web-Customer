@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
-import { Clock, Plus, Store as StoreIcon } from 'lucide-react';
+import { Clock, MapPin, Plus, Search, Sparkles, Store as StoreIcon, X } from 'lucide-react';
 import { CenterSpinner, ConfirmDialog, EmptyState, ErrorCard, FloatingCartButton, PageHeader, QuantityStepper, toast } from '../../components/ui';
 import { getStoreMenu, type StoreMenu } from '../../lib/stores';
 import { rememberStoreVendor } from '../../lib/storeVendor';
@@ -22,7 +22,8 @@ export default function StorePage() {
   const [conflict, setConflict] = useState<CartItem | null>(null);
   const [menu, setMenu] = useState<StoreMenu | null>(null);
   const [error, setError] = useState<string | null>(null);
-  const [cat, setCat] = useState<string>('all');
+  const [cat, setCat] = useState<string>('rec');
+  const [find, setFind] = useState('');
   const userId = useSession((s) => s.userId);
   const [customising, setCustomising] = useState<StoreMenu['products'][number] | null>(null);
   const setCustomization = useCart((s) => s.setCustomization);
@@ -34,7 +35,17 @@ export default function StorePage() {
   useEffect(() => { void load(); /* eslint-disable-next-line react-hooks/exhaustive-deps */ }, [storeId]);
   useEffect(() => { if (menu) rememberStoreVendor(storeId, true); }, [menu, storeId]);
 
-  const shown = useMemo(() => (menu?.products ?? []).filter((p) => cat === 'all' || p.category_id === cat), [menu, cat]);
+  // "Recommended" = the shop's best picks: products on offer first, then the rest in the shop's own order
+  const shown = useMemo(() => {
+    const all = menu?.products ?? [];
+    const f = find.trim().toLowerCase();
+    if (f) return all.filter((p) => p.name.toLowerCase().includes(f));
+    if (cat === 'rec') {
+      const off = (p: (typeof all)[number]) => (p.mrp != null && p.mrp > p.price ? 1 : 0);
+      return all.filter((p) => p.is_available).map((p, i) => ({ p, i })).sort((a, b) => off(b.p) - off(a.p) || a.i - b.i).slice(0, 12).map((x) => x.p);
+    }
+    return all.filter((p) => p.category_id === cat);
+  }, [menu, cat, find]);
 
   if (error) return <div className="page"><PageHeader title="Shop" /><div className="content-pad narrow"><ErrorCard message={error} onRetry={() => void load()} /></div></div>;
   if (!menu) return <div className="page"><PageHeader title="Shop" /><CenterSpinner /></div>;
@@ -78,13 +89,21 @@ export default function StorePage() {
         <div className="store-meta">
           <span className={s.is_open ? 'open-badge' : 'closed-badge'}>{s.is_open ? 'Open now' : 'Closed now'}</span>
           {s.prep_minutes != null && <span className="muted small"><Clock size={13} /> packs in about {s.prep_minutes} min</span>}
-          {s.address && <span className="muted small block">{s.address}</span>}
+          {s.address && <span className="muted small block"><MapPin size={13} /> {s.address}</span>}
         </div>
 
-        {menu.categories.length > 0 && (
-          <div className="sort-chips" role="tablist" aria-label="Product categories">
-            <button className={cat === 'all' ? 'active' : ''} onClick={() => setCat('all')}>All</button>
-            {menu.categories.map((c) => <button key={c.id} className={cat === c.id ? 'active' : ''} onClick={() => setCat(c.id)}>{c.name}</button>)}
+        <div className="search-bar">
+          <Search size={18} />
+          <input value={find} onChange={(e) => setFind(e.target.value)} placeholder={`Search in ${s.name}`} aria-label="Search in this shop" />
+          {find && <button className="icon-btn sm" aria-label="Clear search" onClick={() => setFind('')}><X size={16} /></button>}
+        </div>
+
+        {!find && (
+          <div className="store-cats-sticky">
+            <div className="sort-chips" role="tablist" aria-label="Product categories">
+              <button className={cat === 'rec' ? 'active' : ''} onClick={() => setCat('rec')}><Sparkles size={13} /> Recommended</button>
+              {menu.categories.map((c) => <button key={c.id} className={cat === c.id ? 'active' : ''} onClick={() => setCat(c.id)}>{c.name}</button>)}
+            </div>
           </div>
         )}
 
