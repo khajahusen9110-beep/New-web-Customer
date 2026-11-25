@@ -1275,3 +1275,53 @@ h3, .section-title { letter-spacing: -0.015em; }
 .fee-nudge { display: flex; flex-direction: column; gap: 2px; width: 100%; text-align: left; padding: 10px 12px; margin-bottom: 8px; border-radius: 14px; background: #ecfdf5; border: 1px dashed #34d399; }
 .fee-nudge-text { font-weight: 700; font-size: 13px; color: #047857; }
 .fee-nudge-save { font-size: 12px; color: #065f46; }
+
+/* ===== New home top (same look as the Android app): purple header, Grocery/Food tabs, pill search ===== */
+.brand-header { position: sticky; top: 0; z-index: 60; display: flex; align-items: center; gap: 4px; padding: 10px 8px calc(10px) 8px; background: #5b2fd0; color: #fff; }
+.brand-header .bh-btn { position: relative; width: 42px; height: 42px; display: grid; place-items: center; border-radius: 50%; color: #fff; background: none; }
+.brand-header .bh-btn:active { background: rgba(255,255,255,.15); }
+.bh-city { display: inline-flex; align-items: center; gap: 3px; padding: 6px 8px; border-radius: 10px; color: #fff; background: none; font-weight: 800; font-size: 16px; }
+.bh-city-name { max-width: 110px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.bh-spacer { flex: 1; }
+.bh-logo { display: inline-flex; align-items: center; gap: 6px; }
+.bh-logo img { width: 30px; height: 30px; border-radius: 8px; }
+.bh-wordmark { display: flex; flex-direction: column; line-height: 1; font-size: 18px; font-style: italic; }
+.bh-wordmark b { font-weight: 900; }
+.bh-wordmark .mart { color: #ffb020; }
+.bh-badge { position: absolute; top: 2px; right: 0; min-width: 18px; height: 18px; padding: 0 4px; border-radius: 9px; background: #b3261e; color: #fff; border: 1.5px solid #fff; font-size: 10px; font-weight: 800; display: grid; place-items: center; }
+
+.mode-tabs { display: flex; gap: 8px; padding: 12px 12px 6px; }
+.mt-tab { flex: 1; min-width: 0; position: relative; display: flex; align-items: center; justify-content: center; gap: 8px; padding: 10px 10px; border-radius: 18px; background: #f1ecfd; color: var(--text); text-align: left; }
+.mt-tab:disabled { opacity: .55; cursor: not-allowed; }
+.mt-tab.selected { background: #5b2fd0; color: #fff; box-shadow: 0 4px 10px rgba(91,47,208,.35); }
+.mt-tab.selected::after { content: ''; position: absolute; left: 50%; bottom: -8px; transform: translateX(-50%); border-left: 9px solid transparent; border-right: 9px solid transparent; border-top: 8px solid #5b2fd0; }
+.mt-icon { display: grid; place-items: center; flex: none; }
+.mt-text { display: flex; flex-direction: column; min-width: 0; line-height: 1.25; }
+.mt-text b { font-size: 15px; font-weight: 800; white-space: nowrap; }
+.mt-text small { font-size: 11px; color: var(--muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.mt-tab.selected .mt-text small { color: rgba(255,255,255,.85); }
+.mode-tabs.three .mt-tab { padding: 10px 8px; gap: 6px; }
+
+.pill-search { display: flex; align-items: center; gap: 10px; margin: 12px 12px 0; padding: 0 10px 0 16px; background: #fff; border: 1px solid #e5e1f2; border-radius: 28px; }
+.pill-search:focus-within { border-color: var(--primary); box-shadow: 0 0 0 3px color-mix(in srgb, var(--primary) 14%, transparent); }
+.pill-search input { flex: 1; min-width: 0; border: 0; outline: none; background: transparent; padding: 14px 0; font-size: 15px; }
+.pill-search .icon-btn.on { color: var(--primary); }
+
+.hs-header { display: flex; align-items: center; justify-content: space-between; margin: 6px 0 2px; }
+.hs-header h3 { font-size: 20px; font-weight: 800; margin: 0; }
+.hs-see-all { color: var(--primary); font-weight: 700; font-size: 15px; background: none; padding: 4px; }
+
+.menu-sheet-backdrop { position: fixed; inset: 0; z-index: 300; background: rgba(0,0,0,.4); display: flex; align-items: flex-end; justify-content: center; }
+.menu-sheet { width: 100%; max-width: 520px; background: #fff; border-radius: 20px 20px 0 0; padding: 8px 0 calc(16px + env(safe-area-inset-bottom)); }
+.menu-sheet-row { display: block; width: 100%; text-align: left; padding: 16px 24px; font-size: 16px; font-weight: 600; background: none; border-bottom: 1px solid #eeeaf7; }
+
+@media (min-width: 900px) {
+  .tab-layout .brand-header { top: 64px; padding-left: max(8px, calc((100% - 1200px) / 2 + 12px)); padding-right: max(8px, calc((100% - 1200px) / 2 + 12px)); }
+  .mode-tabs, .pill-search { max-width: 760px; margin-left: auto; margin-right: auto; }
+  .pill-search { margin-top: 12px; }
+  .menu-sheet-backdrop { align-items: center; }
+  .menu-sheet { border-radius: 20px; }
+}
+.all-cats { padding: 16px 16px calc(20px + env(safe-area-inset-bottom)); max-height: 80vh; overflow-y: auto; }
+.all-cats-title { font-size: 18px; font-weight: 800; margin: 0 0 12px; }
+.all-cats-grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 14px 6px; justify-items: center; }
