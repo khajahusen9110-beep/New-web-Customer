@@ -8,6 +8,7 @@ import { getAddresses } from '../lib/repository';
 import type { CustomerAddress } from '../lib/types';
 import { errorMessage, rupees } from '../lib/utils';
 import { openUpiCheckout } from '../lib/razorpay';
+import { startOrderLocation, type LiveFix } from '../lib/orderLocation';
 import {
   STATUS_LABEL, cancelHelperBooking, createHelperBooking, getHelperBooking, getHelperConfig, helperPhotoUrl, isActive,
   createExtensionPayment, createHelperPayment, myHelperBookings, requestHelperExtension, syncExtensionPayment, verifyExtensionPayment, rateHelperBooking, syncHelperPayment, verifyHelperPayment, uploadHelperPhoto, type HelperBooking, type HelperCategory, type HelperConfig,
@@ -211,6 +212,10 @@ function BookForm({ cfg, cityId, userId, onBooked }: { cfg: HelperConfig; cityId
     return d.toISOString().slice(0, 16);
   };
 
+  // the customer's real position is searched while the form is filled, so it is ready when they tap Book
+  const liveFix = useRef<Promise<LiveFix | null> | null>(null);
+  if (liveFix.current === null) liveFix.current = startOrderLocation();
+
   const submit = async () => {
     if (!addressId) { toast('Choose your address'); return; }
     if (desc.trim().length < (cat.is_custom ? 15 : 5)) { toast(cat.is_custom ? 'Please describe your task in a little more detail' : 'Please describe the task'); return; }
@@ -219,9 +224,10 @@ function BookForm({ cfg, cityId, userId, onBooked }: { cfg: HelperConfig; cityId
     if (cfg.require_rules_ack !== false && !ack) { toast('Please accept what the helper does and does not do'); return; }
     setBusy(true);
     try {
+      const live = await Promise.race([liveFix.current!, new Promise<null>((r) => setTimeout(() => r(null), 5000))]);
       const b = await createHelperBooking({
         cityId, addressId, categoryId: cat.id, description: desc.trim(), photoPaths: photos.map((p) => p.path), minutes,
-        requestedFor: later ? new Date(when).toISOString() : null, paymentMethod: mode === 'both' ? pay : mode, rulesAccepted: ack,
+        requestedFor: later ? new Date(when).toISOString() : null, paymentMethod: mode === 'both' ? pay : mode, rulesAccepted: ack, live,
       });
       if (b.status === 'pending_payment') {
         const { userPhone, userEmail } = useSession.getState();
