@@ -1,8 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import {
-  ArrowLeft,
-  Bell,
   ChefHat,
   ChevronDown,
   ChevronRight,
@@ -12,9 +10,6 @@ import {
   Flame,
   MapPin,
   Percent,
-  RefreshCw,
-  Search,
-  ShoppingCart,
   SlidersHorizontal,
   Soup,
   Star,
@@ -40,6 +35,7 @@ import {
   toast,
 } from '../components/ui';
 import { openCityPicker } from '../components/CityPicker';
+import { HomeBrandHeader, HomeMenuSheet, HomeModeTabs, HomePillSearch, openSupportWhatsApp, useOpen } from '../components/HomeTop';
 import {
   getCompletedOrderCount,
   getPromoCoupon,
@@ -97,7 +93,6 @@ import { LocalAdStrip } from '../components/LocalAdStrip';
 import { OfferBanner } from '../components/OfferBanner';
 import { OfferInline } from '../lib/promo';
 import { useDebounced, useFreshCart, useInfiniteSentinel, useMyWallet } from '../lib/hooks';
-import { WalletChip } from '../components/WalletChip';
 import {
   clockLabel,
   cartTotal,
@@ -128,62 +123,6 @@ let couponShownThisSession = false;
 // In stock + featured, in stock, unavailable + featured, unavailable; then by name.
 const sortGrocery = sortGroceryProducts;
 
-
-function HomeTopBar({
-  onRefresh,
-  showBack,
-  backLabel,
-  onBack,
-}: {
-  onRefresh: () => void;
-  showBack: boolean;
-  backLabel: string;
-  onBack: () => void;
-}) {
-  const navigate = useNavigate();
-  const city = useSession((s) => s.selectedCity);
-  const label = useSession((s) => s.defaultAddressLabel);
-  const unread = useSession((s) => s.unreadNotificationCount);
-  const count = useCart((s) => cartCount(s.groceryCart) + cartCount(s.hotelCart));
-  return (
-    <header className="home-top">
-      {showBack && (
-        <button className="icon-btn" aria-label={backLabel} onClick={onBack}>
-          <ArrowLeft size={22} />
-        </button>
-      )}
-      <button className="deliver-to" onClick={openCityPicker}>
-        <span className="icon-circle">
-          <MapPin size={20} />
-        </span>
-        <span className="deliver-text">
-          <span className="label-caps">Deliver to</span>
-          <span className="deliver-city">
-            <span className="deliver-city-name">
-              {label ? `${label} • ` : ''}
-              {city?.name ?? 'Select City'}
-            </span>
-            <ChevronDown size={16} className="text-primary" />
-          </span>
-        </span>
-      </button>
-      <div className="row gap-6">
-        <WalletChip />
-        <button className="icon-circle-btn" aria-label="Refresh" onClick={onRefresh}>
-          <RefreshCw size={19} />
-        </button>
-        <button className="icon-circle-btn" aria-label="Notifications" onClick={() => navigate('/notifications')}>
-          <Bell size={19} />
-          {unread > 0 && <span className="badge">{unread > 99 ? '99+' : unread}</span>}
-        </button>
-        <button className="icon-circle-btn" aria-label="Cart" onClick={() => navigate('/cart')}>
-          <ShoppingCart size={19} />
-          {count > 0 && <span className="badge">{count}</span>}
-        </button>
-      </div>
-    </header>
-  );
-}
 
 function FreeDeliveryBanner({ threshold }: { threshold: number }) {
   return (
@@ -772,16 +711,7 @@ function whenIdle(fn: () => void) {
   else setTimeout(fn, 300);
 }
 
-// Rotating examples in the search box (hints only — typing searches everything as before).
-const GROCERY_SEARCH_HINTS = ['tomato', 'onion', 'fruits', 'vegetables'];
-const FOOD_SEARCH_HINTS = ['biryani', 'dosa', 'roti', 'fried rice'];
-
 export default function HomePage() {
-  const [searchHint, setSearchHint] = useState(0);
-  useEffect(() => {
-    const t = setInterval(() => !document.hidden && setSearchHint((n) => n + 1), 2600);
-    return () => clearInterval(t);
-  }, []);
   const navigate = useNavigate();
   const [params, setParams] = useSearchParams();
   const city = useSession((s) => s.selectedCity);
@@ -831,6 +761,7 @@ export default function HomePage() {
   const [foodRatingOnly, setFoodRatingOnly] = useState(false);
   const [foodOffersOnly, setFoodOffersOnly] = useState(false);
   const [showFoodFilters, setShowFoodFilters] = useState(false);
+  const [menuOpen, openMenu, closeMenu] = useOpen();
   const [trendingSearches, setTrendingSearches] = useState<string[]>([]);
   const loggedQueryRef = useRef<string>('');
 
@@ -1489,56 +1420,44 @@ export default function HomePage() {
 
   return (
     <div className="page home-page">
-      <HomeTopBar
-        onRefresh={refresh}
-        showBack={isHotels && (serviceMode !== 'food_only' || tier != null || selectedDish != null)}
-        backLabel={tier != null || selectedDish != null ? 'Back to food home' : 'Back to groceries'}
-        onBack={() => {
+      <HomeBrandHeader
+        onMenu={openMenu}
+        onBack={isHotels && (serviceMode !== 'food_only' || tier != null || selectedDish != null) ? () => {
           if (tier != null) setTier(null);
           else if (selectedDish != null) setDishKeySel(null);
           else setMode('grocery');
-        }}
+        } : undefined}
+        backLabel={tier != null || selectedDish != null ? 'Back to food home' : 'Back to groceries'}
+      />
+      <HomeMenuSheet
+        open={menuOpen}
+        onClose={closeMenu}
+        items={[
+          { label: 'Wallet', onClick: () => navigate('/wallet') },
+          { label: 'Cart', onClick: () => navigate('/cart') },
+          { label: 'Refer & Earn', onClick: () => navigate('/refer') },
+          { label: 'Help & Support', onClick: () => navigate('/help') },
+          { label: 'Chat on WhatsApp', onClick: openSupportWhatsApp },
+          { label: 'Refresh', onClick: refresh },
+        ]}
       />
 
-      <div className="home-controls">
-        <div className="search-bar">
-          <Search size={18} className="muted" />
-          <input
-            value={search}
-            onChange={(e) => setSearch(e.target.value)}
-            placeholder={`Search "${(isHotels ? FOOD_SEARCH_HINTS : GROCERY_SEARCH_HINTS)[searchHint % 4]}"`}
-            aria-label="Search"
-          />
-          {search && (
-            <button className="icon-btn sm" aria-label="Clear search" onClick={() => setSearch('')}>
-              <X size={16} />
-            </button>
-          )}
-        </div>
-        <div className={`mode-toggle${helperOn ? ' three' : ''}`}>
-          {storesReplaceGrocery ? (
-            <button onClick={() => navigate('/stores')}>Grocery</button>
-          ) : (
-            <button
-              className={!isHotels ? 'active' : ''}
-              disabled={serviceMode === 'food_only'}
-              onClick={() => setMode('grocery')}
-            >
-              {helperOn || storesOn ? 'Groceries' : <>Fresh Groceries &amp; Fruits</>}
-              {serviceMode === 'food_only' && <span className="soon-badge">Coming Soon</span>}
-            </button>
-          )}
-          <button
-            className={isHotels ? 'active' : ''}
-            disabled={serviceMode === 'grocery_only'}
-            onClick={() => setMode('hotels')}
-          >
-            {helperOn ? 'Hotel Food' : <>Hotel Food &amp; Dining</>}
-            {serviceMode === 'grocery_only' && <span className="soon-badge">Coming Soon</span>}
-          </button>
-          {helperOn && <button onClick={() => navigate('/helper')}>Quick Helper</button>}
-        </div>
-      </div>
+      <HomeModeTabs
+        foodSelected={isHotels}
+        helperOn={helperOn}
+        groceryEnabled={serviceMode !== 'food_only'}
+        foodEnabled={serviceMode !== 'grocery_only'}
+        onGrocery={() => (storesReplaceGrocery ? navigate('/stores') : setMode('grocery'))}
+        onFood={() => setMode('hotels')}
+        onHelper={() => navigate('/helper')}
+      />
+      <HomePillSearch
+        value={search}
+        onChange={setSearch}
+        hint="Search products, stores or food"
+        onFilter={isHotels ? () => setShowFoodFilters((v) => !v) : undefined}
+        filterActive={isHotels && showFoodFilters}
+      />
 
       {isHotels && !search && trendingSearches.length > 0 && (
         <div className="search-suggest-row">

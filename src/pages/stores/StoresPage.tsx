@@ -1,10 +1,13 @@
 import { useEffect, useMemo, useState } from 'react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
-import { ChevronRight, MapPin, Search, Sparkles, Store as StoreIcon, X } from 'lucide-react';
+import { ChevronRight, LayoutGrid, MapPin, MoreHorizontal, Search, Store as StoreIcon } from 'lucide-react';
 import { useSession } from '../../store/session';
-import { ConfirmDialog, EmptyState, ErrorCard, ListSkeleton, PageHeader, toast } from '../../components/ui';
+import { ConfirmDialog, EmptyState, ErrorCard, ListSkeleton, toast } from '../../components/ui';
+import { HomeBrandHeader, HomeMenuSheet, HomeModeTabs, HomePillSearch, HomeSectionHeader, openSupportWhatsApp, useOpen } from '../../components/HomeTop';
+import { PromoCarousel } from '../../components/PromoCarousel';
+import { getPromoBanners } from '../../lib/repository';
 import { cartCount, useCart } from '../../store/cart';
-import type { CartItem } from '../../lib/types';
+import type { CartItem, PromoBanner } from '../../lib/types';
 import {
   getCustomerLocation, getStoreMenu, getStoresConfig, listStores, searchStoreProducts,
   type Loc, type StoreListItem, type StoreProductHit, type StoreSort, type StoresConfig,
@@ -40,6 +43,16 @@ export default function StoresPage() {
   const [searching, setSearching] = useState(false);
 
   const [helperOn, setHelperOn] = useState(false);
+  const [menuOpen, openMenu, closeMenu] = useOpen();
+  const [allCats, setAllCats] = useState(false);
+  const [banners, setBanners] = useState<PromoBanner[]>([]);
+  useEffect(() => { if (cityId) void getPromoBanners(cityId, 'grocery').then(setBanners).catch(() => undefined); }, [cityId]);
+  const openBanner = (b: PromoBanner) => {
+    if (!b.link_value) return;
+    if (b.link_type === 'hotel') navigate(`/hotel/${b.link_value}`);
+    else if (b.link_type === 'url' && /^https:\/\//.test(b.link_value)) window.open(b.link_value, '_blank', 'noopener,noreferrer');
+    else if (b.link_type === 'category') setParams({ c: b.link_value }, { replace: true });
+  };
   useEffect(() => { void getStoresConfig(cityId).then(setCfg); }, [cityId]);
   useEffect(() => { if (cityId) void getHelperConfig(cityId).then((c) => setHelperOn(c?.enabled === true)); }, [cityId]);
   useEffect(() => { void getCustomerLocation(userId).then((l) => { setLoc(l); setLocDone(true); }); }, [userId]);
@@ -104,30 +117,39 @@ export default function StoresPage() {
 
   return (
     <div className="page stores-page">
-      <PageHeader title="Grocery" subtitle={city?.name} back={false} />
+      <HomeBrandHeader onMenu={openMenu} />
+      <HomeMenuSheet
+        open={menuOpen}
+        onClose={closeMenu}
+        items={[
+          { label: 'My price quotes', onClick: () => navigate('/quotes') },
+          { label: 'Wallet', onClick: () => navigate('/wallet') },
+          { label: 'Refer & Earn', onClick: () => navigate('/refer') },
+          { label: 'Help & Support', onClick: () => navigate('/help') },
+          { label: 'Chat on WhatsApp', onClick: openSupportWhatsApp },
+        ]}
+      />
+      <HomeModeTabs foodSelected={false} helperOn={helperOn} onGrocery={() => undefined} onFood={() => navigate('/?mode=hotels')} onHelper={() => navigate('/helper')} />
+      <HomePillSearch
+        value={text}
+        onChange={(v) => { setText(v); if (!v) setParams(catId ? { c: catId } : {}, { replace: true }); }}
+        hint="Search products, stores or food"
+        label="Search products in shops"
+      />
       <div className="content-pad narrow stack">
-        <div className={`mode-toggle${helperOn ? ' three' : ''}`}>
-          <button className="active">Grocery</button>
-          <button onClick={() => navigate('/?mode=hotels')}>Hotel Food</button>
-          {helperOn && <button onClick={() => navigate('/helper')}>Quick Helper</button>}
-        </div>
+        {!searchingNow && banners.length > 0 && <PromoCarousel banners={banners} onOpen={openBanner} />}
 
         <button className="list-card" onClick={() => navigate('/quotes')} style={{ padding: '10px 14px' }}>
           <span className="grow"><strong className="block">My price quotes</strong><span className="muted small">Ask a shop for a price on custom work</span></span>
           <ChevronRight size={20} className="muted" />
         </button>
 
-        <div className="search-bar">
-          <Search size={18} />
-          <input value={text} onChange={(e) => setText(e.target.value)} placeholder="Search products in all shops" aria-label="Search products in shops" />
-          {text && <button className="icon-btn sm" aria-label="Clear search" onClick={() => { setText(''); setParams(catId ? { c: catId } : {}, { replace: true }); }}><X size={16} /></button>}
-        </div>
-
+        {cfg && cfg.categories.length > 0 && !searchingNow && <HomeSectionHeader title="Shop Categories" onAction={() => setAllCats(true)} />}
         {cfg && cfg.categories.length > 0 && !searchingNow && (
           <div className="cat-round-row" role="tablist" aria-label="Shop categories">
             <button role="tab" aria-selected={!catId} className={`cat-round${!catId ? ' active' : ''}`} onClick={() => selectCat('')}>
-              <span className="cat-round-img"><Sparkles size={26} /></span>
-              <span className="cat-round-name">Recommended</span>
+              <span className="cat-round-img"><LayoutGrid size={26} /></span>
+              <span className="cat-round-name">All Categories</span>
             </button>
             {cfg.categories.map((c) => (
               <button key={c.id} role="tab" aria-selected={catId === c.id} className={`cat-round${catId === c.id ? ' active' : ''}`} onClick={() => selectCat(c.id)}>
@@ -135,6 +157,26 @@ export default function StoresPage() {
                 <span className="cat-round-name">{c.name}</span>
               </button>
             ))}
+            <button className="cat-round" onClick={() => setAllCats(true)}>
+              <span className="cat-round-img"><MoreHorizontal size={26} /></span>
+              <span className="cat-round-name">More</span>
+            </button>
+          </div>
+        )}
+
+        {allCats && cfg && (
+          <div className="menu-sheet-backdrop" onClick={() => setAllCats(false)} role="presentation">
+            <div className="menu-sheet all-cats" role="dialog" aria-label="All categories" onClick={(e) => e.stopPropagation()}>
+              <h3 className="all-cats-title">All categories</h3>
+              <div className="all-cats-grid">
+                {cfg.categories.map((c) => (
+                  <button key={c.id} className={`cat-round${catId === c.id ? ' active' : ''}`} onClick={() => { selectCat(c.id); setAllCats(false); }}>
+                    <span className="cat-round-img">{c.image_url ? <img src={c.image_url} alt="" loading="lazy" /> : <b>{c.name.charAt(0)}</b>}</span>
+                    <span className="cat-round-name">{c.name}</span>
+                  </button>
+                ))}
+              </div>
+            </div>
           </div>
         )}
 
