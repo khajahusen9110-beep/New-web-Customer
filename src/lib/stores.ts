@@ -281,7 +281,7 @@ export async function getPendingReview(): Promise<PendingReview | null> {
 export const MIN_REVIEWS_FOR_STARS = 3;
 
 /** Rating, review count and the free-delivery note of each shop card (server decides; nothing is invented). */
-export interface StoreCardInfo { store_id: string; avg_rating: number | null; review_count: number; free_delivery: boolean; free_over: number | null }
+export interface StoreCardInfo { store_id: string; avg_rating: number | null; review_count: number; free_delivery: boolean; free_over: number | null; popular?: boolean }
 export async function getStoreCardInfo(cityId: string, stores: { store_id: string; distance_km: number | null }[]): Promise<Record<string, StoreCardInfo>> {
   if (!stores.length) return {};
   try {

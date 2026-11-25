@@ -10,29 +10,33 @@ export function StoreCard({ s, info }: { s: StoreListItem; info?: StoreCardInfo 
   const hasRating = info?.avg_rating != null && info.review_count >= MIN_REVIEWS_FOR_STARS;
   const isNew = !!info && !hasRating;
   const free = info?.free_delivery === true;
+  const fresh = /vegetable|fruit|dairy/i.test(s.category_name ?? '');
   const nearby = !s.is_nearest && s.distance_km != null && s.distance_km <= 2;
+  const tone = !s.is_open ? 'closed' : s.is_nearest ? 'nearest' : 'open';
   return (
-    <div className={`store-card2${s.is_open ? '' : ' closed'}`} role="link" tabIndex={0} onClick={open} onKeyDown={(e) => e.key === 'Enter' && open()} data-testid="store-card">
-      <span className="sc2-photo">{s.banner_url ? <img src={s.banner_url} alt="" loading="lazy" /> : <StoreIcon size={34} />}</span>
-      <span className="sc2-body">
-        <span className="sc2-name"><strong>{s.name}</strong><BadgeCheck size={20} className="sc2-verified" aria-label="Verified shop" /></span>
-        <span className="sc2-sub">{s.category_name}{s.distance_km != null ? ` · ${kmLabel(s.distance_km)}` : ''}</span>
-        {(hasRating || isNew || free) && (
-          <span className="sc2-meta">
-            {hasRating && <span className="sc2-rating"><Star size={15} fill="currentColor" /> <b>{info!.avg_rating!.toFixed(1)}</b> <span>({info!.review_count})</span></span>}
-            {isNew && <span className="sc2-new">✨ New</span>}
-            {(hasRating || isNew) && free && <span className="sc2-sep" />}
-            {free && <span className="sc2-free"><Bike size={15} /> Free Delivery{info!.free_over ? ` ₹${Math.trunc(info!.free_over)}+` : ''}</span>}
-          </span>
-        )}
-        <span className="sc2-foot">
-          <span className="store-badges">
-            {s.is_nearest && <span className="nearest-badge"><MapPin size={12} /> Nearest</span>}
-            {nearby && <span className="nearby-badge"><MapPin size={12} /> Nearby</span>}
-            <span className={s.is_open ? 'open-badge' : 'closed-badge'}>{s.is_open ? '● Open' : 'Closed'}</span>
-          </span>
-          <span className="sc2-view">View Store <ChevronRight size={16} /></span>
+    <div className={`store-card3 ${tone}`} role="link" tabIndex={0} onClick={open} onKeyDown={(e) => e.key === 'Enter' && open()} data-testid="store-card">
+      <span className="sc3-photo">
+        {s.banner_url ? <img src={s.banner_url} alt="" loading="lazy" /> : <StoreIcon size={56} />}
+        <span className="sc3-shade" />
+        <span className="sc3-tl">
+          <span className={s.is_open ? 'open-badge' : 'closed-badge'}>{s.is_open ? '● Open' : 'Closed'}</span>
+          {info?.popular ? <span className="sc3-pop">★ Popular</span> : fresh ? <span className="sc3-fresh">🌿 Fresh</span> : null}
         </span>
+        <span className="sc3-tr">
+          {hasRating ? <span className="sc3-rate"><Star size={14} fill="currentColor" /> <b>{info!.avg_rating!.toFixed(1)}</b> <span>({info!.review_count})</span></span> : isNew ? <span className="sc2-new">✨ New</span> : null}
+        </span>
+        <span className="sc3-bl">
+          {s.is_nearest ? <span className="nearest-badge"><MapPin size={12} /> Nearest</span> : nearby ? <span className="nearby-badge"><MapPin size={12} /> Nearby</span> : null}
+          {s.distance_km != null && <span className="sc3-km">{kmLabel(s.distance_km)}</span>}
+        </span>
+      </span>
+      <span className="sc3-body">
+        <span className="sc2-name"><strong>{s.name}</strong><BadgeCheck size={21} className="sc2-verified" aria-label="Verified shop" /></span>
+        <span className="sc3-sub">
+          <span>{s.category_name}</span>
+          {free && <span className="sc3-free"><Bike size={16} /> Free Delivery{info!.free_over ? ` ₹${Math.trunc(info!.free_over)}+` : ''}</span>}
+        </span>
+        <span className="sc3-btn">{s.is_open ? 'View Store' : 'View Store (closed)'} <ChevronRight size={20} /></span>
       </span>
     </div>
   );
