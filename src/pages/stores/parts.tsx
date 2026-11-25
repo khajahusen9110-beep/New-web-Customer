@@ -1,13 +1,14 @@
 import { useNavigate } from 'react-router-dom';
 import { BadgeCheck, Bike, ChevronRight, MapPin, Plus, Star, Store as StoreIcon } from 'lucide-react';
-import { kmLabel, type StoreCardInfo, type StoreListItem, type StoreProductHit } from '../../lib/stores';
+import { kmLabel, MIN_REVIEWS_FOR_STARS, type StoreCardInfo, type StoreListItem, type StoreProductHit } from '../../lib/stores';
 
 const rupee = (n: number) => `₹${Number.isInteger(n) ? n : n.toFixed(2)}`;
 
 export function StoreCard({ s, info }: { s: StoreListItem; info?: StoreCardInfo }) {
   const navigate = useNavigate();
   const open = () => navigate(`/stores/s/${s.store_id}`);
-  const hasRating = info?.avg_rating != null && info.review_count > 0;
+  const hasRating = info?.avg_rating != null && info.review_count >= MIN_REVIEWS_FOR_STARS;
+  const isNew = !!info && !hasRating;
   const free = info?.free_delivery === true;
   const nearby = !s.is_nearest && s.distance_km != null && s.distance_km <= 2;
   return (
@@ -16,10 +17,11 @@ export function StoreCard({ s, info }: { s: StoreListItem; info?: StoreCardInfo 
       <span className="sc2-body">
         <span className="sc2-name"><strong>{s.name}</strong><BadgeCheck size={20} className="sc2-verified" aria-label="Verified shop" /></span>
         <span className="sc2-sub">{s.category_name}{s.distance_km != null ? ` · ${kmLabel(s.distance_km)}` : ''}</span>
-        {(hasRating || free) && (
+        {(hasRating || isNew || free) && (
           <span className="sc2-meta">
             {hasRating && <span className="sc2-rating"><Star size={15} fill="currentColor" /> <b>{info!.avg_rating!.toFixed(1)}</b> <span>({info!.review_count})</span></span>}
-            {hasRating && free && <span className="sc2-sep" />}
+            {isNew && <span className="sc2-new">✨ New</span>}
+            {(hasRating || isNew) && free && <span className="sc2-sep" />}
             {free && <span className="sc2-free"><Bike size={15} /> Free Delivery{info!.free_over ? ` ₹${Math.trunc(info!.free_over)}+` : ''}</span>}
           </span>
         )}

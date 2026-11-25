@@ -35,6 +35,7 @@ import {
   toast,
 } from '../components/ui';
 import { openCityPicker } from '../components/CityPicker';
+import { ReviewPromptCard } from './stores/RatingParts';
 import { HomeBrandHeader, HomeMenuSheet, HomeModeTabs, HomePillSearch, openSupportWhatsApp, useOpen } from '../components/HomeTop';
 import {
   getCompletedOrderCount,
@@ -1451,6 +1452,7 @@ export default function HomePage() {
         onFood={() => setMode('hotels')}
         onHelper={() => navigate('/helper')}
       />
+      <ReviewPromptCard />
       <HomePillSearch
         value={search}
         onChange={setSearch}

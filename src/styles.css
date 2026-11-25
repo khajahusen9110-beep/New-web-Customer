@@ -1347,3 +1347,21 @@ h3, .section-title { letter-spacing: -0.015em; }
 .nearby-badge { display: inline-flex; align-items: center; gap: 3px; padding: 4px 10px; border-radius: 14px; background: #e0ecff; color: #1d4ed8; font-size: 12px; font-weight: 700; }
 .nearest-badge { display: inline-flex; align-items: center; gap: 3px; }
 .stores-footnote { display: flex; align-items: center; justify-content: center; gap: 8px; margin: 6px 0 0; padding: 12px; border-radius: 16px; background: var(--surface-variant); color: var(--text-2); font-size: 14px; font-weight: 600; }
+
+/* store ratings */
+.sc2-new { background: #ede9fe; color: #5b21b6; font-weight: 700; font-size: 12px; padding: 2px 8px; border-radius: 10px; }
+.rating-card { background: var(--surface, #fff); border: 1px solid #e5e7eb; border-radius: 16px; padding: 14px; }
+.rating-card h3 { margin: 0 0 10px; font-size: 16px; font-weight: 800; }
+.rating-top { display: flex; gap: 16px; align-items: center; }
+.rating-big { display: flex; flex-direction: column; align-items: center; min-width: 84px; }
+.rating-big strong { display: inline-flex; align-items: center; gap: 4px; font-size: 26px; font-weight: 800; }
+.rating-big strong svg { color: #7bc043; } .rating-big .rating-new { font-size: 20px; color: #5b21b6; }
+.rating-bars { flex: 1; display: grid; gap: 3px; }
+.rating-bar { display: flex; align-items: center; gap: 6px; font-size: 11px; }
+.rating-bar i { flex: 1; height: 6px; border-radius: 3px; background: #f1f5f9; overflow: hidden; } .rating-bar b { display: block; height: 100%; background: #7bc043; }
+.rating-bar em { width: 22px; font-style: normal; color: #6b7280; }
+.rating-review { border-top: 1px solid #f1f5f9; margin-top: 10px; padding-top: 8px; }
+.rating-review > div { display: flex; justify-content: space-between; font-size: 13px; } .rating-review svg { color: #7bc043; vertical-align: -2px; }
+.rating-review p { margin: 2px 0 0; font-size: 13px; color: #374151; }
+.review-prompt { display: flex; align-items: center; gap: 8px; margin: 4px 16px; padding: 12px 14px; border-radius: 16px; background: #fff8e1; border: 1px solid #ffe082; cursor: pointer; }
+.review-prompt > div { flex: 1; display: grid; } .review-prompt strong { font-weight: 800; } .review-prompt span { font-size: 13px; color: #9a5b00; }

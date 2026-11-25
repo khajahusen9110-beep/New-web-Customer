@@ -7,6 +7,7 @@ import { requestQuote } from '../../lib/quotes';
 import { uploadCustomPhoto } from '../../lib/stores';
 import { rememberStoreVendor } from '../../lib/storeVendor';
 import { cartCount, useCart } from '../../store/cart';
+import { StoreRatingSection } from './RatingParts';
 import { CustomiseSheet, type CustomiseResult } from './CustomiseSheet';
 import { useSession } from '../../store/session';
 import type { CartItem } from '../../lib/types';
@@ -103,6 +104,8 @@ export default function StorePage() {
           {s.prep_minutes != null && <span className="muted small"><Clock size={13} /> packs in about {s.prep_minutes} min</span>}
           {s.address && <span className="muted small block"><MapPin size={13} /> {s.address}</span>}
         </div>
+
+        <StoreRatingSection storeId={s.id} />
 
         <div className="search-bar">
           <Search size={18} />
