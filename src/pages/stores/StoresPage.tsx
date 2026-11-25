@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from 'react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
-import { ChevronRight, LayoutGrid, MapPin, MoreHorizontal, Search, Store as StoreIcon } from 'lucide-react';
+import { ChevronRight, Clock, LayoutGrid, MapPin, MoreHorizontal, Search, Store as StoreIcon } from 'lucide-react';
 import { useSession } from '../../store/session';
 import { ConfirmDialog, EmptyState, ErrorCard, ListSkeleton, toast } from '../../components/ui';
 import { HomeBrandHeader, HomeMenuSheet, HomeModeTabs, HomePillSearch, HomeSectionHeader, openSupportWhatsApp, useOpen } from '../../components/HomeTop';
@@ -9,8 +9,8 @@ import { getPromoBanners } from '../../lib/repository';
 import { cartCount, useCart } from '../../store/cart';
 import type { CartItem, PromoBanner } from '../../lib/types';
 import {
-  getCustomerLocation, getStoreMenu, getStoresConfig, listStores, searchStoreProducts,
-  type Loc, type StoreListItem, type StoreProductHit, type StoreSort, type StoresConfig,
+  getCustomerLocation, getStoreCardInfo, getStoreMenu, getStoresConfig, listStores, searchStoreProducts,
+  type Loc, type StoreCardInfo, type StoreListItem, type StoreProductHit, type StoreSort, type StoresConfig,
 } from '../../lib/stores';
 import { getHelperConfig } from '../../lib/helper';
 import { StoreCard, StoreProductRow } from './parts';
@@ -43,6 +43,7 @@ export default function StoresPage() {
   const [searching, setSearching] = useState(false);
 
   const [helperOn, setHelperOn] = useState(false);
+  const [cardInfo, setCardInfo] = useState<Record<string, StoreCardInfo>>({});
   const [menuOpen, openMenu, closeMenu] = useOpen();
   const [allCats, setAllCats] = useState(false);
   const [banners, setBanners] = useState<PromoBanner[]>([]);
@@ -112,6 +113,13 @@ export default function StoresPage() {
     () => (stores ?? []).slice().sort((a, b) => Number(b.is_open) - Number(a.is_open) || (a.distance_km ?? 999) - (b.distance_km ?? 999) || a.name.localeCompare(b.name)),
     [stores],
   );
+  // rating and the free-delivery note of the shops on the page (the server decides; nothing is shown when there is none)
+  useEffect(() => {
+    if (!cityId || shops.length === 0) { setCardInfo({}); return; }
+    let cancelled = false;
+    void getStoreCardInfo(cityId, shops.map((x) => ({ store_id: x.store_id, distance_km: x.distance_km }))).then((m) => !cancelled && setCardInfo(m));
+    return () => { cancelled = true; };
+  }, [cityId, shops]);
   const activeCat = cfg?.categories.find((c) => c.id === catId);
   const searchingNow = q.length >= 2;
 
@@ -214,8 +222,8 @@ export default function StoresPage() {
             {stores && shops.length === 0 && (
               <EmptyState icon={<StoreIcon size={36} />} title="No shops here yet" text={`We show shops within ${cfg?.radius_km ?? 5} km of you. Please check again soon.`} />
             )}
-            {shops.map((s) => <StoreCard key={s.store_id} s={s} />)}
-            {shops.length > 0 && <p className="muted small center">Open shops first{loc ? ' · nearest first' : ''} · within {cfg?.radius_km ?? 5} km.</p>}
+            {shops.map((s) => <StoreCard key={s.store_id} s={s} info={cardInfo[s.store_id]} />)}
+            {shops.length > 0 && <p className="stores-footnote"><Clock size={18} /> Open shops first{loc ? ' · nearest first' : ''} · within {cfg?.radius_km ?? 5} km</p>}
           </>
         )}
         {cartItems.length > 0 && <div style={{ height: 84 }} />}
