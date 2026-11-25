@@ -1,3 +1,4 @@
+import { attachOrderLocation, startOrderLocation } from '../lib/orderLocation';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { WhatsAppOffersCheck } from '../components/WhatsAppOffersCheck';
 import { fetchOffersChoice, saveOffersChoice } from '../lib/offersChoice';
@@ -438,6 +439,8 @@ export default function CheckoutPage() {
     try {
       // placeOrder checks maintenance mode itself right before checkout (no separate request here).
       // Only lines checked as available right now are sent.
+      // the customer's exact position, searched while the order is created (never delays it)
+      const liveSearch = startOrderLocation();
       const order = await placeOrder({
         userId,
         isHotel,
@@ -451,6 +454,7 @@ export default function CheckoutPage() {
         deliveryInstructions,
         storeDelivery: isStore ? storeChoice : null,
       });
+      void attachOrderLocation(order.id, liveSearch);
       void saveOffersChoice(offersOn, 'checkout_web');
       // Fired only here — after the server has genuinely created the order row — never on the
       // button click itself (a click can fail validation, payment, or server errors below).
