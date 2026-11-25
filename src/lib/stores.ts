@@ -69,6 +69,7 @@ export interface StoreMenu {
     name: string;
     banner_url: string | null;
     address: string | null;
+    phone?: string | null;
     category_id: string | null;
     category_name: string | null;
     is_open: boolean;
