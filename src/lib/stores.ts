@@ -251,3 +251,16 @@ export async function customPhotoUrl(path: string): Promise<string | null> {
   const { data } = await supabase.storage.from('custom-order-photos').createSignedUrl(path, 600);
   return data?.signedUrl ?? null;
 }
+
+/** Rating, review count and the free-delivery note of each shop card (server decides; nothing is invented). */
+export interface StoreCardInfo { store_id: string; avg_rating: number | null; review_count: number; free_delivery: boolean; free_over: number | null }
+export async function getStoreCardInfo(cityId: string, stores: { store_id: string; distance_km: number | null }[]): Promise<Record<string, StoreCardInfo>> {
+  if (!stores.length) return {};
+  try {
+    const { data, error } = await supabase.rpc('stores_card_info', { p_city_id: cityId, p_stores: stores.map((x) => ({ id: x.store_id, distance_km: x.distance_km })) });
+    if (error || !Array.isArray(data)) return {};
+    const out: Record<string, StoreCardInfo> = {};
+    for (const r of data as StoreCardInfo[]) out[r.store_id] = { ...r, avg_rating: r.avg_rating == null ? null : Number(r.avg_rating), free_over: r.free_over == null ? null : Number(r.free_over) };
+    return out;
+  } catch { return {}; }
+}
