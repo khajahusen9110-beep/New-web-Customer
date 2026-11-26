@@ -1,4 +1,4 @@
-import { attachOrderLocation, startOrderLocation } from '../lib/orderLocation';
+import { attachOrderLocation, recordCheckoutLocation, startOrderLocation, type LiveFix } from '../lib/orderLocation';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { WhatsAppOffersCheck } from '../components/WhatsAppOffersCheck';
 import { fetchOffersChoice, saveOffersChoice } from '../lib/offersChoice';
@@ -101,6 +101,13 @@ export default function CheckoutPage() {
   const [deliveryType, setDeliveryType] = useState<DeliveryType>('scheduled');
   const [slotId, setSlotId] = useState<string | null>(null);
   const [distanceKm, setDistanceKm] = useState<number | null>(null);
+  // The phone's position is searched when checkout opens; the server keeps it for the fee and the fee is worked out again from it
+  const [liveFix, setLiveFix] = useState<LiveFix | null>(null);
+  useEffect(() => {
+    let on = true;
+    void startOrderLocation().then((f) => { if (on && f) { void recordCheckoutLocation(f); setLiveFix(f); } });
+    return () => { on = false; };
+  }, []);
 
   const [couponInput, setCouponInput] = useState('');
   // Code the customer applied; the server preview says whether it is valid and what it gives.
@@ -199,11 +206,11 @@ export default function CheckoutPage() {
   useEffect(() => {
     if (!selectedAddress) return;
     let cancelled = false;
-    resolveDeliveryDistanceKm(selectedAddress, cityId, hotelVendorId, isHotel).then((d) => !cancelled && setDistanceKm(d));
+    resolveDeliveryDistanceKm(selectedAddress, cityId, hotelVendorId, isHotel, liveFix).then((d) => !cancelled && setDistanceKm(d));
     return () => {
       cancelled = true;
     };
-  }, [selectedAddress, cityId, hotelVendorId, isHotel]);
+  }, [selectedAddress, cityId, hotelVendorId, isHotel, liveFix]);
 
   // Delivery options for the effective city.
   useEffect(() => {

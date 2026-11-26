@@ -1937,10 +1937,13 @@ export async function resolveDeliveryDistanceKm(
   cityId: string | null,
   vendorId: string | null,
   isHotel: boolean,
+  live?: { lat: number; lng: number; accuracy: number } | null,
 ): Promise<number> {
   if (!address || address.lat == null || address.lng == null) return 1;
-  const lat = Number(address.lat);
-  const lng = Number(address.lng);
+  let lat = Number(address.lat);
+  let lng = Number(address.lng);
+  // The real position (accurate to 100 m and within 2 km of the chosen address) is a better start than a hand-placed pin; the server does the same.
+  if (live && live.accuracy <= 100 && haversineKm(lat, lng, live.lat, live.lng) <= 2) { lat = live.lat; lng = live.lng; }
   const pickup = await getPickupPoint(isHotel ? vendorId : null, cityId);
   if (pickup) {
     const d = haversineKm(lat, lng, pickup.lat, pickup.lng);
