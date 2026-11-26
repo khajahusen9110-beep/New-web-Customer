@@ -687,7 +687,7 @@ export default function HotelMenuPage() {
       <ConfirmDialog
         open={!!conflict}
         title="Replace Hotel Cart Items?"
-        text={`Your cart already contains items from another hotel. Clear existing items and add from ${vendorName}?`}
+        text={`Your cart already has the most shops you can order from at once (3). Clear existing items and add from ${vendorName}?`}
         confirmLabel="Clear & Add"
         onCancel={() => setConflict(null)}
         onConfirm={() => {

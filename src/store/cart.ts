@@ -8,6 +8,9 @@ import { trackEvent } from '../lib/analytics';
 // In-memory carts are the UI source of truth; they are mirrored to the
 // cart_items table (no prices stored) exactly like the Android app does.
 
+/** Most different shops one cart may hold (the server checks the city's own limit again). */
+export const MAX_SHOPS_PER_CART = 3;
+
 export type AddToCartResult =
   | { kind: 'success' }
   | { kind: 'hotelConflict'; existingVendorId: string; newVendorId: string; pendingItem: CartItem };
@@ -147,7 +150,9 @@ export const useCart = create<CartState>()(
         if (isHotel) {
           const list = get().hotelCart;
           const existingVendor = list.find((i) => i.vendor_id)?.vendor_id;
-          if (existingVendor && vendorId && existingVendor !== vendorId) {
+          const vendorsInCart = new Set(list.map((i) => i.vendor_id).filter(Boolean));
+          // up to MAX_SHOPS_PER_CART different shops can share a cart
+          if (existingVendor && vendorId && !vendorsInCart.has(vendorId) && vendorsInCart.size >= MAX_SHOPS_PER_CART) {
             return {
               kind: 'hotelConflict',
               existingVendorId: existingVendor,

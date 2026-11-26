@@ -181,7 +181,7 @@ export default function StorePage() {
       <ConfirmDialog
         open={!!conflict}
         title="Replace your cart?"
-        text={`Your cart already has items from another shop or hotel. Clear it and add from ${s.name}?`}
+        text={`Your cart already has the most shops you can order from at once (3). Clear it and add from ${s.name}?`}
         confirmLabel="Clear & Add"
         onCancel={() => setConflict(null)}
         onConfirm={() => {

@@ -2124,6 +2124,18 @@ function parseOrderFromRpc(data: unknown): Order | null {
   return { ...fallback(id), ...(obj as Partial<Order>), id };
 }
 
+/** Delivery time of the last several-shop order (shown after ordering). */
+export const multiOrderEta: { minutes: number | null } = { minutes: null };
+
+/** The city's delivery-time rule: minutes = base + per shop x shops, and the most shops in one cart. */
+export async function getDeliveryEtaConfig(cityId: string): Promise<{ base: number; perShop: number; max: number }> {
+  try {
+    const { data } = await supabase.rpc('get_delivery_eta_config', { p_city_id: cityId });
+    const d = (data ?? {}) as { base_eta_minutes?: number; per_store_eta_minutes?: number; max_stores?: number };
+    return { base: d.base_eta_minutes ?? 20, perShop: d.per_store_eta_minutes ?? 10, max: d.max_stores ?? 3 };
+  } catch { return { base: 20, perShop: 10, max: 3 }; }
+}
+
 /** Thrown by placeOrder when the service is in maintenance, so checkout can show its maintenance screen. */
 export class MaintenanceError extends Error {}
 
@@ -2186,6 +2198,30 @@ export async function placeOrder(p: {
     p_items: items,
     p_notes: null,
   };
+  // Several shops in the cart: one order per shop, placed together (cash on delivery for now)
+  const shopIds = Array.from(new Set(raw.map((i) => i.vendor_id).filter((v): v is string => !!v)));
+  if (p.isHotel && shopIds.length > 1) {
+    if (paymentMethod !== 'cash') throw new Error('Orders from more than one shop are cash on delivery for now.');
+    const stores = shopIds.map((vid) => ({ vendor_id: vid, items: items.filter((_, idx) => raw[idx].vendor_id === vid) }));
+    const { data, error } = await supabase.rpc('checkout_multi_order', {
+      p_address_id: p.addressId, p_payment_method: paymentMethod, p_stores: stores,
+      p_coupon_code: p.couponCode?.trim().toUpperCase() || null, p_use_wallet: p.useWallet === true,
+    });
+    if (error) throw new Error(errorMessage(error, 'Failed to place order'));
+    const j = data as { eta_minutes?: number; total?: number; orders?: { id: string; order_number: string }[] };
+    const list = j.orders ?? [];
+    const cooking = p.cookingInstructions?.trim() || null;
+    const delivery = p.deliveryInstructions?.trim() || null;
+    if (cooking || delivery) {
+      for (const o of list) {
+        try { await supabase.rpc('set_order_instructions', { p_order_id: o.id, p_cooking: cooking, p_delivery: delivery }); } catch { /* best effort */ }
+      }
+    }
+    try { await clearCartDirectly(p.isHotel); } catch { /* the orders are placed */ }
+    invalidateCache('myWallet');
+    multiOrderEta.minutes = j.eta_minutes ?? null;
+    return { ...(parseOrderFromRpc(list[0]?.id ?? '') ?? {}), order_number: list[0]?.order_number ?? '', total_amount: Number(j.total ?? 0), status: 'pending', payment_method: 'cash' } as Order;
+  }
   // The checkout RPC validates the coupon, applies the discount to the order total and
   // records the usage itself, so the customer is charged exactly what checkout showed.
   // Do not send p_slot_id / p_delivery_type: the RPCs do not accept them yet.

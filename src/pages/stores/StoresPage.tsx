@@ -236,7 +236,7 @@ export default function StoresPage() {
       <ConfirmDialog
         open={!!conflict}
         title="Replace your cart?"
-        text={`Your cart already has items from another shop or hotel. Clear it and add from ${conflictShop}?`}
+        text={`Your cart already has the most shops you can order from at once (3). Clear it and add from ${conflictShop}?`}
         confirmLabel="Clear & Add"
         onCancel={() => setConflict(null)}
         onConfirm={() => { forceClearHotelCartAndAdd(conflict!); setConflict(null); toast('Cart cleared and item added'); }}
