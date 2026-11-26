@@ -119,11 +119,14 @@ export async function getHelperConfig(cityId: string | null | undefined, force =
 export async function createHelperBooking(p: {
   cityId: string; addressId: string; categoryId: string; description: string; photoPaths: string[]; minutes: number; requestedFor: string | null;
   paymentMethod: 'upi' | 'cash'; rulesAccepted: boolean;
+  /** The customer's real position and its accuracy (the nearest matching helper is chosen from it); optional. */
+  live?: { lat: number; lng: number; accuracy: number } | null;
 }): Promise<HelperBooking> {
-  const { data, error } = await supabase.rpc('helper_create_booking', {
+  const { data, error } = await supabase.rpc('helper_create_booking_v2', {
     p_city_id: p.cityId, p_address_id: p.addressId, p_category_id: p.categoryId, p_description: p.description,
     p_photo_paths: p.photoPaths, p_minutes: p.minutes, p_requested_for: p.requestedFor,
     p_payment_method: p.paymentMethod, p_rules_accepted: p.rulesAccepted,
+    p_live_lat: p.live?.lat ?? null, p_live_lng: p.live?.lng ?? null, p_live_accuracy: p.live?.accuracy ?? null,
   });
   if (error) throw new Error(error.message);
   return data as HelperBooking;

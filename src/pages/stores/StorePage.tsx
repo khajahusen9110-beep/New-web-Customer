@@ -1,12 +1,14 @@
 import { useEffect, useMemo, useState } from 'react';
 import { useNavigate, useParams, useSearchParams } from 'react-router-dom';
-import { Clock, MapPin, Plus, Search, Sparkles, Store as StoreIcon, X } from 'lucide-react';
+import { Plus, Search, Store as StoreIcon, X } from 'lucide-react';
 import { CenterSpinner, ConfirmDialog, Modal, EmptyState, ErrorCard, FloatingCartButton, PageHeader, QuantityStepper, toast } from '../../components/ui';
 import { getStoreMenu, type StoreMenu } from '../../lib/stores';
 import { requestQuote } from '../../lib/quotes';
 import { uploadCustomPhoto } from '../../lib/stores';
 import { rememberStoreVendor } from '../../lib/storeVendor';
 import { cartCount, useCart } from '../../store/cart';
+import { StoreRatingSection } from './RatingParts';
+import { StoreCallPill, StoreCatTiles, StoreHero, StoreInfo } from './StoreHead';
 import { CustomiseSheet, type CustomiseResult } from './CustomiseSheet';
 import { useSession } from '../../store/session';
 import type { CartItem } from '../../lib/types';
@@ -97,12 +99,10 @@ export default function StorePage() {
     <div className="page stores-page">
       <PageHeader title={s.name} subtitle={s.category_name ?? undefined} />
       <div className="content-pad narrow stack">
-        {s.banner_url && <img className="store-banner" src={s.banner_url} alt="" />}
-        <div className="store-meta">
-          <span className={s.is_open ? 'open-badge' : 'closed-badge'}>{s.is_open ? 'Open now' : 'Closed now'}</span>
-          {s.prep_minutes != null && <span className="muted small"><Clock size={13} /> packs in about {s.prep_minutes} min</span>}
-          {s.address && <span className="muted small block"><MapPin size={13} /> {s.address}</span>}
-        </div>
+        <StoreHero s={s} />
+        <StoreInfo s={s} />
+
+        <StoreRatingSection storeId={s.id} />
 
         <div className="search-bar">
           <Search size={18} />
@@ -112,10 +112,7 @@ export default function StorePage() {
 
         {!find && (
           <div className="store-cats-sticky">
-            <div className="sort-chips" role="tablist" aria-label="Product categories">
-              <button className={cat === 'rec' ? 'active' : ''} onClick={() => setCat('rec')}><Sparkles size={13} /> Recommended</button>
-              {menu.categories.map((c) => <button key={c.id} className={cat === c.id ? 'active' : ''} onClick={() => setCat(c.id)}>{c.name}</button>)}
-            </div>
+            <StoreCatTiles menu={menu} cat={cat} onSelect={setCat} />
           </div>
         )}
 
@@ -158,6 +155,7 @@ export default function StorePage() {
       </div>
 
       <div className="floating-cart-wrap">
+        <StoreCallPill phone={s.phone} />
         <FloatingCartButton itemCount={cartCount(thisItems)} total={thisTotal} onClick={() => navigate('/checkout/hotel')} />
       </div>
 

@@ -69,6 +69,7 @@ export interface StoreMenu {
     name: string;
     banner_url: string | null;
     address: string | null;
+    phone?: string | null;
     category_id: string | null;
     category_name: string | null;
     is_open: boolean;
@@ -252,8 +253,36 @@ export async function customPhotoUrl(path: string): Promise<string | null> {
   return data?.signedUrl ?? null;
 }
 
+/** Stars, how many people gave each, and the latest written reviews of one shop. */
+export interface StoreRatingSummary {
+  avg_rating: number | null; review_count: number;
+  distribution: Record<string, number>;
+  recent: { rating: number; comment: string; name: string; created_at: string }[];
+}
+export async function getStoreRatingSummary(storeId: string): Promise<StoreRatingSummary | null> {
+  try {
+    const { data, error } = await supabase.rpc('store_rating_summary', { p_vendor_id: storeId });
+    if (error || !data) return null;
+    const d = data as StoreRatingSummary;
+    return { ...d, avg_rating: d.avg_rating == null ? null : Number(d.avg_rating) };
+  } catch { return null; }
+}
+
+/** The latest delivered order the customer has not rated yet (3 days, after a 20 minute wait); null when none. */
+export interface PendingReview { order_id: string; vendor_id: string; vendor_name: string; order_number: string | null }
+export async function getPendingReview(): Promise<PendingReview | null> {
+  try {
+    const { data, error } = await supabase.rpc('my_pending_review');
+    if (error || !data) return null;
+    return data as PendingReview;
+  } catch { return null; }
+}
+
+/** A shop with fewer ratings than this shows "New" instead of stars, so one 5-star review cannot outrank an established shop. */
+export const MIN_REVIEWS_FOR_STARS = 3;
+
 /** Rating, review count and the free-delivery note of each shop card (server decides; nothing is invented). */
-export interface StoreCardInfo { store_id: string; avg_rating: number | null; review_count: number; free_delivery: boolean; free_over: number | null }
+export interface StoreCardInfo { store_id: string; avg_rating: number | null; review_count: number; free_delivery: boolean; free_over: number | null; popular?: boolean }
 export async function getStoreCardInfo(cityId: string, stores: { store_id: string; distance_km: number | null }[]): Promise<Record<string, StoreCardInfo>> {
   if (!stores.length) return {};
   try {
