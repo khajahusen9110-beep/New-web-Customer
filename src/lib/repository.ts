@@ -2387,7 +2387,7 @@ export async function getOrderById(orderId: string): Promise<Order> {
 export async function getOrderItems(orderId: string): Promise<OrderItem[]> {
   const { data } = await supabase
     .from('order_items')
-    .select('id,order_id,product_id,variant_id,product_name,variant_label,quantity,unit_price,total_price,vendor_id,custom_note,custom_photo_path')
+    .select('id,order_id,product_id,variant_id,product_name,variant_label,quantity,unit_price,total_price,vendor_id,custom_note,custom_photo_path,item_status')
     .eq('order_id', orderId);
   return ((data ?? []) as OrderItem[]).map((i) => ({ ...i, quantity: Number(i.quantity) }));
 }
@@ -2427,6 +2427,7 @@ export async function getDeliveryPartner(partnerId: string): Promise<DeliveryPar
 
 /** Copies order items back into the cart after re-checking availability. */
 export async function reorder(orderItems: OrderItem[], cityId: string): Promise<string> {
+  orderItems = orderItems.filter((i) => i.item_status !== 'rejected'); // what the store could not give is not ordered again
   const ids = Array.from(new Set(orderItems.map((i) => i.product_id).filter(Boolean)));
   if (!ids.length) return 'No items to reorder.';
   const prodRes = await supabase

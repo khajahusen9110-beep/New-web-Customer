@@ -360,6 +360,8 @@ export interface OrderItem {
   vendor_id?: string | null;
   custom_note?: string | null;
   custom_photo_path?: string | null;
+  /** 'rejected' when the store could not give this item */
+  item_status?: 'active' | 'rejected' | null;
 }
 
 export interface OrderStatusHistory {

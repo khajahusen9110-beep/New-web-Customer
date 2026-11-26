@@ -587,14 +587,15 @@ export default function OrderDetailPage() {
           </section>
 
           <section className="card pad">
-            <h3>Items Ordered ({items.length})</h3>
+            <h3>Items Ordered ({items.filter((i) => i.item_status !== 'rejected').length})</h3>
             {items.length === 0 ? (
               <p className="muted small">No items recorded for this order.</p>
             ) : (
               items.map((it) => (
-                <div key={it.id ?? it.product_id} className="row between item-line">
+                <div key={it.id ?? it.product_id} className="row between item-line" style={it.item_status === 'rejected' ? { opacity: 0.6, textDecoration: 'line-through' } : undefined}>
                   <span>
                     <strong className="block">{it.product_name}</strong>
+                    {it.item_status === 'rejected' && <span className="small block" style={{ color: '#b91c1c', fontWeight: 700, textDecoration: 'none', display: 'block' }}>Not available at the store. Removed from your bill.</span>}
                     {(it.custom_note || it.custom_photo_path) && (
                       <span className="muted small block">{it.custom_note ? `✏️ ${it.custom_note}` : ''}{it.custom_note && it.custom_photo_path ? ' · ' : ''}{it.custom_photo_path ? '📷 Photo sent to the shop' : ''}</span>
                     )}
