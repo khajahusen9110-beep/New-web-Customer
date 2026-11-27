@@ -31,7 +31,7 @@ export function StoreCard({ s, info }: { s: StoreListItem; info?: StoreCardInfo 
         </span>
       </span>
       <span className="sc3-body">
-        <span className="sc2-name"><strong>{s.name}</strong><BadgeCheck size={21} className="sc2-verified" aria-label="Verified shop" /></span>
+        <span className="sc2-name">{info?.logo_url && <img className="sc3-logo" src={info.logo_url} alt="" loading="lazy" />}<strong>{s.name}</strong><BadgeCheck size={21} className="sc2-verified" aria-label="Verified shop" /></span>
         <span className="sc3-sub">
           <span>{s.category_name}</span>
           {free && <span className="sc3-free"><Bike size={16} /> Free Delivery{info!.free_over ? ` ₹${Math.trunc(info!.free_over)}+` : ''}</span>}

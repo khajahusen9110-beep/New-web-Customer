@@ -1408,3 +1408,6 @@ h3, .section-title { letter-spacing: -0.015em; }
 .cat-tiles button.active .ct-img { border-color: #6d3ad9; } .cat-tiles button.active .ct-name { color: #6d3ad9; font-weight: 800; }
 .ct-name { font-size: 12px; font-weight: 600; max-width: 76px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .store-call { position: fixed; left: 16px; bottom: 18px; z-index: 20; display: inline-flex; align-items: center; gap: 6px; padding: 13px 20px; border-radius: 16px; background: #f1ecff; color: #6d3ad9; font-weight: 800; box-shadow: 0 6px 20px rgba(0,0,0,.15); text-decoration: none; }
+
+.sc3-logo { width: 40px; height: 40px; border-radius: 12px; object-fit: cover; margin-right: 10px; background: var(--primary-container); flex: none; }
+.sc3-logo.big { width: 52px; height: 52px; border-radius: 14px; }

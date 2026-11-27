@@ -23,7 +23,7 @@ export function StoreInfo({ s }: { s: Store }) {
   return (
     <>
       <div className="store-info-card">
-        <div className="sic-name"><strong>{s.name}</strong><BadgeCheck size={22} className="sc2-verified" aria-label="Verified shop" /></div>
+        <div className="sic-name">{s.logo_url && <img className="sc3-logo big" src={s.logo_url} alt="" />}<strong>{s.name}</strong><BadgeCheck size={22} className="sc2-verified" aria-label="Verified shop" /></div>
         {s.category_name && <div className="muted">{s.category_name}</div>}
         {stars ? <div className="sic-rate"><Star size={17} fill="currentColor" /> <b>{stars.avg_rating!.toFixed(1)}</b> <span>({stars.review_count} ratings)</span></div>
           : r ? <div className="sic-new"><Sparkles size={14} /> New on SND Mart</div> : null}
