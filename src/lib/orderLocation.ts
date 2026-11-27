@@ -33,6 +33,14 @@ export function startOrderLocation(): Promise<LiveFix | null> {
   });
 }
 
+/** Tells the server where the customer is now, so the delivery distance and fee at checkout use it. Never throws. */
+export async function recordCheckoutLocation(fix: LiveFix): Promise<void> {
+  try {
+    if (fix.lat === 0 && fix.lng === 0) return;
+    await supabase.rpc('record_checkout_location', { p_lat: fix.lat, p_lng: fix.lng, p_accuracy: fix.accuracy });
+  } catch { /* the fee then uses the address pin */ }
+}
+
 /** Waits for the search and attaches the position to the placed order; failures are ignored (the order is already placed). */
 export async function attachOrderLocation(orderId: string, search: Promise<LiveFix | null>): Promise<void> {
   try {

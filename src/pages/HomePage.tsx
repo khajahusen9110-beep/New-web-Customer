@@ -1885,7 +1885,7 @@ export default function HomePage() {
       <ConfirmDialog
         open={!!dishConflict}
         title="Replace Hotel Cart Items?"
-        text={`Your cart already contains items from another hotel. Clear existing items and add from ${dishConflict?.hotel ?? 'this hotel'}?`}
+        text={`Your cart already has the most shops you can order from at once (3). Clear existing items and add from ${dishConflict?.hotel ?? 'this hotel'}?`}
         confirmLabel="Clear & Add"
         onCancel={() => setDishConflict(null)}
         onConfirm={() => {

@@ -1937,10 +1937,13 @@ export async function resolveDeliveryDistanceKm(
   cityId: string | null,
   vendorId: string | null,
   isHotel: boolean,
+  live?: { lat: number; lng: number; accuracy: number } | null,
 ): Promise<number> {
   if (!address || address.lat == null || address.lng == null) return 1;
-  const lat = Number(address.lat);
-  const lng = Number(address.lng);
+  let lat = Number(address.lat);
+  let lng = Number(address.lng);
+  // The real position (accurate to 100 m and within 2 km of the chosen address) is a better start than a hand-placed pin; the server does the same.
+  if (live && live.accuracy <= 100 && haversineKm(lat, lng, live.lat, live.lng) <= 2) { lat = live.lat; lng = live.lng; }
   const pickup = await getPickupPoint(isHotel ? vendorId : null, cityId);
   if (pickup) {
     const d = haversineKm(lat, lng, pickup.lat, pickup.lng);
@@ -2121,6 +2124,18 @@ function parseOrderFromRpc(data: unknown): Order | null {
   return { ...fallback(id), ...(obj as Partial<Order>), id };
 }
 
+/** Delivery time of the last several-shop order (shown after ordering). */
+export const multiOrderEta: { minutes: number | null } = { minutes: null };
+
+/** The city's delivery-time rule: minutes = base + per shop x shops, and the most shops in one cart. */
+export async function getDeliveryEtaConfig(cityId: string): Promise<{ base: number; perShop: number; max: number }> {
+  try {
+    const { data } = await supabase.rpc('get_delivery_eta_config', { p_city_id: cityId });
+    const d = (data ?? {}) as { base_eta_minutes?: number; per_store_eta_minutes?: number; max_stores?: number };
+    return { base: d.base_eta_minutes ?? 20, perShop: d.per_store_eta_minutes ?? 10, max: d.max_stores ?? 3 };
+  } catch { return { base: 20, perShop: 10, max: 3 }; }
+}
+
 /** Thrown by placeOrder when the service is in maintenance, so checkout can show its maintenance screen. */
 export class MaintenanceError extends Error {}
 
@@ -2183,6 +2198,30 @@ export async function placeOrder(p: {
     p_items: items,
     p_notes: null,
   };
+  // Several shops in the cart: one order per shop, placed together (cash on delivery for now)
+  const shopIds = Array.from(new Set(raw.map((i) => i.vendor_id).filter((v): v is string => !!v)));
+  if (p.isHotel && shopIds.length > 1) {
+    if (paymentMethod !== 'cash') throw new Error('Orders from more than one shop are cash on delivery for now.');
+    const stores = shopIds.map((vid) => ({ vendor_id: vid, items: items.filter((_, idx) => raw[idx].vendor_id === vid) }));
+    const { data, error } = await supabase.rpc('checkout_multi_order', {
+      p_address_id: p.addressId, p_payment_method: paymentMethod, p_stores: stores,
+      p_coupon_code: p.couponCode?.trim().toUpperCase() || null, p_use_wallet: p.useWallet === true,
+    });
+    if (error) throw new Error(errorMessage(error, 'Failed to place order'));
+    const j = data as { eta_minutes?: number; total?: number; orders?: { id: string; order_number: string }[] };
+    const list = j.orders ?? [];
+    const cooking = p.cookingInstructions?.trim() || null;
+    const delivery = p.deliveryInstructions?.trim() || null;
+    if (cooking || delivery) {
+      for (const o of list) {
+        try { await supabase.rpc('set_order_instructions', { p_order_id: o.id, p_cooking: cooking, p_delivery: delivery }); } catch { /* best effort */ }
+      }
+    }
+    try { await clearCartDirectly(p.isHotel); } catch { /* the orders are placed */ }
+    invalidateCache('myWallet');
+    multiOrderEta.minutes = j.eta_minutes ?? null;
+    return { ...(parseOrderFromRpc(list[0]?.id ?? '') ?? {}), order_number: list[0]?.order_number ?? '', total_amount: Number(j.total ?? 0), status: 'pending', payment_method: 'cash' } as Order;
+  }
   // The checkout RPC validates the coupon, applies the discount to the order total and
   // records the usage itself, so the customer is charged exactly what checkout showed.
   // Do not send p_slot_id / p_delivery_type: the RPCs do not accept them yet.
@@ -2384,7 +2423,7 @@ export async function getOrderById(orderId: string): Promise<Order> {
 export async function getOrderItems(orderId: string): Promise<OrderItem[]> {
   const { data } = await supabase
     .from('order_items')
-    .select('id,order_id,product_id,variant_id,product_name,variant_label,quantity,unit_price,total_price,vendor_id,custom_note,custom_photo_path')
+    .select('id,order_id,product_id,variant_id,product_name,variant_label,quantity,unit_price,total_price,vendor_id,custom_note,custom_photo_path,item_status')
     .eq('order_id', orderId);
   return ((data ?? []) as OrderItem[]).map((i) => ({ ...i, quantity: Number(i.quantity) }));
 }
@@ -2424,6 +2463,7 @@ export async function getDeliveryPartner(partnerId: string): Promise<DeliveryPar
 
 /** Copies order items back into the cart after re-checking availability. */
 export async function reorder(orderItems: OrderItem[], cityId: string): Promise<string> {
+  orderItems = orderItems.filter((i) => i.item_status !== 'rejected'); // what the store could not give is not ordered again
   const ids = Array.from(new Set(orderItems.map((i) => i.product_id).filter(Boolean)));
   if (!ids.length) return 'No items to reorder.';
   const prodRes = await supabase

@@ -88,7 +88,7 @@ export default function QuotesPage() {
       <ConfirmDialog
         open={!!conflict}
         title="Replace your cart?"
-        text="Your cart already has items from another shop or hotel. Clear it and add this quoted item?"
+        text="Your cart already has the most shops you can order from at once (3). Clear it and add this quoted item?"
         confirmLabel="Clear & Add"
         onCancel={() => setConflict(null)}
         onConfirm={() => { forceClearHotelCartAndAdd(conflict!); setConflict(null); toast('Cart cleared and item added'); navigate('/cart', { state: { isHotel: true } }); }}

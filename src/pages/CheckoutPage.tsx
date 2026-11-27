@@ -1,4 +1,4 @@
-import { attachOrderLocation, startOrderLocation } from '../lib/orderLocation';
+import { attachOrderLocation, recordCheckoutLocation, startOrderLocation, type LiveFix } from '../lib/orderLocation';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { WhatsAppOffersCheck } from '../components/WhatsAppOffersCheck';
 import { fetchOffersChoice, saveOffersChoice } from '../lib/offersChoice';
@@ -14,8 +14,10 @@ import {
   getAddresses,
   getCityDeliverySettings,
   getDeliverySlots,
+  getDeliveryEtaConfig,
   getExpressDeliverySettings,
   getMyCodAllowed,
+  multiOrderEta,
   placeOrder,
   syncRazorpayPayment,
   resolveDeliveryDistanceKm,
@@ -101,6 +103,13 @@ export default function CheckoutPage() {
   const [deliveryType, setDeliveryType] = useState<DeliveryType>('scheduled');
   const [slotId, setSlotId] = useState<string | null>(null);
   const [distanceKm, setDistanceKm] = useState<number | null>(null);
+  // The phone's position is searched when checkout opens; the server keeps it for the fee and the fee is worked out again from it
+  const [liveFix, setLiveFix] = useState<LiveFix | null>(null);
+  useEffect(() => {
+    let on = true;
+    void startOrderLocation().then((f) => { if (on && f) { void recordCheckoutLocation(f); setLiveFix(f); } });
+    return () => { on = false; };
+  }, []);
 
   const [couponInput, setCouponInput] = useState('');
   // Code the customer applied; the server preview says whether it is valid and what it gives.
@@ -129,7 +138,13 @@ export default function CheckoutPage() {
   useEffect(() => {
     if (!codAllowed && payment === 'cod') setPayment('upi');
   }, [codAllowed, payment]);
-  const paymentMethods = codAllowed ? PAYMENT_METHODS : PAYMENT_METHODS.filter((m) => m.key !== 'cod');
+  // Several shops in the cart: one order per shop, one rider for all; cash on delivery for now
+  const shopCount = isHotel ? new Set(hotelCart.map((i) => i.vendor_id).filter(Boolean)).size : 0;
+  const multiShop = shopCount > 1;
+  const [etaCfg, setEtaCfg] = useState({ base: 20, perShop: 10, max: 3 });
+  useEffect(() => { if (cityId) void getDeliveryEtaConfig(cityId).then(setEtaCfg); }, [cityId]);
+  useEffect(() => { if (multiShop) setPayment('cod'); }, [multiShop]);
+  const paymentMethods = (codAllowed ? PAYMENT_METHODS : PAYMENT_METHODS.filter((m) => m.key !== 'cod')).filter((m) => !multiShop || m.key === 'cod');
   // Cooking (shown to the vendor) + delivery (shown to the delivery partner) instructions.
   const [cookingInstructions, setCookingInstructions] = useState('');
   const [deliveryInstructions, setDeliveryInstructions] = useState('');
@@ -199,11 +214,11 @@ export default function CheckoutPage() {
   useEffect(() => {
     if (!selectedAddress) return;
     let cancelled = false;
-    resolveDeliveryDistanceKm(selectedAddress, cityId, hotelVendorId, isHotel).then((d) => !cancelled && setDistanceKm(d));
+    resolveDeliveryDistanceKm(selectedAddress, cityId, hotelVendorId, isHotel, liveFix).then((d) => !cancelled && setDistanceKm(d));
     return () => {
       cancelled = true;
     };
-  }, [selectedAddress, cityId, hotelVendorId, isHotel]);
+  }, [selectedAddress, cityId, hotelVendorId, isHotel, liveFix]);
 
   // Delivery options for the effective city.
   useEffect(() => {
@@ -456,6 +471,7 @@ export default function CheckoutPage() {
       });
       void attachOrderLocation(order.id, liveSearch);
       void saveOffersChoice(offersOn, 'checkout_web');
+      if (multiOrderEta.minutes) { toast(`${shopCount} shops: delivery in about ${multiOrderEta.minutes} min`); multiOrderEta.minutes = null; }
       // Fired only here — after the server has genuinely created the order row — never on the
       // button click itself (a click can fail validation, payment, or server errors below).
       trackEvent('order_placed', {
@@ -810,6 +826,12 @@ export default function CheckoutPage() {
           {/* Payment */}
           <section className="card pad">
             <h3>Payment Method</h3>
+            {multiShop && (
+              <div className="card pad" style={{ background: '#ede9fe', marginBottom: 10 }}>
+                <strong>{shopCount} shops · one delivery</strong>
+                <p className="small" style={{ margin: '4px 0 0' }}>Delivery in about {etaCfg.base + etaCfg.perShop * shopCount} min. One rider brings everything once every shop has accepted. Cash on delivery for now. Delivery and handling are charged once.{!codAllowed ? ' Cash on delivery is not available for your account, so please order from one shop at a time.' : ''}</p>
+              </div>
+            )}
             <div className="stack-sm">
               {paymentMethods.map((m) => (
                 <label key={m.key} className={`radio-card${payment === m.key ? ' selected' : ''}`}>
