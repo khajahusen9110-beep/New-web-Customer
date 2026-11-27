@@ -214,11 +214,25 @@ export default function CheckoutPage() {
   useEffect(() => {
     if (!selectedAddress) return;
     let cancelled = false;
-    resolveDeliveryDistanceKm(selectedAddress, cityId, hotelVendorId, isHotel, liveFix).then((d) => !cancelled && setDistanceKm(d));
+    // several shops: the distance is to the farthest shop
+    const vids = isHotel ? Array.from(new Set(hotelCart.map((i) => i.vendor_id).filter((v): v is string => !!v))) : [];
+    const run = vids.length > 1
+      ? Promise.all(vids.map((v) => resolveDeliveryDistanceKm(selectedAddress, cityId, v, true, liveFix))).then((ds) => Math.max(...ds))
+      : resolveDeliveryDistanceKm(selectedAddress, cityId, hotelVendorId, isHotel, liveFix);
+    run.then((d) => !cancelled && setDistanceKm(d));
     return () => {
       cancelled = true;
     };
-  }, [selectedAddress, cityId, hotelVendorId, isHotel, liveFix]);
+  }, [selectedAddress, cityId, hotelVendorId, isHotel, liveFix, hotelCart]);
+
+  // Food rule for one hotel, Stores rule (a fee for every shop) for shops; the platform fee only when a hotel is in the cart
+  const [hasFoodShop, setHasFoodShop] = useState(false);
+  useEffect(() => {
+    let off = false;
+    const vids = isHotel ? Array.from(new Set(hotelCart.map((i) => i.vendor_id).filter((v): v is string => !!v))) : [];
+    void Promise.all(vids.map((v) => isStoreVendor(v))).then((r) => { if (!off) setHasFoodShop(r.some((x) => !x)); });
+    return () => { off = true; };
+  }, [isHotel, hotelCart]);
 
   // Delivery options for the effective city.
   useEffect(() => {
@@ -313,14 +327,15 @@ export default function CheckoutPage() {
   useEffect(() => {
     if (!cityId || subtotal <= 0) { setFeeInfo(null); return; }
     let off = false;
-    const t = setTimeout(() => { void getCheckoutFees(cityId, distanceKm, feeAmount).then((f) => !off && setFeeInfo(f)); }, 250);
+    const kind = isHotel && shopCount <= 1 && hasFoodShop ? 'food' : 'store';
+    const t = setTimeout(() => { void getCheckoutFees(cityId, distanceKm, feeAmount, kind, Math.max(shopCount, 1), hasFoodShop).then((f) => !off && setFeeInfo(f)); }, 250);
     return () => { off = true; clearTimeout(t); };
-  }, [cityId, distanceKm, feeAmount, subtotal]);
+  }, [cityId, distanceKm, feeAmount, subtotal, isHotel, shopCount, hasFoodShop]);
   const rulesOn = feeInfo?.rules_enabled === true;
   const handlingFee = rulesOn ? feeInfo!.handling_fee : handlingBase;
   const platformFee = rulesOn ? feeInfo!.platform_fee : platformBase;
 
-  const storeAdj = isStore && storeCfg ? (storeChoice.type === 'express' ? storeCfg.express_extra_fee : -storeCfg.scheduled_discount) : 0;
+  const storeAdj = 0; // one delivery rule per kind: no extra Express / Scheduled adjustment any more
   const deliveryFee: number | null = isStore && storeCfg
     ? Math.max((rulesOn ? feeInfo!.delivery_fee : (expressCalc.fee ?? 0)) + storeAdj, 0)
     : !deliveryAvailable

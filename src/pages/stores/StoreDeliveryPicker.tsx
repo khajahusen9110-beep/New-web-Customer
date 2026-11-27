@@ -32,13 +32,13 @@ export function StoreDeliveryPicker({ cfg, shopOpen, leadHours = 0, value, onCha
         {cfg.express_enabled && (
           <button type="button" className={`btn ${value.type === 'express' ? 'btn-primary' : 'btn-outline'}`} disabled={!canExpress}
             onClick={() => onChange({ type: 'express', scheduledFor: null })}>
-            Express{cfg.express_extra_fee > 0 ? ` (+₹${cfg.express_extra_fee})` : ''}
+            Express
           </button>
         )}
         {cfg.scheduled_enabled && (
           <button type="button" className={`btn ${value.type === 'scheduled' ? 'btn-primary' : 'btn-outline'}`} disabled={!canSchedule}
             onClick={() => onChange({ type: 'scheduled', scheduledFor: value.scheduledFor })}>
-            Scheduled{cfg.scheduled_discount > 0 ? ` (₹${cfg.scheduled_discount} off)` : ''}
+            Scheduled
           </button>
         )}
       </div>
